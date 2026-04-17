@@ -1,0 +1,71 @@
+{
+  "name": "dungeon-companion-api",
+  "version": "0.0.1",
+  "description": "api",
+  "keywords": [
+    "loopback-application",
+    "loopback"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "engines": {
+    "node": "20 || 22 || 24"
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "clean": "rimraf dist *.tsbuildinfo .eslintcache",
+    "lint": "npm run prettier:check && npm run eslint",
+    "lint:fix": "npm run eslint:fix && npm run prettier:fix",
+    "prettier:cli": "prettier \"**/*.ts\" \"**/*.js\"",
+    "prettier:check": "npm run prettier:cli -- -l",
+    "prettier:fix": "npm run prettier:cli -- --write",
+    "eslint": "eslint .",
+    "eslint:fix": "npm run eslint -- --fix",
+    "pretest": "npm run rebuild",
+    "test": "mocha dist/__tests__",
+    "posttest": "npm run lint",
+    "test:dev": "mocha dist/__tests__/**/*.js && npm run posttest",
+    "docker:build": "docker build -t dungeon-companion-api .",
+    "docker:run": "docker run -p 3000:3000 -d dungeon-companion-api",
+    "openapi-spec": "node ./dist/openapi-spec",
+    "prestart": "npm run rebuild",
+    "start": "node -r source-map-support/register .",
+    "prepare": "npm run build",
+    "rebuild": "npm run clean && npm run build"
+  },
+  "repository": {
+    "type": "git"
+  },
+  "author": "osmorais <osmorais>",
+  "license": "",
+  "files": [
+    "README.md",
+    "dist",
+    "src",
+    "!*/__tests__"
+  ],
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.90.0",
+    "@loopback/boot": "^8.0.12",
+    "@loopback/core": "^7.0.11",
+    "@loopback/rest": "^15.0.12",
+    "@loopback/rest-explorer": "^8.0.12",
+    "dotenv": "^17.4.2",
+    "openai": "^6.34.0",
+    "tslib": "^2.0.0"
+  },
+  "devDependencies": {
+    "@loopback/eslint-config": "^16.0.1",
+    "@loopback/testlab": "^8.0.11",
+    "@types/dotenv": "^6.1.1",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^20.19.39",
+    "eslint": "^8.57.1",
+    "mocha": "^11.7.5",
+    "prettier": "^3.8.2",
+    "rimraf": "^5.0.10",
+    "source-map-support": "^0.5.21",
+    "typescript": "~5.2.2"
+  }
+}
