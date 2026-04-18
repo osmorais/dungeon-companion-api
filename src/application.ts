@@ -7,6 +7,7 @@ import {
 import {RestApplication} from '@loopback/rest';
 import path from 'path';
 import {MySequence} from './sequence';
+import {AiAgentService, CharacterSheetService} from './services';
 
 export {ApplicationConfig};
 
@@ -25,6 +26,9 @@ export class DungeonCompanionApiApplication extends BootMixin(RestApplication) {
       path: '/explorer',
     });
     this.component(RestExplorerComponent);
+
+    this.service(AiAgentService, 'services.AiAgentService');
+    this.service(CharacterSheetService, 'services.CharacterSheetService');
 
     this.projectRoot = __dirname;
     // Customize @loopback/boot Booter Conventions here
