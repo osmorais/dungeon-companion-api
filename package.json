@@ -53,6 +53,7 @@
     "@loopback/rest-explorer": "^8.0.12",
     "dotenv": "^17.4.2",
     "openai": "^6.34.0",
+    "postgres": "^3.4.9",
     "tslib": "^2.0.0"
   },
   "devDependencies": {
