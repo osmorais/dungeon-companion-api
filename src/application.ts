@@ -7,7 +7,8 @@ import {
 import {RestApplication} from '@loopback/rest';
 import path from 'path';
 import {MySequence} from './sequence';
-import {AiAgentService, CharacterSheetService} from './services';
+import {AiAgentService, CharacterSheetService, CharacterOptionsService} from './services';
+import {PostgresDatasource} from './datasources';
 
 export {ApplicationConfig};
 
@@ -29,6 +30,11 @@ export class DungeonCompanionApiApplication extends BootMixin(RestApplication) {
 
     this.service(AiAgentService, 'services.AiAgentService');
     this.service(CharacterSheetService, 'services.CharacterSheetService');
+    this.service(CharacterOptionsService, 'services.CharacterOptionsService');
+
+    this.bind('db.Postgres').toDynamicValue(() =>
+      PostgresDatasource.getInstance(),
+    );
 
     this.projectRoot = __dirname;
     // Customize @loopback/boot Booter Conventions here
