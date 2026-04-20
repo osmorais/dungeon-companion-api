@@ -16,7 +16,7 @@ export function normalizeKey(value: string): string {
 
 export function resolveRace(race: string): RaceRule {
   const key = normalizeKey(race);
-  const rule = RACES[key];
+  const rule = RACES[key]; //TO DO: Passar o ID do banco de dados.
   if (!rule) throw new Error(`Raça não encontrada: "${race}". Raças disponíveis: ${Object.keys(RACES).join(', ')}`);
   return rule;
 }
@@ -24,31 +24,31 @@ export function resolveRace(race: string): RaceRule {
 export function resolveSubrace(subrace: string | undefined) {
   if (!subrace) return null;
   const key = normalizeKey(subrace);
-  return SUBRACES[key] ?? null;
+  return SUBRACES[key] ?? null; 
 }
 
 export function resolveClass(className: string): ClassRule {
   const key = normalizeKey(className);
-  const rule = CLASSES[key];
+  const rule = CLASSES[key]; //TO DO: Passar o ID do banco de dados.
   if (!rule) throw new Error(`Classe não encontrada: "${className}". Classes disponíveis: ${Object.keys(CLASSES).join(', ')}`);
   return rule;
 }
 
 export function resolveBackground(background: string): BackgroundRule {
   const key = normalizeKey(background);
-  const rule = BACKGROUNDS[key];
+  const rule = BACKGROUNDS[key]; //TO DO: Passar o ID do banco de dados.
   if (!rule) throw new Error(`Antecedente não encontrado: "${background}". Antecedentes disponíveis: ${Object.keys(BACKGROUNDS).join(', ')}`);
   return rule;
 }
 
 export function resolveWeapon(weaponName: string): WeaponRule | null {
   const key = normalizeKey(weaponName);
-  return WEAPONS[key] ?? null;
+  return WEAPONS[key] ?? null; //TO DO: Passar o ID do banco de dados.
 }
 
 export function resolveArmor(armorName: string) {
   const key = normalizeKey(armorName).replace(/-/g, '').replace(/\s/g, '');
-  const normalized = normalizeKey(armorName);
+  const normalized = normalizeKey(armorName); //TO DO: Passar o ID do banco de dados.
   return ARMOR[normalized] ?? ARMOR[key] ?? ARMOR['nenhuma'];
 }
 
