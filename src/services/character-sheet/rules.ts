@@ -59,11 +59,12 @@ export interface ArmorRule {
 // Races
 // ---------------------------------------------------------------------------
 
+//TO DO: Adicionar o id_race a partir do banco de dados e utilizar somente as regras.
 export const RACES: Record<string, RaceRule> = {
   anao: {
     displayName: 'Anão',
     bonuses: {CON: 2},
-    speed: '7,5m (25 pés)',
+    speed: '7,5m',
     languages: ['Comum', 'Anão'],
     traits: [
       {name: 'Visão no Escuro', source: 'Raça', description: 'Você enxerga na meia-luz a até 18 metros como se fosse luz plena e na escuridão como se fosse meia-luz.'},
@@ -73,7 +74,7 @@ export const RACES: Record<string, RaceRule> = {
   elfo: {
     displayName: 'Elfo',
     bonuses: {DEX: 2},
-    speed: '9m (30 pés)',
+    speed: '9m',
     languages: ['Comum', 'Élfico'],
     skillProficiencies: ['perception'],
     traits: [
@@ -85,7 +86,7 @@ export const RACES: Record<string, RaceRule> = {
   halfling: {
     displayName: 'Halfling',
     bonuses: {DEX: 2},
-    speed: '7,5m (25 pés)',
+    speed: '7,5m',
     languages: ['Comum', 'Halfling'],
     traits: [
       {name: 'Sorte', source: 'Raça', description: 'Quando você rola 1 num d20 em um teste de atributo, teste de resistência ou jogada de ataque, você pode rolar novamente o dado e deve usar o novo resultado.'},
@@ -95,14 +96,14 @@ export const RACES: Record<string, RaceRule> = {
   humano: {
     displayName: 'Humano',
     bonuses: {STR: 1, DEX: 1, CON: 1, INT: 1, WIS: 1, CHA: 1},
-    speed: '9m (30 pés)',
+    speed: '9m',
     languages: ['Comum'],
     traits: [],
   },
   draconato: {
     displayName: 'Draconato',
     bonuses: {STR: 2, CHA: 1},
-    speed: '9m (30 pés)',
+    speed: '9m',
     languages: ['Comum', 'Dracônico'],
     traits: [
       {name: 'Ancestralidade Dracônica', source: 'Raça', description: 'Você tem ancestralidade dracônica. Você pode usar uma ação para exalar energia destrutiva (Sopro de Fogo, CD 13).'},
@@ -112,7 +113,7 @@ export const RACES: Record<string, RaceRule> = {
   gnomo: {
     displayName: 'Gnomo',
     bonuses: {INT: 2},
-    speed: '7,5m (25 pés)',
+    speed: '7,5m',
     languages: ['Comum', 'Gnômico'],
     traits: [
       {name: 'Visão no Escuro', source: 'Raça', description: 'Você enxerga na meia-luz a até 18 metros como se fosse luz plena.'},
@@ -122,7 +123,7 @@ export const RACES: Record<string, RaceRule> = {
   'meio-elfo': {
     displayName: 'Meio-Elfo',
     bonuses: {CHA: 2},
-    speed: '9m (30 pés)',
+    speed: '9m',
     languages: ['Comum', 'Élfico'],
     traits: [
       {name: 'Visão no Escuro', source: 'Raça', description: 'Você enxerga na meia-luz a até 18 metros como se fosse luz plena.'},
@@ -133,7 +134,7 @@ export const RACES: Record<string, RaceRule> = {
   'meio-orc': {
     displayName: 'Meio-Orc',
     bonuses: {STR: 2, CON: 1},
-    speed: '9m (30 pés)',
+    speed: '9m',
     languages: ['Comum', 'Orc'],
     traits: [
       {name: 'Visão no Escuro', source: 'Raça', description: 'Você enxerga na meia-luz a até 18 metros como se fosse luz plena.'},
@@ -144,7 +145,7 @@ export const RACES: Record<string, RaceRule> = {
   tiefling: {
     displayName: 'Tiefling',
     bonuses: {CHA: 2, INT: 1},
-    speed: '9m (30 pés)',
+    speed: '9m',
     languages: ['Comum', 'Infernal'],
     traits: [
       {name: 'Visão no Escuro', source: 'Raça', description: 'Você enxerga na meia-luz a até 18 metros como se fosse luz plena.'},
@@ -169,6 +170,7 @@ export const SUBRACES: Record<string, SubraceRule> = {
 // Classes
 // ---------------------------------------------------------------------------
 
+//TO DO: Adicionar o id_class a partir do banco de dados e utilizar somente as regras.
 export const CLASSES: Record<string, ClassRule> = {
   barbaro: {
     displayName: 'Bárbaro',
@@ -365,6 +367,7 @@ export const CLASSES: Record<string, ClassRule> = {
 // Backgrounds
 // ---------------------------------------------------------------------------
 
+//TO DO: Adicionar o id_background a partir do banco de dados e utilizar somente as regras.
 export const BACKGROUNDS: Record<string, BackgroundRule> = {
   acolito: {
     displayName: 'Acólito',
@@ -435,6 +438,7 @@ export const BACKGROUNDS: Record<string, BackgroundRule> = {
 // Weapons
 // ---------------------------------------------------------------------------
 
+//TO DO: Substituir esse array pelo get do banco de dados.
 export const WEAPONS: Record<string, WeaponRule> = {
   adaga: {displayName: 'Adaga', damageDie: '1d4', damageType: 'Perfurante', properties: ['Acuidade', 'Leve', 'Arremesso (6/18m)'], isRanged: false, isFinesse: true},
   'espada-curta': {displayName: 'Espada Curta', damageDie: '1d6', damageType: 'Perfurante', properties: ['Acuidade', 'Leve'], isRanged: false, isFinesse: true},
@@ -456,6 +460,7 @@ export const WEAPONS: Record<string, WeaponRule> = {
 // Armor
 // ---------------------------------------------------------------------------
 
+//TO DO: Substituir esse array pelo get do banco de dados.
 export const ARMOR: Record<string, ArmorRule> = {
   nenhuma: {baseAC: 10, armorType: 'none'},
   'couro-batido': {baseAC: 12, armorType: 'light'},
@@ -470,6 +475,7 @@ export const ARMOR: Record<string, ArmorRule> = {
 // Skill definitions
 // ---------------------------------------------------------------------------
 
+//TO DO: Substituir esse array pelo get do banco de dados.
 export const SKILLS: Record<string, StatKeyEn> = {
   acrobatics: 'DEX',
   animal_handling: 'WIS',
