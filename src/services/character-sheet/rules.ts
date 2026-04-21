@@ -17,6 +17,7 @@ export interface SubraceRule {
 }
 
 export interface ClassRule {
+  id_class: number;
   displayName: string;
   hitDie: number;
   savingThrows: StatKeyEn[];
@@ -31,6 +32,7 @@ export interface ClassRule {
 }
 
 export interface BackgroundRule {
+  id_background: number;
   displayName: string;
   skills: string[];
   tools: string[];
@@ -173,6 +175,7 @@ export const SUBRACES: Record<string, SubraceRule> = {
 //TO DO: Adicionar o id_class a partir do banco de dados e utilizar somente as regras.
 export const CLASSES: Record<string, ClassRule> = {
   barbaro: {
+    id_class: 1,
     displayName: 'Bárbaro',
     hitDie: 12,
     savingThrows: ['STR', 'CON'],
@@ -188,6 +191,7 @@ export const CLASSES: Record<string, ClassRule> = {
     startingGold: 0,
   },
   bardo: {
+    id_class: 2,
     displayName: 'Bardo',
     hitDie: 8,
     savingThrows: ['DEX', 'CHA'],
@@ -203,7 +207,25 @@ export const CLASSES: Record<string, ClassRule> = {
     startingEquipment: ['Rapieira', 'Instrumento Musical', 'Couro Batido', 'Pacote do Diplomata'],
     startingGold: 5 * 4,
   },
+  bruxo: {
+    id_class: 3,
+    displayName: 'Bruxo',
+    hitDie: 8,
+    savingThrows: ['WIS', 'CHA'],
+    armorProficiencies: ['Leve'],
+    weaponProficiencies: ['Armas Simples'],
+    isSpellcaster: true,
+    spellcastingAbility: 'CHA',
+    spellSlotsLevel1: 1,
+    traits: [
+      {name: 'Patrono Sobrenatural', source: 'Classe', description: 'Você fez um pacto com um ser sobrenatural de seu nível de poder, um ser cujos objetivos e motivações são diferentes dos mortais.'},
+      {name: 'Magia do Pacto', source: 'Classe', description: 'Seu arcano pesquisado concedeu-lhe facilidade com feitiços. Você pode lançar feitiços de bruxo.'},
+    ],
+    startingEquipment: ['Besta Leve com 20 virotes', 'Bastão', 'Couro Batido', 'Foco Arcano', 'Pacote do Estudioso'],
+    startingGold: 4 * 4,
+  },
   clerigo: {
+    id_class: 4,
     displayName: 'Clérigo',
     hitDie: 8,
     savingThrows: ['WIS', 'CHA'],
@@ -220,6 +242,7 @@ export const CLASSES: Record<string, ClassRule> = {
     startingGold: 5 * 4,
   },
   druida: {
+    id_class: 5,
     displayName: 'Druida',
     hitDie: 8,
     savingThrows: ['INT', 'WIS'],
@@ -235,7 +258,25 @@ export const CLASSES: Record<string, ClassRule> = {
     startingEquipment: ['Escudo de Madeira', 'Cimitarra', 'Couro Batido', 'Pacote do Explorador'],
     startingGold: 2 * 4,
   },
+  feiticeiro: {
+    id_class: 6,
+    displayName: 'Feiticeiro',
+    hitDie: 6,
+    savingThrows: ['CON', 'CHA'],
+    armorProficiencies: ['Nenhuma'],
+    weaponProficiencies: ['Adagas', 'Dardos', 'Fundas', 'Bastões', 'Bestas Leves'],
+    isSpellcaster: true,
+    spellcastingAbility: 'CHA',
+    spellSlotsLevel1: 2,
+    traits: [
+      {name: 'Origem de Feitiçaria', source: 'Classe', description: 'Escolha uma origem de feitiçaria que descreve a fonte de seu poder mágico inato. Sua escolha concede características a você no 1º nível e novamente nos níveis 6, 14 e 18.'},
+      {name: 'Conjuração', source: 'Classe', description: 'A magia é parte de você, fluindo diretamente da sua herança. Você pode lançar feitiços de feiticeiro.'},
+    ],
+    startingEquipment: ['Besta Leve com 20 virotes', 'Bastão', 'Foco Arcano', 'Pacote do Aventureiro'],
+    startingGold: 3 * 4,
+  },
   guerreiro: {
+    id_class: 7,
     displayName: 'Guerreiro',
     hitDie: 10,
     savingThrows: ['STR', 'CON'],
@@ -251,6 +292,7 @@ export const CLASSES: Record<string, ClassRule> = {
     startingGold: 5 * 4,
   },
   ladino: {
+    id_class: 8,
     displayName: 'Ladino',
     hitDie: 8,
     savingThrows: ['DEX', 'INT'],
@@ -267,6 +309,7 @@ export const CLASSES: Record<string, ClassRule> = {
     startingGold: 4 * 4,
   },
   mago: {
+    id_class: 9,
     displayName: 'Mago',
     hitDie: 6,
     savingThrows: ['INT', 'WIS'],
@@ -282,7 +325,24 @@ export const CLASSES: Record<string, ClassRule> = {
     startingEquipment: ['Bastão', 'Grimório', 'Foco Arcano (Varinha)', 'Pacote de Estudioso', 'Tinteiro e Pena'],
     startingGold: 4 * 4,
   },
+  monge: {
+    id_class: 10,
+    displayName: 'Monge',
+    hitDie: 8,
+    savingThrows: ['STR', 'DEX'],
+    armorProficiencies: ['Nenhuma'],
+    weaponProficiencies: ['Armas Simples', 'Espadas Curtas'],
+    isSpellcaster: false,
+    spellSlotsLevel1: 0,
+    traits: [
+      {name: 'Defesa sem Armadura', source: 'Classe', description: 'Enquanto não estiver vestindo armadura e não estiver empunhando um escudo, sua CA é igual a 10 + seu modificador de Destreza + seu modificador de Sabedoria.'},
+      {name: 'Artes Marciais', source: 'Classe', description: 'Sua prática das artes marciais lhe dá o domínio de estilos de combate que usam ataques desarmados e armas de monge.'},
+    ],
+    startingEquipment: ['Espada Curta', 'Dez Dardos', 'Pacote do Aventureiro'],
+    startingGold: 5 * 4,
+  },
   paladino: {
+    id_class: 11,
     displayName: 'Paladino',
     hitDie: 10,
     savingThrows: ['WIS', 'CHA'],
@@ -299,6 +359,7 @@ export const CLASSES: Record<string, ClassRule> = {
     startingGold: 5 * 4,
   },
   ranger: {
+    id_class: 12,
     displayName: 'Ranger (Patrulheiro)',
     hitDie: 10,
     savingThrows: ['STR', 'DEX'],
@@ -314,53 +375,6 @@ export const CLASSES: Record<string, ClassRule> = {
     startingEquipment: ['Cota de Escamas', 'Duas Espadas Curtas', 'Pacote do Explorador', 'Arco Longo com 20 flechas'],
     startingGold: 5 * 4,
   },
-  feiticeiro: {
-    displayName: 'Feiticeiro',
-    hitDie: 6,
-    savingThrows: ['CON', 'CHA'],
-    armorProficiencies: ['Nenhuma'],
-    weaponProficiencies: ['Adagas', 'Dardos', 'Fundas', 'Bastões', 'Bestas Leves'],
-    isSpellcaster: true,
-    spellcastingAbility: 'CHA',
-    spellSlotsLevel1: 2,
-    traits: [
-      {name: 'Origem de Feitiçaria', source: 'Classe', description: 'Escolha uma origem de feitiçaria que descreve a fonte de seu poder mágico inato. Sua escolha concede características a você no 1º nível e novamente nos níveis 6, 14 e 18.'},
-      {name: 'Conjuração', source: 'Classe', description: 'A magia é parte de você, fluindo diretamente da sua herança. Você pode lançar feitiços de feiticeiro.'},
-    ],
-    startingEquipment: ['Besta Leve com 20 virotes', 'Bastão', 'Foco Arcano', 'Pacote do Aventureiro'],
-    startingGold: 3 * 4,
-  },
-  bruxo: {
-    displayName: 'Bruxo',
-    hitDie: 8,
-    savingThrows: ['WIS', 'CHA'],
-    armorProficiencies: ['Leve'],
-    weaponProficiencies: ['Armas Simples'],
-    isSpellcaster: true,
-    spellcastingAbility: 'CHA',
-    spellSlotsLevel1: 1,
-    traits: [
-      {name: 'Patrono Sobrenatural', source: 'Classe', description: 'Você fez um pacto com um ser sobrenatural de seu nível de poder, um ser cujos objetivos e motivações são diferentes dos mortais.'},
-      {name: 'Magia do Pacto', source: 'Classe', description: 'Seu arcano pesquisado concedeu-lhe facilidade com feitiços. Você pode lançar feitiços de bruxo.'},
-    ],
-    startingEquipment: ['Besta Leve com 20 virotes', 'Bastão', 'Couro Batido', 'Foco Arcano', 'Pacote do Estudioso'],
-    startingGold: 4 * 4,
-  },
-  monge: {
-    displayName: 'Monge',
-    hitDie: 8,
-    savingThrows: ['STR', 'DEX'],
-    armorProficiencies: ['Nenhuma'],
-    weaponProficiencies: ['Armas Simples', 'Espadas Curtas'],
-    isSpellcaster: false,
-    spellSlotsLevel1: 0,
-    traits: [
-      {name: 'Defesa sem Armadura', source: 'Classe', description: 'Enquanto não estiver vestindo armadura e não estiver empunhando um escudo, sua CA é igual a 10 + seu modificador de Destreza + seu modificador de Sabedoria.'},
-      {name: 'Artes Marciais', source: 'Classe', description: 'Sua prática das artes marciais lhe dá o domínio de estilos de combate que usam ataques desarmados e armas de monge.'},
-    ],
-    startingEquipment: ['Espada Curta', 'Dez Dardos', 'Pacote do Aventureiro'],
-    startingGold: 5 * 4,
-  },
 };
 
 // ---------------------------------------------------------------------------
@@ -370,66 +384,185 @@ export const CLASSES: Record<string, ClassRule> = {
 //TO DO: Adicionar o id_background a partir do banco de dados e utilizar somente as regras.
 export const BACKGROUNDS: Record<string, BackgroundRule> = {
   acolito: {
+    id_background: 1,
     displayName: 'Acólito',
-    skills: ['perception', 'religion'],
+    skills: ['insight', 'religion'],
     tools: ['Nenhuma'],
     languages: 2,
-    feature: {name: 'Abrigo dos Fiéis', source: 'Antecedente', description: 'Como acólito, você comanda o respeito daqueles que compartilham de sua fé. Você e seus aventureiros podem esperar receber cura e cuidados gratuitos no templo.'},
-    startingItems: ['Símbolo Sagrado', 'Livro de Preces', 'Incenso (5 palitos)', 'Vestes', 'Roupas comuns', 'Bolsa com 15 po'],
+    feature: {
+      name: 'Abrigo dos Fiéis', 
+      source: 'Antecedente', 
+      description: 'Como acólito, você comanda o respeito daqueles que compartilham de sua fé. Você e seus aventureiros podem esperar receber cura e cuidados gratuitos no templo.'
+    },
+    startingItems: ['Símbolo Sagrado', 'Livro de Preces', 'Incenso (5 varetas)', 'Vestimentas', 'Roupas comuns', 'Bolsa com 15 po'],
     startingGold: 15,
   },
-  chalatao: {
+  'artesao-de-guilda': {
+    id_background: 2,
+    displayName: 'Artesão de Guilda',
+    skills: ['insight', 'persuasion'],
+    tools: ['Ferramentas de Artesão'],
+    languages: 1,
+    feature: {
+      name: 'Associação de Guilda',
+      source: 'Antecedente',
+      description: 'Como membro de uma guilda, você tem acesso aos benefícios de membresia, incluindo moradia e suporte político/jurídico.'
+    },
+    startingItems: ['Ferramentas de artesão', 'Carta de apresentação', 'Roupas de viajante', 'Bolsa com 15 po'],
+    startingGold: 15,
+  },
+  artista: {
+    id_background: 3,
+    displayName: 'Artista',
+    skills: ['acrobatics', 'performance'],
+    tools: ['Kit de Disfarce', 'Um tipo de instrumento musical'],
+    languages: 0,
+    feature: {
+      name: 'Pelo Olhar do Público',
+      source: 'Antecedente',
+      description: 'Você sempre consegue encontrar um lugar para se apresentar e receber comida e alojamento em troca.'
+    },
+    startingItems: ['Instrumento musical', 'Presente de admirador', 'Traje', 'Bolsa com 15 po'],
+    startingGold: 15,
+  },
+  charlatao: {
+    id_background: 4,
     displayName: 'Charlatão',
     skills: ['deception', 'sleight_of_hand'],
     tools: ['Kit de Disfarce', 'Kit de Falsificação'],
     languages: 0,
-    feature: {name: 'Falsa Identidade', source: 'Antecedente', description: 'Você criou uma segunda identidade que inclui documentação, contatos estabelecidos e disfarces.'},
-    startingItems: ['Roupas Finas', 'Kit de Disfarce', 'Ferramentas do Ofício', 'Bolsa com 15 po'],
+    feature: {
+      name: 'Falsa Identidade', 
+      source: 'Antecedente', 
+      description: 'Você criou uma segunda identidade que inclui documentação, contatos estabelecidos e disfarces.'
+    },
+    startingItems: ['Roupas Finas', 'Kit de Disfarce', 'Ferramentas de Trapaça', 'Bolsa com 15 po'],
     startingGold: 15,
   },
   criminoso: {
+    id_background: 5,
     displayName: 'Criminoso',
     skills: ['deception', 'stealth'],
-    tools: ['Ferramentas de Ladrão', 'Kit de Jogo'],
+    tools: ['Um tipo de kit de jogo', 'Ferramentas de Ladrão'],
     languages: 0,
-    feature: {name: 'Contato Criminal', source: 'Antecedente', description: 'Você tem um contato confiável e de confiança que age como seu intermediário na rede criminal.'},
+    feature: {
+      name: 'Contato Criminal', 
+      source: 'Antecedente', 
+      description: 'Você tem um contato confiável e de confiança que age como seu intermediário na rede criminal.'
+    },
     startingItems: ['Pé de Cabra', 'Roupas Escuras com Capuz', 'Bolsa com 15 po'],
     startingGold: 15,
   },
+  eremita: {
+    id_background: 6,
+    displayName: 'Eremita',
+    skills: ['medicine', 'religion'],
+    tools: ['Kit de Herbalismo'],
+    languages: 1,
+    feature: {
+      name: 'Descoberta',
+      source: 'Antecedente',
+      description: 'Você descobriu um segredo único após seu tempo de reclusão.'
+    },
+    startingItems: ['Estojo de pergaminho', 'Cobertor de inverno', 'Kit de herbalismo', '5 po'],
+    startingGold: 5,
+  },
+  forasteiro: {
+    id_background: 7,
+    displayName: 'Forasteiro',
+    skills: ['athletics', 'survival'],
+    tools: ['Um tipo de instrumento musical'],
+    languages: 1,
+    feature: {
+      name: 'Andarilho',
+      source: 'Antecedente',
+      description: 'Você tem uma memória excelente para mapas e geografia.'
+    },
+    startingItems: ['Bordão', 'Armadilha de caça', 'Troféu de animal', 'Bolsa com 10 po'],
+    startingGold: 10,
+  },
   'heroi-do-povo': {
+    id_background: 8,
     displayName: 'Herói do Povo',
     skills: ['animal_handling', 'survival'],
     tools: ['Ferramentas de Artesão', 'Veículos Terrestres'],
     languages: 0,
-    feature: {name: 'Chamado Rústico', source: 'Antecedente', description: 'Desde sua origem humilde, o povo confia e está do seu lado.'},
+    feature: {
+      name: 'Hospitalidade Rústica', 
+      source: 'Antecedente', 
+      description: 'Desde sua origem humilde, o povo confia e está do seu lado.'
+    },
     startingItems: ['Ferramentas de Artesão', 'Pá', 'Pote de Ferro', 'Roupas Comuns', 'Bolsa com 10 po'],
     startingGold: 10,
   },
+  marinheiro: {
+    id_background: 9,
+    displayName: 'Marinheiro',
+    skills: ['athletics', 'perception'],
+    tools: ['Ferramentas de Navegador', 'Veículos Aquáticos'],
+    languages: 0,
+    feature: {
+      name: 'Passagem de Navio',
+      source: 'Antecedente',
+      description: 'Você pode conseguir passagem gratuita em um navio para você e seus companheiros.'
+    },
+    startingItems: ['Clava (malagueta)', '15m de corda de seda', 'Amuleto da sorte', 'Bolsa com 10 po'],
+    startingGold: 10,
+  },
   nobre: {
+    id_background: 10,
     displayName: 'Nobre',
     skills: ['history', 'persuasion'],
-    tools: ['Kit de Jogo'],
+    tools: ['Um tipo de kit de jogo'],
     languages: 1,
-    feature: {name: 'Posição de Privilégio', source: 'Antecedente', description: 'Graças à sua posição nobre, pessoas tendem a pensar o melhor de você. Você é bem-vindo na alta sociedade.'},
-    startingItems: ['Roupas Finas', 'Anel com Brasão', 'Pergaminho de Pedigree', 'Bolsa com 25 po'],
+    feature: {
+      name: 'Posição de Privilégio', 
+      source: 'Antecedente', 
+      description: 'Graças à sua posição nobre, pessoas tendem a pensar o melhor de você. Você é bem-vindo na alta sociedade.'
+    },
+    startingItems: ['Roupas Finas', 'Anel de Sinete', 'Pergaminho de Linhagem', 'Bolsa com 25 po'],
     startingGold: 25,
   },
+  orfao: {
+    id_background: 11,
+    displayName: 'Órfão',
+    skills: ['stealth', 'sleight_of_hand'],
+    tools: ['Kit de Disfarce', 'Ferramentas de Ladrão'],
+    languages: 0,
+    feature: {
+      name: 'Segredos da Cidade',
+      source: 'Antecedente',
+      description: 'Você conhece os caminhos e passagens secretas da cidade onde cresceu.'
+    },
+    startingItems: ['Faca pequena', 'Mapa da cidade natal', 'Rato de estimação', 'Bolsa com 10 po'],
+    startingGold: 10,
+  },
   sabio: {
+    id_background: 12,
     displayName: 'Sábio',
     skills: ['arcana', 'history'],
     tools: ['Nenhuma'],
     languages: 2,
-    feature: {name: 'Pesquisador', source: 'Antecedente', description: 'Quando você tenta aprender ou relembrar um fragmento de conhecimento, se você não souber a informação, você frequentemente sabe onde e de quem pode obtê-la.'},
-    startingItems: ['Garrafa de Tinta Preta', 'Pena de Escrever', 'Faca Pequena', 'Carta de um Colega Morto', 'Roupas Comuns', 'Bolsa com 10 po'],
+    feature: {
+      name: 'Pesquisador', 
+      source: 'Antecedente', 
+      description: 'Quando você tenta aprender ou relembrar um conhecimento, você frequentemente sabe onde obter essa informação.'
+    },
+    startingItems: ['Vidro de tinta', 'Pena', 'Faca Pequena', 'Carta de Colega', 'Bolsa com 10 po'],
     startingGold: 10,
   },
   soldado: {
+    id_background: 13,
     displayName: 'Soldado',
     skills: ['athletics', 'intimidation'],
-    tools: ['Veículos Terrestres', 'Kit de Jogos'],
+    tools: ['Veículos Terrestres', 'Um tipo de kit de jogo'],
     languages: 0,
-    feature: {name: 'Patente Militar', source: 'Antecedente', description: 'Você tem uma patente militar de sua carreira como soldado. Soldados leais a sua antiga organização militar ainda reconhecem sua autoridade e influência.'},
-    startingItems: ['Insígnia de Patente', 'Troféu de um Inimigo Morto', 'Ossos de Jogo', 'Roupas Comuns', 'Bolsa com 10 po'],
+    feature: {
+      name: 'Patente Militar', 
+      source: 'Antecedente', 
+      description: 'Você tem uma patente militar. Soldados leais a sua antiga organização ainda reconhecem sua autoridade.'
+    },
+    startingItems: ['Insígnia de Patente', 'Troféu de Inimigo', 'Dados de osso ou baralho', 'Bolsa com 10 po'],
     startingGold: 10,
   },
 };
