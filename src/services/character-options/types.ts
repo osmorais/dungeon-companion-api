@@ -17,6 +17,16 @@ export interface WeaponOption {
   isRanged: boolean;
 }
 
+export interface WeaponRow {
+  id_weapon: number;
+  name: string;
+  damage_die: string | null;
+  damage_type: string | null;
+  properties: string | null;
+  weight: number;
+  price_value: number;
+}
+
 export interface Race {
   id_race: number;
   name: string;

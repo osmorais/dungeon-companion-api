@@ -1,6 +1,6 @@
 import {inject, injectable, BindingScope} from '@loopback/core';
 import {PostgresDatasource} from '../../datasources';
-import {Alignment, AttributeType, Background, CharacterClass, Race, Skill} from './types';
+import {Alignment, AttributeType, Background, CharacterClass, Race, Skill, WeaponRow} from './types';
 
 @injectable({scope: BindingScope.TRANSIENT})
 export class CharacterOptionsRepository {
@@ -31,5 +31,9 @@ export class CharacterOptionsRepository {
 
   async findAlignments(): Promise<Alignment[]> {
     return this.db.sql<Alignment[]>`SELECT id_alignment, name, description FROM alignment`;
+  }
+
+  async findWeapons(): Promise<WeaponRow[]> {
+    return this.db.sql<WeaponRow[]>`SELECT id_weapon, name, damage_die, damage_type, properties, weight, price_value FROM weapon`;
   }
 }
