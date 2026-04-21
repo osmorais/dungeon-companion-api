@@ -1,6 +1,7 @@
 import {inject, injectable, BindingScope} from '@loopback/core';
 import {PostgresDatasource} from '../datasources';
-import {AttributeType, CharacterOptions, Skill} from './character-options/types';
+import {AttributeType, CharacterOptions, Skill, WeaponOption} from './character-options/types';
+import {WEAPONS} from './character-sheet/rules';
 
 @injectable({scope: BindingScope.TRANSIENT})
 export class CharacterOptionsService {
@@ -15,6 +16,13 @@ export class CharacterOptionsService {
       this.db.sql<Skill[]>`SELECT id_skill, name, id_attribute FROM skill`,
     ]);
 
-    return {attributes, skills};
+    const weapons: WeaponOption[] = Object.values(WEAPONS).map(w => ({
+      name: w.displayName,
+      damage: `${w.damageDie} ${w.damageType}`,
+      properties: w.properties,
+      isRanged: w.isRanged,
+    }));
+
+    return {attributes, skills, weapons};
   }
 }
