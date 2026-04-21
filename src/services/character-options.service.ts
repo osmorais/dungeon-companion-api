@@ -1,28 +1,35 @@
-import {inject, injectable, BindingScope} from '@loopback/core';
-import {PostgresDatasource} from '../datasources';
-import {AttributeType, CharacterOptions, Skill, WeaponOption} from './character-options/types';
-import {WEAPONS} from './character-sheet/rules';
+import {injectable, BindingScope, service} from '@loopback/core';
+import {CharacterOptionsRepository} from '../repositories/character-options.repository';
+import {Alignment, Background, CharacterClass, CharacterOptions, Race, WeaponOption} from '../models/character-options-types';
 
 @injectable({scope: BindingScope.TRANSIENT})
 export class CharacterOptionsService {
   constructor(
-    @inject('db.Postgres')
-    private db: PostgresDatasource,
+    @service(CharacterOptionsRepository)
+    private repository: CharacterOptionsRepository,
   ) {}
 
   async getCharacterOptions(): Promise<CharacterOptions> {
-    const [attributes, skills] = await Promise.all([
-      this.db.sql<AttributeType[]>`SELECT id_attribute, name, full_name FROM attribute_type`,
-      this.db.sql<Skill[]>`SELECT id_skill, name, id_attribute FROM skill`,
+    const [attributes, skills, races, classes, backgrounds, alignments, weaponRows] = await Promise.all([
+      this.repository.findAttributes(),
+      this.repository.findSkills(),
+      this.repository.findRaces(),
+      this.repository.findClasses(),
+      this.repository.findBackgrounds(),
+      this.repository.findAlignments(),
+      this.repository.findWeapons(),
     ]);
 
-    const weapons: WeaponOption[] = Object.values(WEAPONS).map(w => ({
-      name: w.displayName,
-      damage: `${w.damageDie} ${w.damageType}`,
-      properties: w.properties,
-      isRanged: w.isRanged,
-    }));
+    const weapons: WeaponOption[] = weaponRows.map(w => {
+      const props = w.properties ? w.properties.split(', ') : [];
+      return {
+        name: w.name,
+        damage: w.damage_die && w.damage_type ? `${w.damage_die} ${w.damage_type}` : '-',
+        properties: props,
+        isRanged: props.some(p => p.toLowerCase().startsWith('munição')),
+      };
+    });
 
-    return {attributes, skills, weapons};
+    return {attributes, skills, weapons, races, classes, backgrounds, alignments};
   }
 }

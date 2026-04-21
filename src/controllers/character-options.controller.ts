@@ -1,7 +1,7 @@
 import {inject} from '@loopback/core';
 import {get, response} from '@loopback/rest';
 import {CharacterOptionsService} from '../services';
-import {CharacterOptions} from '../services/character-options/types';
+import {CharacterOptions} from '../models/character-options-types';
 
 export class CharacterOptionsController {
   constructor(
