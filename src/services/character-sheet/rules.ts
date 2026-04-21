@@ -1,6 +1,7 @@
 import {StatKeyEn, Trait} from './types';
 
 export interface RaceRule {
+  id_race: number;
   displayName: string;
   bonuses: Partial<Record<StatKeyEn, number>>;
   speed: string;
@@ -64,6 +65,7 @@ export interface ArmorRule {
 //TO DO: Adicionar o id_race a partir do banco de dados e utilizar somente as regras.
 export const RACES: Record<string, RaceRule> = {
   anao: {
+    id_race: 1,
     displayName: 'Anão',
     bonuses: {CON: 2},
     speed: '7,5m',
@@ -74,6 +76,7 @@ export const RACES: Record<string, RaceRule> = {
     ],
   },
   elfo: {
+    id_race: 2,
     displayName: 'Elfo',
     bonuses: {DEX: 2},
     speed: '9m',
@@ -86,6 +89,7 @@ export const RACES: Record<string, RaceRule> = {
     ],
   },
   halfling: {
+    id_race: 3,
     displayName: 'Halfling',
     bonuses: {DEX: 2},
     speed: '7,5m',
@@ -95,14 +99,8 @@ export const RACES: Record<string, RaceRule> = {
       {name: 'Bravura', source: 'Raça', description: 'Você tem vantagem em testes de resistência contra medo.'},
     ],
   },
-  humano: {
-    displayName: 'Humano',
-    bonuses: {STR: 1, DEX: 1, CON: 1, INT: 1, WIS: 1, CHA: 1},
-    speed: '9m',
-    languages: ['Comum'],
-    traits: [],
-  },
   draconato: {
+    id_race: 4,
     displayName: 'Draconato',
     bonuses: {STR: 2, CHA: 1},
     speed: '9m',
@@ -113,6 +111,7 @@ export const RACES: Record<string, RaceRule> = {
     ],
   },
   gnomo: {
+    id_race: 5,
     displayName: 'Gnomo',
     bonuses: {INT: 2},
     speed: '7,5m',
@@ -123,6 +122,7 @@ export const RACES: Record<string, RaceRule> = {
     ],
   },
   'meio-elfo': {
+    id_race: 6,
     displayName: 'Meio-Elfo',
     bonuses: {CHA: 2},
     speed: '9m',
@@ -134,6 +134,7 @@ export const RACES: Record<string, RaceRule> = {
     ],
   },
   'meio-orc': {
+    id_race: 7,
     displayName: 'Meio-Orc',
     bonuses: {STR: 2, CON: 1},
     speed: '9m',
@@ -145,6 +146,7 @@ export const RACES: Record<string, RaceRule> = {
     ],
   },
   tiefling: {
+    id_race: 8,
     displayName: 'Tiefling',
     bonuses: {CHA: 2, INT: 1},
     speed: '9m',
@@ -154,6 +156,14 @@ export const RACES: Record<string, RaceRule> = {
       {name: 'Resistência Infernal', source: 'Raça', description: 'Você tem resistência a dano de fogo.'},
       {name: 'Legado Infernal', source: 'Raça', description: 'Você conhece o truque Taumaturgia. No nível 3, pode lançar Mãos Flamejantes uma vez por dia. No nível 5, pode lançar Escuridão uma vez por dia.'},
     ],
+  },
+  humano: {
+    id_race: 9,
+    displayName: 'Humano',
+    bonuses: {STR: 1, DEX: 1, CON: 1, INT: 1, WIS: 1, CHA: 1},
+    speed: '9m',
+    languages: ['Comum'],
+    traits: [],
   },
 };
 
