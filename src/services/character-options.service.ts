@@ -1,6 +1,6 @@
 import {injectable, BindingScope, service} from '@loopback/core';
-import {CharacterOptionsRepository} from './character-options/character-options.repository';
-import {Alignment, Background, CharacterClass, CharacterOptions, Race, WeaponOption} from './character-options/types';
+import {CharacterOptionsRepository} from '../repositories/character-options.repository';
+import {Alignment, Background, CharacterClass, CharacterOptions, Race, WeaponOption} from '../models/character-options-types';
 
 @injectable({scope: BindingScope.TRANSIENT})
 export class CharacterOptionsService {

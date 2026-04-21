@@ -1,7 +1,7 @@
 import {inject} from '@loopback/core';
 import {get, param, post, requestBody, response} from '@loopback/rest';
 import {AiAgentService, CharacterSheetService} from '../services';
-import {CharacterInput} from '../services/character-sheet/types';
+import {CharacterInput} from '../models/character-sheet-types';
 
 export class CharacterController {
   constructor(

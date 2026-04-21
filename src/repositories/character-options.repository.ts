@@ -1,6 +1,6 @@
 import {inject, injectable, BindingScope} from '@loopback/core';
-import {PostgresDatasource} from '../../datasources';
-import {Alignment, AttributeType, Background, CharacterClass, Race, Skill, WeaponRow} from './types';
+import {PostgresDatasource} from '../datasources';
+import {Alignment, AttributeType, Background, CharacterClass, Race, Skill, WeaponRow} from '../models/character-options-types';
 
 @injectable({scope: BindingScope.TRANSIENT})
 export class CharacterOptionsRepository {
