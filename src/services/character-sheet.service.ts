@@ -1,5 +1,5 @@
 import {injectable, BindingScope} from '@loopback/core';
-import {CharacterInput, CharacterSheet} from './character-sheet/types';
+import {CharacterInput, CharacterSheet} from '../models/character-sheet-types';
 import {
   normalizeKey,
   resolveRace,

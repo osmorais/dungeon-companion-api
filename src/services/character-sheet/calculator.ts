@@ -1,4 +1,4 @@
-import {FinalStats, StatKeyEn, StatBlock, SkillBlock, WeaponAction, Trait} from './types';
+import {FinalStats, StatKeyEn, StatBlock, SkillBlock, WeaponAction, Trait} from '../../models/character-sheet-types';
 import {RACES, SUBRACES, CLASSES, BACKGROUNDS, WEAPONS, ARMOR, SKILLS, SPELL_SLOTS, RaceRule, ClassRule, BackgroundRule, WeaponRule} from './rules';
 
 // ---------------------------------------------------------------------------
