@@ -8,7 +8,7 @@ import {RestApplication} from '@loopback/rest';
 import path from 'path';
 import {MySequence} from './sequence';
 import {AiAgentService, CharacterSheetService, CharacterOptionsService} from './services';
-import {CharacterOptionsRepository} from './services/character-options/character-options.repository';
+import {CharacterOptionsRepository} from './repositories/character-options.repository';
 import {PostgresDatasource} from './datasources';
 
 export {ApplicationConfig};

@@ -1,4 +1,4 @@
-import {StatKeyEn, Trait} from './types';
+import {StatKeyEn, Trait} from '../../models/character-sheet-types';
 
 export interface RaceRule {
   id_race: number;
