@@ -10,7 +10,15 @@ export interface Skill {
   id_attribute: number;
 }
 
+export interface WeaponOption {
+  name: string;
+  damage: string;
+  properties: string[];
+  isRanged: boolean;
+}
+
 export interface CharacterOptions {
   attributes: AttributeType[];
   skills: Skill[];
+  weapons: WeaponOption[];
 }
