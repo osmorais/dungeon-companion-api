@@ -26,11 +26,12 @@ export class CharacterSheetService {
     const {core_build, attributes, choices, equipment, character_details} = input;
     const level = core_build.level;
 
-    const raceRule = resolveRace(core_build.race);
+    const raceRule = resolveRace(core_build.id_race);
     const subraceRule = resolveSubrace(core_build.subrace);
-    const classRule = resolveClass(core_build.class);
-    const classKey = normalizeKey(core_build.class);
-    const bgRule = resolveBackground(core_build.background);
+    const classRule = resolveClass(core_build.id_class);
+    // const classKey = normalizeKey(core_build.class);
+    const classKey = core_build.id_class ?? 0;
+    const bgRule = resolveBackground(core_build.id_background);
 
     const stats = applyRacialBonuses(attributes.base_values, raceRule, subraceRule);
     const profBonus = getProfBonus(level);

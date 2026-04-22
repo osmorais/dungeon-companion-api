@@ -63,8 +63,8 @@ export interface ArmorRule {
 // ---------------------------------------------------------------------------
 
 //TO DO: Adicionar o id_race a partir do banco de dados e utilizar somente as regras.
-export const RACES: Record<string, RaceRule> = {
-  anao: {
+export const RACES: Record<number, RaceRule> = {
+  1: {
     id_race: 1,
     displayName: 'Anão',
     bonuses: {CON: 2},
@@ -75,7 +75,7 @@ export const RACES: Record<string, RaceRule> = {
       {name: 'Resistência Anã', source: 'Raça', description: 'Você tem vantagem em testes de resistência contra veneno e resistência a dano de veneno.'},
     ],
   },
-  elfo: {
+  2: {
     id_race: 2,
     displayName: 'Elfo',
     bonuses: {DEX: 2},
@@ -88,7 +88,7 @@ export const RACES: Record<string, RaceRule> = {
       {name: 'Transe', source: 'Raça', description: 'Elfos não precisam dormir. Em vez disso, meditam profundamente por 4 horas por dia.'},
     ],
   },
-  halfling: {
+  3: {
     id_race: 3,
     displayName: 'Halfling',
     bonuses: {DEX: 2},
@@ -99,7 +99,7 @@ export const RACES: Record<string, RaceRule> = {
       {name: 'Bravura', source: 'Raça', description: 'Você tem vantagem em testes de resistência contra medo.'},
     ],
   },
-  draconato: {
+  4: {
     id_race: 4,
     displayName: 'Draconato',
     bonuses: {STR: 2, CHA: 1},
@@ -110,7 +110,7 @@ export const RACES: Record<string, RaceRule> = {
       {name: 'Resistência Dracônica', source: 'Raça', description: 'Você tem resistência ao tipo de dano associado à sua ancestralidade dracônica.'},
     ],
   },
-  gnomo: {
+  5: {
     id_race: 5,
     displayName: 'Gnomo',
     bonuses: {INT: 2},
@@ -121,7 +121,7 @@ export const RACES: Record<string, RaceRule> = {
       {name: 'Esperteza Gnômica', source: 'Raça', description: 'Você tem vantagem em todos os testes de resistência de Inteligência, Sabedoria e Carisma contra magia.'},
     ],
   },
-  'meio-elfo': {
+  6: {
     id_race: 6,
     displayName: 'Meio-Elfo',
     bonuses: {CHA: 2},
@@ -133,7 +133,7 @@ export const RACES: Record<string, RaceRule> = {
       {name: 'Habilidade Versátil', source: 'Raça', description: 'Você ganha proficiência em duas perícias à sua escolha.'},
     ],
   },
-  'meio-orc': {
+  7: {
     id_race: 7,
     displayName: 'Meio-Orc',
     bonuses: {STR: 2, CON: 1},
@@ -145,7 +145,7 @@ export const RACES: Record<string, RaceRule> = {
       {name: 'Tolerância Inabalável', source: 'Raça', description: 'Quando um dano te reduziria a 0 pontos de vida, você pode usar sua reação para cair a 1 ponto de vida em vez disso.'},
     ],
   },
-  tiefling: {
+  8: {
     id_race: 8,
     displayName: 'Tiefling',
     bonuses: {CHA: 2, INT: 1},
@@ -157,7 +157,7 @@ export const RACES: Record<string, RaceRule> = {
       {name: 'Legado Infernal', source: 'Raça', description: 'Você conhece o truque Taumaturgia. No nível 3, pode lançar Mãos Flamejantes uma vez por dia. No nível 5, pode lançar Escuridão uma vez por dia.'},
     ],
   },
-  humano: {
+  9: {
     id_race: 9,
     displayName: 'Humano',
     bonuses: {STR: 1, DEX: 1, CON: 1, INT: 1, WIS: 1, CHA: 1},
@@ -183,8 +183,8 @@ export const SUBRACES: Record<string, SubraceRule> = {
 // ---------------------------------------------------------------------------
 
 //TO DO: Adicionar o id_class a partir do banco de dados e utilizar somente as regras.
-export const CLASSES: Record<string, ClassRule> = {
-  barbaro: {
+export const CLASSES: Record<number, ClassRule> = {
+  1: {
     id_class: 1,
     displayName: 'Bárbaro',
     hitDie: 12,
@@ -200,7 +200,7 @@ export const CLASSES: Record<string, ClassRule> = {
     startingEquipment: ['Machado Grande', 'Dois Machados de Mão', 'Pacote de Aventureiro', 'Quatro Azagaias'],
     startingGold: 0,
   },
-  bardo: {
+  2: {
     id_class: 2,
     displayName: 'Bardo',
     hitDie: 8,
@@ -217,7 +217,7 @@ export const CLASSES: Record<string, ClassRule> = {
     startingEquipment: ['Rapieira', 'Instrumento Musical', 'Couro Batido', 'Pacote do Diplomata'],
     startingGold: 5 * 4,
   },
-  bruxo: {
+  3: {
     id_class: 3,
     displayName: 'Bruxo',
     hitDie: 8,
@@ -234,7 +234,7 @@ export const CLASSES: Record<string, ClassRule> = {
     startingEquipment: ['Besta Leve com 20 virotes', 'Bastão', 'Couro Batido', 'Foco Arcano', 'Pacote do Estudioso'],
     startingGold: 4 * 4,
   },
-  clerigo: {
+  4: {
     id_class: 4,
     displayName: 'Clérigo',
     hitDie: 8,
@@ -251,7 +251,7 @@ export const CLASSES: Record<string, ClassRule> = {
     startingEquipment: ['Maça', 'Escudo', 'Cota de Malha', 'Pacote do Padre'],
     startingGold: 5 * 4,
   },
-  druida: {
+  5: {
     id_class: 5,
     displayName: 'Druida',
     hitDie: 8,
@@ -268,7 +268,7 @@ export const CLASSES: Record<string, ClassRule> = {
     startingEquipment: ['Escudo de Madeira', 'Cimitarra', 'Couro Batido', 'Pacote do Explorador'],
     startingGold: 2 * 4,
   },
-  feiticeiro: {
+  6: {
     id_class: 6,
     displayName: 'Feiticeiro',
     hitDie: 6,
@@ -285,7 +285,7 @@ export const CLASSES: Record<string, ClassRule> = {
     startingEquipment: ['Besta Leve com 20 virotes', 'Bastão', 'Foco Arcano', 'Pacote do Aventureiro'],
     startingGold: 3 * 4,
   },
-  guerreiro: {
+  7: {
     id_class: 7,
     displayName: 'Guerreiro',
     hitDie: 10,
@@ -301,7 +301,7 @@ export const CLASSES: Record<string, ClassRule> = {
     startingEquipment: ['Cota de Malha', 'Escudo', 'Espada Longa', 'Besta Leve com 20 virotes', 'Pacote do Aventureiro'],
     startingGold: 5 * 4,
   },
-  ladino: {
+  8: {
     id_class: 8,
     displayName: 'Ladino',
     hitDie: 8,
@@ -318,7 +318,7 @@ export const CLASSES: Record<string, ClassRule> = {
     startingEquipment: ['Rapieira', 'Arco Curto com 20 flechas', 'Couro Batido', 'Duas Adagas', 'Ferramentas de Ladrão', 'Pacote do Aventureiro'],
     startingGold: 4 * 4,
   },
-  mago: {
+  9: {
     id_class: 9,
     displayName: 'Mago',
     hitDie: 6,
@@ -335,7 +335,7 @@ export const CLASSES: Record<string, ClassRule> = {
     startingEquipment: ['Bastão', 'Grimório', 'Foco Arcano (Varinha)', 'Pacote de Estudioso', 'Tinteiro e Pena'],
     startingGold: 4 * 4,
   },
-  monge: {
+  10: {
     id_class: 10,
     displayName: 'Monge',
     hitDie: 8,
@@ -351,7 +351,7 @@ export const CLASSES: Record<string, ClassRule> = {
     startingEquipment: ['Espada Curta', 'Dez Dardos', 'Pacote do Aventureiro'],
     startingGold: 5 * 4,
   },
-  paladino: {
+  11: {
     id_class: 11,
     displayName: 'Paladino',
     hitDie: 10,
@@ -368,7 +368,7 @@ export const CLASSES: Record<string, ClassRule> = {
     startingEquipment: ['Espada Longa', 'Escudo', 'Cota de Malha', 'Símbolo Sagrado', 'Pacote do Padre'],
     startingGold: 5 * 4,
   },
-  ranger: {
+  12: {
     id_class: 12,
     displayName: 'Ranger (Patrulheiro)',
     hitDie: 10,
@@ -392,8 +392,8 @@ export const CLASSES: Record<string, ClassRule> = {
 // ---------------------------------------------------------------------------
 
 //TO DO: Adicionar o id_background a partir do banco de dados e utilizar somente as regras.
-export const BACKGROUNDS: Record<string, BackgroundRule> = {
-  acolito: {
+export const BACKGROUNDS: Record<number, BackgroundRule> = {
+  1: {
     id_background: 1,
     displayName: 'Acólito',
     skills: ['insight', 'religion'],
@@ -407,7 +407,7 @@ export const BACKGROUNDS: Record<string, BackgroundRule> = {
     startingItems: ['Símbolo Sagrado', 'Livro de Preces', 'Incenso (5 varetas)', 'Vestimentas', 'Roupas comuns', 'Bolsa com 15 po'],
     startingGold: 15,
   },
-  'artesao-de-guilda': {
+  2: {
     id_background: 2,
     displayName: 'Artesão de Guilda',
     skills: ['insight', 'persuasion'],
@@ -421,7 +421,7 @@ export const BACKGROUNDS: Record<string, BackgroundRule> = {
     startingItems: ['Ferramentas de artesão', 'Carta de apresentação', 'Roupas de viajante', 'Bolsa com 15 po'],
     startingGold: 15,
   },
-  artista: {
+  3: {
     id_background: 3,
     displayName: 'Artista',
     skills: ['acrobatics', 'performance'],
@@ -435,7 +435,7 @@ export const BACKGROUNDS: Record<string, BackgroundRule> = {
     startingItems: ['Instrumento musical', 'Presente de admirador', 'Traje', 'Bolsa com 15 po'],
     startingGold: 15,
   },
-  charlatao: {
+  4: {
     id_background: 4,
     displayName: 'Charlatão',
     skills: ['deception', 'sleight_of_hand'],
@@ -449,7 +449,7 @@ export const BACKGROUNDS: Record<string, BackgroundRule> = {
     startingItems: ['Roupas Finas', 'Kit de Disfarce', 'Ferramentas de Trapaça', 'Bolsa com 15 po'],
     startingGold: 15,
   },
-  criminoso: {
+  5: {
     id_background: 5,
     displayName: 'Criminoso',
     skills: ['deception', 'stealth'],
@@ -463,7 +463,7 @@ export const BACKGROUNDS: Record<string, BackgroundRule> = {
     startingItems: ['Pé de Cabra', 'Roupas Escuras com Capuz', 'Bolsa com 15 po'],
     startingGold: 15,
   },
-  eremita: {
+  6: {
     id_background: 6,
     displayName: 'Eremita',
     skills: ['medicine', 'religion'],
@@ -477,7 +477,7 @@ export const BACKGROUNDS: Record<string, BackgroundRule> = {
     startingItems: ['Estojo de pergaminho', 'Cobertor de inverno', 'Kit de herbalismo', '5 po'],
     startingGold: 5,
   },
-  forasteiro: {
+  7: {
     id_background: 7,
     displayName: 'Forasteiro',
     skills: ['athletics', 'survival'],
@@ -491,7 +491,7 @@ export const BACKGROUNDS: Record<string, BackgroundRule> = {
     startingItems: ['Bordão', 'Armadilha de caça', 'Troféu de animal', 'Bolsa com 10 po'],
     startingGold: 10,
   },
-  'heroi-do-povo': {
+  8: {
     id_background: 8,
     displayName: 'Herói do Povo',
     skills: ['animal_handling', 'survival'],
@@ -505,7 +505,7 @@ export const BACKGROUNDS: Record<string, BackgroundRule> = {
     startingItems: ['Ferramentas de Artesão', 'Pá', 'Pote de Ferro', 'Roupas Comuns', 'Bolsa com 10 po'],
     startingGold: 10,
   },
-  marinheiro: {
+  9: {
     id_background: 9,
     displayName: 'Marinheiro',
     skills: ['athletics', 'perception'],
@@ -519,7 +519,7 @@ export const BACKGROUNDS: Record<string, BackgroundRule> = {
     startingItems: ['Clava (malagueta)', '15m de corda de seda', 'Amuleto da sorte', 'Bolsa com 10 po'],
     startingGold: 10,
   },
-  nobre: {
+  10: {
     id_background: 10,
     displayName: 'Nobre',
     skills: ['history', 'persuasion'],
@@ -533,7 +533,7 @@ export const BACKGROUNDS: Record<string, BackgroundRule> = {
     startingItems: ['Roupas Finas', 'Anel de Sinete', 'Pergaminho de Linhagem', 'Bolsa com 25 po'],
     startingGold: 25,
   },
-  orfao: {
+  11: {
     id_background: 11,
     displayName: 'Órfão',
     skills: ['stealth', 'sleight_of_hand'],
@@ -547,7 +547,7 @@ export const BACKGROUNDS: Record<string, BackgroundRule> = {
     startingItems: ['Faca pequena', 'Mapa da cidade natal', 'Rato de estimação', 'Bolsa com 10 po'],
     startingGold: 10,
   },
-  sabio: {
+  12: {
     id_background: 12,
     displayName: 'Sábio',
     skills: ['arcana', 'history'],
@@ -561,7 +561,7 @@ export const BACKGROUNDS: Record<string, BackgroundRule> = {
     startingItems: ['Vidro de tinta', 'Pena', 'Faca Pequena', 'Carta de Colega', 'Bolsa com 10 po'],
     startingGold: 10,
   },
-  soldado: {
+  13: {
     id_background: 13,
     displayName: 'Soldado',
     skills: ['athletics', 'intimidation'],
