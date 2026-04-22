@@ -14,10 +14,10 @@ export function normalizeKey(value: string): string {
     .replace(/[^a-z0-9-]/g, '');
 }
 
-export function resolveRace(race: string): RaceRule {
-  const key = normalizeKey(race);
+export function resolveRace(id_race: number): RaceRule {
+  const key = id_race ?? 0;
   const rule = RACES[key]; //TO DO: Passar o ID do banco de dados.
-  if (!rule) throw new Error(`Raça não encontrada: "${race}". Raças disponíveis: ${Object.keys(RACES).join(', ')}`);
+  if (!rule) throw new Error(`ID da raça não encontrado: "${id_race}". Raças disponíveis: ${Object.keys(RACES).join(', ')}`);
   return rule;
 }
 
@@ -27,17 +27,17 @@ export function resolveSubrace(subrace: string | undefined) {
   return SUBRACES[key] ?? null; 
 }
 
-export function resolveClass(className: string): ClassRule {
-  const key = normalizeKey(className);
+export function resolveClass(id_class: number): ClassRule {
+  const key = id_class ?? 0;
   const rule = CLASSES[key]; //TO DO: Passar o ID do banco de dados.
-  if (!rule) throw new Error(`Classe não encontrada: "${className}". Classes disponíveis: ${Object.keys(CLASSES).join(', ')}`);
+  if (!rule) throw new Error(`ID da classe não encontrado: "${id_class}". Classes disponíveis: ${Object.keys(CLASSES).join(', ')}`);
   return rule;
 }
 
-export function resolveBackground(background: string): BackgroundRule {
-  const key = normalizeKey(background);
+export function resolveBackground(id_background: number): BackgroundRule {
+  const key = id_background ?? 0;
   const rule = BACKGROUNDS[key]; //TO DO: Passar o ID do banco de dados.
-  if (!rule) throw new Error(`Antecedente não encontrado: "${background}". Antecedentes disponíveis: ${Object.keys(BACKGROUNDS).join(', ')}`);
+  if (!rule) throw new Error(`ID do antecedente não encontrado: "${id_background}". Antecedentes disponíveis: ${Object.keys(BACKGROUNDS).join(', ')}`);
   return rule;
 }
 
@@ -168,16 +168,16 @@ export function calcArmorClass(
   armorName: string,
   stats: FinalStats,
   hasShield: boolean,
-  classKey: string,
+  classKey: number,
 ): number {
   const armor = resolveArmor(armorName);
   const dexMod = getMod(stats.DEX);
 
   let ac: number;
   if (armor.armorType === 'none') {
-    if (classKey === 'barbaro') {
+    if (classKey === CLASSES[1].id_class) { // Bárbaro
       ac = 10 + dexMod + getMod(stats.CON);
-    } else if (classKey === 'monge') {
+    } else if (classKey === CLASSES[10].id_class) { // Monge
       ac = 10 + dexMod + getMod(stats.WIS);
     } else {
       ac = 10 + dexMod;
@@ -248,7 +248,7 @@ export function collectTraits(
 
 export function buildSpellcasting(
   classRule: ClassRule,
-  classKey: string,
+  classKey: number,
   level: number,
   spells: string[],
   stats: FinalStats,
@@ -263,7 +263,8 @@ export function buildSpellcasting(
   const spellSaveDC = 8 + profBonus + abilityMod;
   const spellAttackBonus = profBonus + abilityMod;
 
-  const classSlots = SPELL_SLOTS[classKey];
+  const className = CLASSES[classKey]?.displayName ?? 'Classe Desconcida';
+  const classSlots = SPELL_SLOTS[className];
   const levelSlots = classSlots?.[level] ?? (classRule.spellSlotsLevel1 > 0 ? {level_1: classRule.spellSlotsLevel1} : {});
   const slots = Object.fromEntries(
     Object.entries(levelSlots).filter(([, v]) => (v as number) > 0),
