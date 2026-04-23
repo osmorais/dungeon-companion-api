@@ -66,6 +66,18 @@ export interface Spell {
   school: string | null;
 }
 
+export interface Armour {
+  id_armour: number;
+  name: string;
+  armour_class_base: number | null;
+  is_sum_dexterity: boolean | null;
+  armour_type: string | null;
+  max_dexterity_bonus: number | null;
+  is_stealth_disadvantage: boolean | null;
+  weight: number | null;
+  price_value: number | null;
+}
+
 export interface CharacterOptions {
   attributes: AttributeType[];
   skills: Skill[];
@@ -75,4 +87,5 @@ export interface CharacterOptions {
   backgrounds: Background[];
   alignments: Alignment[];
   spells: Spell[];
+  armours: Armour[];
 }

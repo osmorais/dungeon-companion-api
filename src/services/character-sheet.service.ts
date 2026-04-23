@@ -39,7 +39,7 @@ export class CharacterSheetService {
 
     const attributeBlocks = buildAttributeBlocks(stats, classRule, profBonus);
     const skillBlocks = buildSkillBlocks(stats, profBonus, proficientSkills);
-    const ac = calcArmorClass(equipment.armor_type, stats, equipment.has_shield, classKey);
+    const ac = calcArmorClass(equipment.armour?.name ?? 'Nenhuma', stats, equipment.has_shield, classKey);
     const maxHP = calcMaxHP(classRule.hitDie, level, getMod(stats.CON));
     const weaponActions = buildWeaponActions(equipment.weapons, stats, profBonus);
     const traits = collectTraits(raceRule, subraceRule, classRule, bgRule);
@@ -52,7 +52,9 @@ export class CharacterSheetService {
     const raceDisplay = core_build.subrace ?? raceRule.displayName;
 
     const startingItems = [...classRule.startingEquipment, ...bgRule.startingItems];
-    const equippedWeapons = equipment.weapons.filter(w => !classRule.startingEquipment.some(e => e.toLowerCase().includes(w.toLowerCase())));
+    const equippedWeapons = equipment.weapons
+      .filter(w => !classRule.startingEquipment.some(e => e.toLowerCase().includes(w.name.toLowerCase())))
+      .map(w => w.name);
     const allItems = [...new Set([...equippedWeapons, ...startingItems])];
 
     const totalGold = bgRule.startingGold;
