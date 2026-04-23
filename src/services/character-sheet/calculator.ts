@@ -1,4 +1,5 @@
 import {FinalStats, StatKeyEn, StatBlock, SkillBlock, WeaponAction, Trait} from '../../models/character-sheet-types';
+import {Skill, Spell, WeaponOption} from '../../models/character-options-types';
 import {RACES, SUBRACES, CLASSES, BACKGROUNDS, WEAPONS, ARMOR, SKILLS, SPELL_SLOTS, RaceRule, ClassRule, BackgroundRule, WeaponRule} from './rules';
 
 // ---------------------------------------------------------------------------
@@ -202,12 +203,12 @@ export function calcMaxHP(hitDie: number, level: number, conMod: number): number
 }
 
 export function buildWeaponActions(
-  weaponNames: string[],
+  weapons: WeaponOption[],
   stats: FinalStats,
   profBonus: number,
 ): WeaponAction[] {
-  return weaponNames.flatMap(name => {
-    const rule = resolveWeapon(name);
+  return weapons.flatMap(w => {
+    const rule = resolveWeapon(w.name);
     if (!rule) return [];
 
     const strMod = getMod(stats.STR);
@@ -250,7 +251,7 @@ export function buildSpellcasting(
   classRule: ClassRule,
   classKey: number,
   level: number,
-  spells: string[],
+  spells: Spell[],
   stats: FinalStats,
   profBonus: number,
 ) {
@@ -270,8 +271,8 @@ export function buildSpellcasting(
     Object.entries(levelSlots).filter(([, v]) => (v as number) > 0),
   );
 
-  const cantrips = spells.filter(s => !s.includes('Mísseis') && !s.includes('Curar') && !s.includes('Escudo') && !s.includes('Armadura') && !s.includes('Detectar') && !s.includes('Identificar') && !s.includes('Sono'));
-  const leveledSpells = spells.filter(s => !cantrips.includes(s));
+  const cantrips = spells.filter(s => s.spellLevel === 0).map(s => s.name);
+  const leveledSpells = spells.filter(s => s.spellLevel > 0).map(s => s.name);
 
   return {
     is_spellcaster: true,
@@ -302,10 +303,10 @@ export function buildLanguages(
 }
 
 export function collectProficientSkills(
-  chosenSkills: string[],
+  chosenSkills: Skill[],
   bgRule: BackgroundRule,
   raceRule: RaceRule,
 ): string[] {
-  const normalized = chosenSkills.map(normalizeSkill);
+  const normalized = chosenSkills.map(s => normalizeSkill(s.name));
   return [...new Set([...normalized, ...bgRule.skills, ...(raceRule.skillProficiencies ?? [])])];
 }

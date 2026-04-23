@@ -1,6 +1,6 @@
 import {injectable, BindingScope, service} from '@loopback/core';
 import {CharacterOptionsRepository} from '../repositories/character-options.repository';
-import {Alignment, Background, CharacterClass, CharacterOptions, Race, Spell, WeaponOption} from '../models/character-options-types';
+import {Alignment, Armour, Background, CharacterClass, CharacterOptions, Race, Spell, WeaponOption} from '../models/character-options-types';
 
 @injectable({scope: BindingScope.TRANSIENT})
 export class CharacterOptionsService {
@@ -10,7 +10,7 @@ export class CharacterOptionsService {
   ) {}
 
   async getCharacterOptions(): Promise<CharacterOptions> {
-    const [attributes, skills, races, classes, backgrounds, alignments, weaponRows, spells] = await Promise.all([
+    const [attributes, skills, races, classes, backgrounds, alignments, weaponRows, spells, armours] = await Promise.all([
       this.repository.findAttributes(),
       this.repository.findSkills(),
       this.repository.findRaces(),
@@ -19,6 +19,7 @@ export class CharacterOptionsService {
       this.repository.findAlignments(),
       this.repository.findWeapons(),
       this.repository.findSpells(),
+      this.repository.findArmours(),
     ]);
 
     const weapons: WeaponOption[] = weaponRows.map(w => {
@@ -31,6 +32,6 @@ export class CharacterOptionsService {
       };
     });
 
-    return {attributes, skills, weapons, races, classes, backgrounds, alignments, spells};
+    return {attributes, skills, weapons, races, classes, backgrounds, alignments, spells, armours};
   }
 }

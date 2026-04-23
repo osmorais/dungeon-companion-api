@@ -1,6 +1,6 @@
 import {inject, injectable, BindingScope} from '@loopback/core';
 import {PostgresDatasource} from '../datasources';
-import {Alignment, AttributeType, Background, CharacterClass, Race, Skill, Spell, WeaponRow} from '../models/character-options-types';
+import {Alignment, Armour, AttributeType, Background, CharacterClass, Race, Skill, Spell, WeaponRow} from '../models/character-options-types';
 
 @injectable({scope: BindingScope.TRANSIENT})
 export class CharacterOptionsRepository {
@@ -45,4 +45,24 @@ export class CharacterOptionsRepository {
       ORDER BY spelllevel, name
     `;
   }
+
+  async findArmours(): Promise<Armour[]> {
+    return this.db.sql<Armour[]>`
+      SELECT id_armour, name, armour_class_base, is_sum_dexterity, armour_type,
+             max_dexterity_bonus, is_stealth_disadvantage, weight, price_value
+      FROM armour
+      ORDER BY armour_type, name
+    `;
+  }
+
+  async findSpellsByLevel(spellLevel: number): Promise<Spell[]> {
+    return this.db.sql<Spell[]>`
+      SELECT id_spell, name, description, casting_time, range_distance, duration,
+             is_verbal, is_somatic, is_material, spelllevel AS "spellLevel", school
+      FROM spell
+      WHERE spelllevel = ${spellLevel}
+      ORDER BY name
+    `;
+  }
+
 }
