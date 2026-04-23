@@ -1,3 +1,5 @@
+import {Armour, Skill, Spell, WeaponOption} from './character-options-types';
+
 export type StatKeyPt = 'FOR' | 'DES' | 'CON' | 'INT' | 'SAB' | 'CAR';
 export type StatKeyEn = 'STR' | 'DEX' | 'CON' | 'INT' | 'WIS' | 'CHA';
 
@@ -17,13 +19,13 @@ export interface CharacterInput {
     base_values: Record<StatKeyPt, number>;
   };
   choices: {
-    skills: string[];
-    spells?: string[];
+    skills: Skill[];
+    spells?: Spell[];
     feats?: string[];
   };
   equipment: {
-    armor_type: string;
-    weapons: string[];
+    armour: Armour | null;
+    weapons: WeaponOption[];
     has_shield: boolean;
   };
   character_details?: {
