@@ -9,6 +9,7 @@ import path from 'path';
 import {MySequence} from './sequence';
 import {AiAgentService, CharacterSheetService, CharacterOptionsService} from './services';
 import {CharacterOptionsRepository} from './repositories/character-options.repository';
+import {CharacterRepository} from './repositories/character.repository';
 import {PostgresDatasource} from './datasources';
 
 export {ApplicationConfig};
@@ -30,6 +31,7 @@ export class DungeonCompanionApiApplication extends BootMixin(RestApplication) {
     this.component(RestExplorerComponent);
 
     this.service(AiAgentService, 'services.AiAgentService');
+    this.service(CharacterRepository);
     this.service(CharacterSheetService, 'services.CharacterSheetService');
     this.service(CharacterOptionsRepository);
     this.service(CharacterOptionsService, 'services.CharacterOptionsService');
