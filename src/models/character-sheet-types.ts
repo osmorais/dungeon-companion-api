@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/naming-convention */
 import {Armour, Skill, Spell, WeaponOption} from './character-options-types';
 
 export type StatKeyPt = 'FOR' | 'DES' | 'CON' | 'INT' | 'SAB' | 'CAR';
@@ -72,6 +73,34 @@ export interface Trait {
   name: string;
   source: string;
   description: string;
+}
+
+export interface CharacterRawData {
+  character: {
+    id_character: number;
+    name: string;
+    level: number;
+    id_race: number;
+    id_class: number;
+    id_armour: number | null;
+    id_alignment: number | null;
+    proficiency_bonus: number;
+    armour_class: number;
+    initiative_value: number;
+    current_hit_points: number;
+    max_hit_points: number;
+    hit_dice: string;
+    passive_perception: string | number;
+    xp_points: number;
+    total_po: number;
+    alignment_name: string | null;
+    id_background: number | null;
+  };
+  attributes: Array<{attribute_name: string; score: number; modifier: number}>;
+  skills: Array<{skill_name: string; is_trained: boolean}>;
+  spells: Array<{id_spell: number; name: string; spell_level: number}>;
+  weapons: Array<{name: string; has_proficiency: boolean}>;
+  items: Array<{name: string}>;
 }
 
 export interface CharacterSheet {

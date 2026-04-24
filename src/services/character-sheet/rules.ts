@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/naming-convention */
 import {StatKeyEn, Trait} from '../../models/character-sheet-types';
 
 export interface RaceRule {
