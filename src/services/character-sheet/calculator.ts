@@ -1,3 +1,5 @@
+/* eslint-disable no-void */
+/* eslint-disable @typescript-eslint/naming-convention */
 import {FinalStats, StatKeyEn, StatBlock, SkillBlock, WeaponAction, Trait} from '../../models/character-sheet-types';
 import {Skill, Spell, WeaponOption} from '../../models/character-options-types';
 import {RACES, SUBRACES, CLASSES, BACKGROUNDS, WEAPONS, ARMOR, SKILLS, SPELL_SLOTS, RaceRule, ClassRule, BackgroundRule, WeaponRule} from './rules';
@@ -17,7 +19,7 @@ export function normalizeKey(value: string): string {
 
 export function resolveRace(id_race: number): RaceRule {
   const key = id_race ?? 0;
-  const rule = RACES[key]; //TO DO: Passar o ID do banco de dados.
+  const rule = RACES[key];
   if (!rule) throw new Error(`ID da raça não encontrado: "${id_race}". Raças disponíveis: ${Object.keys(RACES).join(', ')}`);
   return rule;
 }
@@ -30,14 +32,14 @@ export function resolveSubrace(subrace: string | undefined) {
 
 export function resolveClass(id_class: number): ClassRule {
   const key = id_class ?? 0;
-  const rule = CLASSES[key]; //TO DO: Passar o ID do banco de dados.
+  const rule = CLASSES[key]; 
   if (!rule) throw new Error(`ID da classe não encontrado: "${id_class}". Classes disponíveis: ${Object.keys(CLASSES).join(', ')}`);
   return rule;
 }
 
 export function resolveBackground(id_background: number): BackgroundRule {
   const key = id_background ?? 0;
-  const rule = BACKGROUNDS[key]; //TO DO: Passar o ID do banco de dados.
+  const rule = BACKGROUNDS[key];
   if (!rule) throw new Error(`ID do antecedente não encontrado: "${id_background}". Antecedentes disponíveis: ${Object.keys(BACKGROUNDS).join(', ')}`);
   return rule;
 }
@@ -54,7 +56,7 @@ export function resolveArmor(armorName: string) {
 }
 
 export function normalizeSkill(skillName: string): string {
-  const map: Record<string, string> = {
+  const map: Record<string, string> = { //TO DO: Utilizar listagem de pericias do banco de dados e passar ID da skill no parametro
     acrobacia: 'acrobatics',
     'adestrar-animais': 'animal_handling',
     adestraranimais: 'animal_handling',

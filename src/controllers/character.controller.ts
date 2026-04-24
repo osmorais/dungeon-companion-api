@@ -1,5 +1,5 @@
 import {inject} from '@loopback/core';
-import {get, param, post, requestBody, response} from '@loopback/rest';
+import {get, param, post, requestBody, response, HttpErrors} from '@loopback/rest';
 import {AiAgentService, CharacterSheetService} from '../services';
 import {CharacterInput} from '../models/character-sheet-types';
 
@@ -48,6 +48,19 @@ export class CharacterController {
     })
     input: CharacterInput,
   ): object {
-    return this.characterSheetService.build(input);
+    return this.characterSheetService.saveCharacter(input);
+  }
+
+  @get('/api/character-sheet/{id}')
+  @response(200, {
+    description: 'Returns the full character sheet for the given character ID',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async getSheet(
+    @param.path.number('id') id: number,
+  ): Promise<object> {
+    const sheet = await this.characterSheetService.loadCharacter(id);
+    if (!sheet) throw new HttpErrors.NotFound(`Character with id ${id} not found`);
+    return sheet;
   }
 }
