@@ -63,7 +63,6 @@ export interface ArmorRule {
 // Races
 // ---------------------------------------------------------------------------
 
-//TO DO: Adicionar o id_race a partir do banco de dados e utilizar somente as regras.
 export const RACES: Record<number, RaceRule> = {
   1: {
     id_race: 1,
@@ -183,7 +182,6 @@ export const SUBRACES: Record<string, SubraceRule> = {
 // Classes
 // ---------------------------------------------------------------------------
 
-//TO DO: Adicionar o id_class a partir do banco de dados e utilizar somente as regras.
 export const CLASSES: Record<number, ClassRule> = {
   1: {
     id_class: 1,
@@ -392,7 +390,6 @@ export const CLASSES: Record<number, ClassRule> = {
 // Backgrounds
 // ---------------------------------------------------------------------------
 
-//TO DO: Adicionar o id_background a partir do banco de dados e utilizar somente as regras.
 export const BACKGROUNDS: Record<number, BackgroundRule> = {
   1: {
     id_background: 1,
@@ -604,42 +601,40 @@ export const WEAPONS: Record<string, WeaponRule> = {
 // Armor
 // ---------------------------------------------------------------------------
 
-//TO DO: Substituir esse array pelo get do banco de dados.
-export const ARMOR: Record<string, ArmorRule> = {
-  nenhuma: {baseAC: 10, armorType: 'none'},
-  'couro-batido': {baseAC: 12, armorType: 'light'},
-  'camisademalia': {baseAC: 13, armorType: 'medium', maxDexBonus: 2},
-  'cotademalia': {baseAC: 16, armorType: 'heavy', maxDexBonus: 0},
-  'armaduradeplacas': {baseAC: 18, armorType: 'heavy', maxDexBonus: 0},
-  'couro': {baseAC: 11, armorType: 'light'},
-  'cotadeescamas': {baseAC: 14, armorType: 'medium', maxDexBonus: 2},
-};
+// export const ARMOR: Record<string, ArmorRule> = {
+//   nenhuma: {baseAC: 10, armorType: 'none'},
+//   'couro-batido': {baseAC: 12, armorType: 'light'},
+//   'camisademalia': {baseAC: 13, armorType: 'medium', maxDexBonus: 2},
+//   'cotademalia': {baseAC: 16, armorType: 'heavy', maxDexBonus: 0},
+//   'armaduradeplacas': {baseAC: 18, armorType: 'heavy', maxDexBonus: 0},
+//   'couro': {baseAC: 11, armorType: 'light'},
+//   'cotadeescamas': {baseAC: 14, armorType: 'medium', maxDexBonus: 2},
+// };
 
 // ---------------------------------------------------------------------------
 // Skill definitions
 // ---------------------------------------------------------------------------
 
-//TO DO: Substituir esse array pelo get do banco de dados.
-export const SKILLS: Record<string, StatKeyEn> = {
-  acrobatics: 'DEX',
-  animal_handling: 'WIS',
-  arcana: 'INT',
-  athletics: 'STR',
-  deception: 'CHA',
-  history: 'INT',
-  insight: 'WIS',
-  intimidation: 'CHA',
-  investigation: 'INT',
-  medicine: 'WIS',
-  nature: 'INT',
-  perception: 'WIS',
-  performance: 'CHA',
-  persuasion: 'CHA',
-  religion: 'INT',
-  sleight_of_hand: 'DEX',
-  stealth: 'DEX',
-  survival: 'WIS',
-};
+// export const SKILLS: Record<string, StatKeyEn> = {
+//   acrobatics: 'DEX',
+//   animal_handling: 'WIS',
+//   arcana: 'INT',
+//   athletics: 'STR',
+//   deception: 'CHA',
+//   history: 'INT',
+//   insight: 'WIS',
+//   intimidation: 'CHA',
+//   investigation: 'INT',
+//   medicine: 'WIS',
+//   nature: 'INT',
+//   perception: 'WIS',
+//   performance: 'CHA',
+//   persuasion: 'CHA',
+//   religion: 'INT',
+//   sleight_of_hand: 'DEX',
+//   stealth: 'DEX',
+//   survival: 'WIS',
+// };
 
 // ---------------------------------------------------------------------------
 // Spell slots by class and level (simplified: level 1-5)

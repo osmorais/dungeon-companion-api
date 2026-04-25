@@ -10,7 +10,7 @@ export class CharacterOptionsService {
   ) {}
 
   async getCharacterOptions(): Promise<CharacterOptions> {
-    const [attributes, skills, races, classes, backgrounds, alignments, weaponRows, spells, armours] = await Promise.all([
+    const [attributes, skills, races, classes, backgrounds, alignments, weapons, spells, armours] = await Promise.all([
       this.repository.findAttributes(),
       this.repository.findSkills(),
       this.repository.findRaces(),
@@ -22,15 +22,15 @@ export class CharacterOptionsService {
       this.repository.findArmours(),
     ]);
 
-    const weapons: WeaponOption[] = weaponRows.map(w => {
-      const props = w.properties ? w.properties.split(', ') : [];
-      return {
-        name: w.name,
-        damage: w.damage_die && w.damage_type ? `${w.damage_die} ${w.damage_type}` : '-',
-        properties: props,
-        isRanged: props.some(p => p.toLowerCase().startsWith('munição')),
-      };
-    });
+    // const weapons: WeaponOption[] = weaponRows.map(w => {
+    //   const props = w.properties ? w.properties.split(', ') : [];
+    //   return {
+    //     name: w.name,
+    //     damage: w.damage_die && w.damage_type ? `${w.damage_die} ${w.damage_type}` : '-',
+    //     properties: props,
+    //     isRanged: props.some(p => p.toLowerCase().startsWith('munição')),
+    //   };
+    // });
 
     return {attributes, skills, weapons, races, classes, backgrounds, alignments, spells, armours};
   }

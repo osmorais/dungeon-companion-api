@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {inject, injectable, BindingScope} from '@loopback/core';
 import {PostgresDatasource} from '../datasources';
-import {CharacterInput, CharacterRawData, CharacterSheet} from '../models/character-sheet-types';
+import {CharacterInput, CharacterRawData, CharacterSheet, CharacterSkillInsert} from '../models/character-sheet-types';
 
 const STAT_TO_PT: Record<string, string> = {
   STR: 'FOR', DEX: 'DES', CON: 'CON', INT: 'INT', WIS: 'SAB', CHA: 'CAR',
@@ -14,7 +14,15 @@ export class CharacterRepository {
     private db: PostgresDatasource,
   ) {}
 
-  async saveCharacter(input: CharacterInput, sheet: CharacterSheet): Promise<number> {
+  async findAllSkills(): Promise<{id_skill: number; id_attribute: number; attribute_name: string}[]> {
+    return this.db.sql`
+      SELECT s.id_skill, s.id_attribute, at.name AS attribute_name
+      FROM skill s
+      JOIN attribute_type at ON at.id_attribute = s.id_attribute
+    `;
+  }
+
+  async saveCharacter(input: CharacterInput, sheet: CharacterSheet, skills: CharacterSkillInsert[]): Promise<number> {
     const {core_build, equipment, choices, character_details} = input;
     const cs = sheet.character_sheet;
 
@@ -52,7 +60,6 @@ export class CharacterRepository {
         VALUES (${idCharacter}, ${core_build.id_background})
       `;
 
-      //TO DO: Retirar essas buscar por nome e ja trazer o id na requisição
       const attrRows = await sql<{id_attribute: number; name: string}[]>`
         SELECT id_attribute, name FROM attribute_type
       `;
@@ -70,10 +77,10 @@ export class CharacterRepository {
         `;
       }
 
-      for (const skill of choices.skills ?? []) {
+      for (const skill of skills) {
         await sql`
-          INSERT INTO character_skill (id_character, id_skill, is_trained)
-          VALUES (${idCharacter}, ${skill.id_skill}, TRUE)
+          INSERT INTO character_skill (id_character, id_skill, is_trained, trained_value, level_value, total_skill_value)
+          VALUES (${idCharacter}, ${skill.id_skill}, ${skill.is_trained}, ${skill.trained_value}, ${skill.level_value}, ${skill.total_skill_value})
         `;
       }
 
@@ -92,24 +99,15 @@ export class CharacterRepository {
       }
 
       if (equipment.weapons.length) {
-        const weaponNames = equipment.weapons.map(w => w.name);
-        const weaponRows = await sql<{id_weapon: number; name: string}[]>`
-          SELECT id_weapon, name FROM weapon WHERE name = ANY(${weaponNames})
-        `;
-        const weaponByName: Record<string, number> = Object.fromEntries(
-          weaponRows.map(r => [r.name, r.id_weapon]),
-        );
-
         for (const weapon of equipment.weapons) {
-          const idWeapon = weaponByName[weapon.name];
-          if (!idWeapon) continue;
           await sql`
             INSERT INTO character_weapon (id_character, id_weapon, has_proficiency)
-            VALUES (${idCharacter}, ${idWeapon}, TRUE)
+            VALUES (${idCharacter}, ${weapon.id_weapon}, TRUE)
           `;
         }
       }
 
+      // TO DO: ajustar para pegar pelo ID do item
       if (cs.equipment.items.length) {
         const itemRows = await sql<{id_item: number; name: string}[]>`
           SELECT id_item, name FROM item WHERE name = ANY(${cs.equipment.items})
@@ -124,6 +122,21 @@ export class CharacterRepository {
 
       return idCharacter;
     });
+  }
+
+  async findAllCharacters(): Promise<{id_character: number; name: string; level: number; race: string; class: string}[]> {
+    return this.db.sql`
+      SELECT
+        c.id_character,
+        c.name,
+        c.level,
+        r.name AS race,
+        cl.name AS class
+      FROM character c
+      LEFT JOIN race  r  ON r.id_race  = c.id_race
+      LEFT JOIN class cl ON cl.id_class = c.id_class
+      ORDER BY c.id_character DESC
+    `;
   }
 
   async findCharacterById(id: number): Promise<CharacterRawData | null> {
@@ -154,7 +167,7 @@ export class CharacterRepository {
     `;
 
     const skills = await this.db.sql<CharacterRawData['skills'][number][]>`
-      SELECT s.name AS skill_name, cs.is_trained
+      SELECT s.id_skill, s.name, s.id_attribute, s.description, cs.is_trained, cs.total_skill_value, cs.level_value
       FROM character_skill cs
       JOIN skill s ON s.id_skill = cs.id_skill
       WHERE cs.id_character = ${id}
@@ -168,7 +181,7 @@ export class CharacterRepository {
     `;
 
     const weapons = await this.db.sql<CharacterRawData['weapons'][number][]>`
-      SELECT w.name, cw.has_proficiency
+      SELECT w.id_weapon, w.name, w.damage_die, w.damage_type, w.properties, w.weight, w.price_value, cw.has_proficiency
       FROM character_weapon cw
       JOIN weapon w ON w.id_weapon = cw.id_weapon
       WHERE cw.id_character = ${id}

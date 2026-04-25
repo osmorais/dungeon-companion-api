@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import {Armour, Skill, Spell, WeaponOption} from './character-options-types';
+import {Armour, Skill, Spell, WeaponRow} from './character-options-types';
 
 export type StatKeyPt = 'FOR' | 'DES' | 'CON' | 'INT' | 'SAB' | 'CAR';
 export type StatKeyEn = 'STR' | 'DEX' | 'CON' | 'INT' | 'WIS' | 'CHA';
@@ -26,7 +26,7 @@ export interface CharacterInput {
   };
   equipment: {
     armour: Armour | null;
-    weapons: WeaponOption[];
+    weapons: WeaponRow[];
     has_shield: boolean;
   };
   character_details?: {
@@ -75,6 +75,14 @@ export interface Trait {
   description: string;
 }
 
+export interface CharacterSkillInsert {
+  id_skill: number;
+  is_trained: boolean;
+  trained_value: number;
+  level_value: number;
+  total_skill_value: number;
+}
+
 export interface CharacterRawData {
   character: {
     id_character: number;
@@ -97,9 +105,9 @@ export interface CharacterRawData {
     id_background: number | null;
   };
   attributes: Array<{attribute_name: string; score: number; modifier: number}>;
-  skills: Array<{skill_name: string; is_trained: boolean}>;
+  skills: Array<{id_skill: number; name: string; id_attribute: number; description: string; is_trained: boolean, level_value: number; total_skill_value: number}>;
   spells: Array<{id_spell: number; name: string; spell_level: number}>;
-  weapons: Array<{name: string; has_proficiency: boolean}>;
+  weapons: Array<{id_weapon: number; name: string; has_proficiency: boolean; damage_die: string | null; damage_type: string | null; properties: string | null; weight: number; price_value: number}>;
   items: Array<{name: string}>;
 }
 
@@ -123,8 +131,8 @@ export interface CharacterSheet {
       passive_perception: number;
     };
     attributes_and_saves: Record<StatKeyEn, StatBlock>;
-    skills: Record<string, SkillBlock>;
-    combat_actions: {weapons: WeaponAction[]};
+    skills: Skill[];
+    weapons: WeaponRow[];
     features_and_traits: Trait[];
     proficiencies_and_languages: {
       armor: string[];
