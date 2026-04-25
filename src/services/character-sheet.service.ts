@@ -1,12 +1,9 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/naming-convention */
 import {injectable, BindingScope, service} from '@loopback/core';
-import {CharacterInput, CharacterRawData, CharacterSheet, FinalStats, StatKeyEn} from '../models/character-sheet-types';
-import {Spell, WeaponOption} from '../models/character-options-types';
+import {CharacterInput, CharacterSheet, CharacterSkillInsert, FinalStats, StatKeyEn} from '../models/character-sheet-types';
+import {Spell, WeaponRow, Skill} from '../models/character-options-types';
 import {CharacterRepository} from '../repositories/character.repository';
 import {
-  normalizeKey,
-  normalizeSkill,
   resolveRace,
   resolveSubrace,
   resolveClass,
@@ -15,7 +12,6 @@ import {
   getProfBonus,
   applyRacialBonuses,
   buildAttributeBlocks,
-  buildSkillBlocks,
   calcArmorClass,
   calcMaxHP,
   buildWeaponActions,
@@ -48,8 +44,8 @@ export class CharacterSheetService {
     const proficientSkills = collectProficientSkills(choices.skills, bgRule, raceRule);
 
     const attributeBlocks = buildAttributeBlocks(stats, classRule, profBonus);
-    const skillBlocks = buildSkillBlocks(stats, profBonus, proficientSkills);
-    const ac = calcArmorClass(equipment.armour?.name ?? 'Nenhuma', stats, equipment.has_shield, classKey);
+    // const skillBlocks = buildSkillBlocks(stats, profBonus, proficientSkills);
+    const ac = calcArmorClass(equipment.armour, stats, equipment.has_shield, classKey);
     const maxHP = calcMaxHP(classRule.hitDie, level, getMod(stats.CON));
     const weaponActions = buildWeaponActions(equipment.weapons, stats, profBonus);
     const traits = collectTraits(raceRule, subraceRule, classRule, bgRule);
@@ -89,8 +85,8 @@ export class CharacterSheetService {
           passive_perception: passivePerception,
         },
         attributes_and_saves: attributeBlocks,
-        skills: skillBlocks,
-        combat_actions: {weapons: weaponActions},
+        skills: choices.skills,
+        weapons: weaponActions,
         features_and_traits: traits,
         proficiencies_and_languages: {
           armor: classRule.armorProficiencies,
@@ -107,9 +103,48 @@ export class CharacterSheetService {
     };
   }
 
-  async saveCharacter(input: CharacterInput): Promise<CharacterSheet | null>  {
+  async listCharacters(): Promise<{id_character: number; name: string; level: number; race: string; class: string}[]> {
+    return this.repository.findAllCharacters();
+  }
+
+  async saveCharacter(input: CharacterInput): Promise<CharacterSheet | null> {
     const sheet = this.build(input);
-    return this.loadCharacter(await this.repository.saveCharacter(input, sheet));
+    const allSkills = await this.repository.findAllSkills();
+    const computedSkills = this.computeSkills(allSkills, input, sheet);
+    return this.loadCharacter(await this.repository.saveCharacter(input, sheet, computedSkills));
+  }
+
+  private computeSkills(
+    allSkills: {id_skill: number; id_attribute: number; attribute_name: string}[],
+    input: CharacterInput,
+    sheet: CharacterSheet,
+  ): CharacterSkillInsert[] {
+    const STAT_TO_PT: Record<string, string> = {
+      STR: 'FOR', DEX: 'DES', CON: 'CON', INT: 'INT', WIS: 'SAB', CHA: 'CAR',
+    };
+
+    const ptToModifier: Record<string, number> = {};
+    for (const [enKey, block] of Object.entries(sheet.character_sheet.attributes_and_saves)) {
+      const ptName = STAT_TO_PT[enKey];
+      if (ptName) ptToModifier[ptName] = block.modifier;
+    }
+
+    const trainedIds = new Set((input.choices.skills ?? []).map(s => s.id_skill));
+    const profBonus = sheet.character_sheet.combat_stats.proficiency_bonus;
+    const level = input.core_build.level;
+
+    return allSkills.map(skill => {
+      const isTrained = trainedIds.has(skill.id_skill);
+      const trained_value = isTrained ? profBonus : 0;
+      const modifier = ptToModifier[skill.attribute_name] ?? 0;
+      return {
+        id_skill: skill.id_skill,
+        is_trained: isTrained,
+        trained_value,
+        level_value: level,
+        total_skill_value: modifier + trained_value,
+      };
+    });
   }
 
   async loadCharacter(id: number): Promise<CharacterSheet | null> {
@@ -151,19 +186,23 @@ export class CharacterSheetService {
       return result;
     })();
 
-    const proficientSkillKeys = skills
-      .filter(s => s.is_trained)
-      .map(s => normalizeSkill(s.skill_name));
 
-    const skillBlocks = buildSkillBlocks(stats, profBonus, proficientSkillKeys);
+    const skillsResult: Skill[] = skills.map(s => ({
+      id_skill: s.id_skill,
+      name: s.name,
+      id_attribute: s.id_attribute,
+      description: s.description,
+      is_trained: s.is_trained,
+      level_value: s.level_value,
+      total_skill_value: s.total_skill_value,
+    }));
 
-    const weaponOptions: WeaponOption[] = weapons.map(w => ({
-      name: w.name,
-      damage: '',
-      properties: [],
+    const weaponsForCalc: WeaponRow[] = weapons.map(w => ({
+      ...w,
+      attack_bonus: 0,
       isRanged: false,
     }));
-    const weaponActions = buildWeaponActions(weaponOptions, stats, profBonus);
+    const weaponResult = buildWeaponActions(weaponsForCalc, stats, profBonus);
 
     const spellList: Spell[] = spells.map(s => ({
       id_spell: s.id_spell,
@@ -207,8 +246,8 @@ export class CharacterSheetService {
           passive_perception: Number(character.passive_perception),
         },
         attributes_and_saves: attributesAndSaves,
-        skills: skillBlocks,
-        combat_actions: {weapons: weaponActions},
+        skills: skillsResult,
+        weapons: weaponResult,
         features_and_traits: traits,
         proficiencies_and_languages: {
           armor: classRule.armorProficiencies,

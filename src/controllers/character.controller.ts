@@ -51,6 +51,15 @@ export class CharacterController {
     return this.characterSheetService.saveCharacter(input);
   }
 
+  @get('/api/character-sheet')
+  @response(200, {
+    description: 'Returns a summary list of all characters',
+    content: {'application/json': {schema: {type: 'array'}}},
+  })
+  async listSheets(): Promise<object[]> {
+    return this.characterSheetService.listCharacters();
+  }
+
   @get('/api/character-sheet/{id}')
   @response(200, {
     description: 'Returns the full character sheet for the given character ID',
