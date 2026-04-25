@@ -1,8 +1,8 @@
 /* eslint-disable no-void */
 /* eslint-disable @typescript-eslint/naming-convention */
 import {FinalStats, StatKeyEn, StatBlock, SkillBlock, WeaponAction, Trait} from '../../models/character-sheet-types';
-import {Skill, Spell, WeaponOption} from '../../models/character-options-types';
-import {RACES, SUBRACES, CLASSES, BACKGROUNDS, WEAPONS, ARMOR, SKILLS, SPELL_SLOTS, RaceRule, ClassRule, BackgroundRule, WeaponRule} from './rules';
+import {Armour, Skill, Spell, WeaponOption, WeaponRow} from '../../models/character-options-types';
+import {RACES, SUBRACES, CLASSES, BACKGROUNDS, WEAPONS, SPELL_SLOTS, RaceRule, ClassRule, BackgroundRule, WeaponRule} from './rules';
 
 // ---------------------------------------------------------------------------
 // Normalization helpers
@@ -49,11 +49,11 @@ export function resolveWeapon(weaponName: string): WeaponRule | null {
   return WEAPONS[key] ?? null; //TO DO: Passar o ID do banco de dados.
 }
 
-export function resolveArmor(armorName: string) {
-  const key = normalizeKey(armorName).replace(/-/g, '').replace(/\s/g, '');
-  const normalized = normalizeKey(armorName); //TO DO: Passar o ID do banco de dados.
-  return ARMOR[normalized] ?? ARMOR[key] ?? ARMOR['nenhuma'];
-}
+// export function resolveArmor(armorName: string) {
+//   const key = normalizeKey(armorName).replace(/-/g, '').replace(/\s/g, '');
+//   const normalized = normalizeKey(armorName); //TO DO: Passar o ID do banco de dados.
+//   return ARMOR[normalized] ?? ARMOR[key] ?? ARMOR['nenhuma'];
+// }
 
 export function normalizeSkill(skillName: string): string {
   const map: Record<string, string> = { //TO DO: Utilizar listagem de pericias do banco de dados e passar ID da skill no parametro
@@ -149,35 +149,35 @@ export function buildAttributeBlocks(
   return result;
 }
 
-export function buildSkillBlocks(
-  stats: FinalStats,
-  profBonus: number,
-  proficientSkills: string[],
-): Record<string, SkillBlock> {
-  const result: Record<string, SkillBlock> = {};
-  for (const [skill, stat] of Object.entries(SKILLS)) {
-    const mod = getMod(stats[stat]);
-    const isProficient = proficientSkills.includes(skill);
-    result[skill] = {
-      stat,
-      bonus: isProficient ? mod + profBonus : mod,
-      proficient: isProficient,
-    };
-  }
-  return result;
-}
+// export function buildSkillBlocks(
+//   stats: FinalStats,
+//   profBonus: number,
+//   proficientSkills: string[],
+// ): Record<string, SkillBlock> {
+//   const result: Record<string, SkillBlock> = {};
+//   for (const [skill, stat] of Object.entries(SKILLS)) {
+//     const mod = getMod(stats[stat]);
+//     const isProficient = proficientSkills.includes(skill);
+//     result[skill] = {
+//       stat,
+//       bonus: isProficient ? mod + profBonus : mod,
+//       proficient: isProficient,
+//     };
+//   }
+//   return result;
+// }
 
 export function calcArmorClass(
-  armorName: string,
+  armor: Armour | null,
   stats: FinalStats,
   hasShield: boolean,
   classKey: number,
 ): number {
-  const armor = resolveArmor(armorName);
+  // const armor = resolveArmor(armorName);
   const dexMod = getMod(stats.DEX);
 
   let ac: number;
-  if (armor.armorType === 'none') {
+  if (armor?.armour_type === null) {
     if (classKey === CLASSES[1].id_class) { // Bárbaro
       ac = 10 + dexMod + getMod(stats.CON);
     } else if (classKey === CLASSES[10].id_class) { // Monge
@@ -185,13 +185,13 @@ export function calcArmorClass(
     } else {
       ac = 10 + dexMod;
     }
-  } else if (armor.armorType === 'light') {
-    ac = armor.baseAC + dexMod;
-  } else if (armor.armorType === 'medium') {
-    const cappedDex = Math.min(dexMod, armor.maxDexBonus ?? 2);
-    ac = armor.baseAC + cappedDex;
+  } else if (armor?.armour_type === 'Armadura Leve') {
+    ac = armor?.armour_class_base ?? 10 + dexMod;
+  } else if (armor?.armour_type === 'Armadura Média') {
+    const cappedDex = Math.min(dexMod, armor.max_dexterity_bonus ?? 2);
+    ac = armor?.armour_class_base ?? 10 + cappedDex;
   } else {
-    ac = armor.baseAC;
+    ac = armor?.armour_class_base ?? 10;
   }
 
   return hasShield ? ac + 2 : ac;
@@ -205,19 +205,37 @@ export function calcMaxHP(hitDie: number, level: number, conMod: number): number
 }
 
 export function buildWeaponActions(
-  weapons: WeaponOption[],
+  weapons: WeaponRow[],
   stats: FinalStats,
   profBonus: number,
-): WeaponAction[] {
-  return weapons.flatMap(w => {
+): WeaponRow[] {
+
+  const weaponsVerified : WeaponRow[] = weapons.map(w => {
+  const props = w.properties ? w.properties.split(', ') : [];
+  return {
+    id_weapon: w.id_weapon,
+    attack_bonus: w.attack_bonus,
+    name: w.name,
+    damage_die: w.damage_die,
+    damage_type: w.damage_type,
+    weight: w.weight,
+    price_value: w.price_value,
+    properties: w.properties,
+    isRanged: props.some(p => p.toLowerCase().startsWith('munição'))
+  };
+});
+
+
+  return weaponsVerified.flatMap(w => {
     const rule = resolveWeapon(w.name);
     if (!rule) return [];
 
     const strMod = getMod(stats.STR);
     const dexMod = getMod(stats.DEX);
     let abilityMod: number;
+    
 
-    if (rule.isRanged) {
+    if (w.isRanged) {
       abilityMod = dexMod;
     } else if (rule.isFinesse) {
       abilityMod = Math.max(strMod, dexMod);
@@ -225,13 +243,8 @@ export function buildWeaponActions(
       abilityMod = strMod;
     }
 
-    return [{
-      name: rule.displayName,
-      attack_bonus: profBonus + abilityMod,
-      damage: `${rule.damageDie} + ${abilityMod}`,
-      damage_type: rule.damageType,
-      properties: rule.properties,
-    }];
+    w.attack_bonus = profBonus + abilityMod;
+    return w;
   });
 }
 

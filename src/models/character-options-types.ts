@@ -8,6 +8,10 @@ export interface Skill {
   id_skill: number;
   name: string;
   id_attribute: number;
+  description: string;
+  is_trained: boolean;
+  level_value: number;
+  total_skill_value: number;
 }
 
 export interface WeaponOption {
@@ -19,12 +23,14 @@ export interface WeaponOption {
 
 export interface WeaponRow {
   id_weapon: number;
+  attack_bonus: number;
   name: string;
   damage_die: string | null;
   damage_type: string | null;
   properties: string | null;
   weight: number;
   price_value: number;
+  isRanged: boolean;
 }
 
 export interface Race {
@@ -81,7 +87,7 @@ export interface Armour {
 export interface CharacterOptions {
   attributes: AttributeType[];
   skills: Skill[];
-  weapons: WeaponOption[];
+  weapons: WeaponRow[];
   races: Race[];
   classes: CharacterClass[];
   backgrounds: Background[];
