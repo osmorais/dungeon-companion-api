@@ -227,8 +227,8 @@ export function buildWeaponActions(
 
 
   return weaponsVerified.flatMap(w => {
-    const rule = resolveWeapon(w.name);
-    if (!rule) return [];
+    // const rule = resolveWeapon(w.name);
+    // if (!rule) return [];
 
     const strMod = getMod(stats.STR);
     const dexMod = getMod(stats.DEX);
@@ -237,8 +237,8 @@ export function buildWeaponActions(
 
     if (w.isRanged) {
       abilityMod = dexMod;
-    } else if (rule.isFinesse) {
-      abilityMod = Math.max(strMod, dexMod);
+    // } else if (rule.isFinesse) { //TO DO: Verificar necessidade de aplicar essa regra
+    //   abilityMod = Math.max(strMod, dexMod);
     } else {
       abilityMod = strMod;
     }
