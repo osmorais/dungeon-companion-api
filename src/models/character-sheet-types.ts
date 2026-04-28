@@ -103,10 +103,25 @@ export interface CharacterRawData {
     total_po: number;
     alignment_name: string | null;
     id_background: number | null;
+    spellcasting_ability: string | null;
+    spell_save_dc: number | null;
+    spell_attack_bonus: number | null;
   };
   attributes: Array<{attribute_name: string; score: number; modifier: number}>;
-  skills: Array<{id_skill: number; name: string; id_attribute: number; description: string; is_trained: boolean, level_value: number; total_skill_value: number}>;
-  spells: Array<{id_spell: number; name: string; spell_level: number}>;
+  skills: Array<{id_skill: number; name: string; id_attribute: number; attribute_name: string; description: string; is_trained: boolean, level_value: number; total_skill_value: number}>;
+  spells: Array<{
+    id_spell: number;
+    name: string;
+    description: string | null;
+    casting_time: string | null;
+    range_distance: number | null;
+    duration: string | null;
+    is_verbal: boolean;
+    is_somatic: boolean;
+    is_material: boolean;
+    spellLevel: number;
+    school: string | null;
+  }>;
   weapons: Array<{id_weapon: number; name: string; has_proficiency: boolean; damage_die: string | null; damage_type: string | null; properties: string | null; weight: number; price_value: number}>;
   items: Array<{name: string}>;
 }
@@ -144,14 +159,11 @@ export interface CharacterSheet {
       currency: {cp: number; sp: number; ep: number; gp: number; pp: number};
       items: string[];
     };
-    spellcasting: {
-      is_spellcaster: boolean;
-      spellcasting_ability?: StatKeyEn;
-      spell_save_dc?: number;
-      spell_attack_bonus?: number;
-      slots_total?: Record<string, number>;
-      slots_expended?: Record<string, number>;
-      spells_known?: {cantrips: string[]; [key: string]: string[]};
+    spellcasting_info?: {
+      spellcasting_ability: string;
+      spell_save_dc: number;
+      spell_attack_bonus: number;
     };
+    spells: Spell[];
   };
 }

@@ -8,6 +8,7 @@ export interface Skill {
   id_skill: number;
   name: string;
   id_attribute: number;
+  attribute_name: string;
   description: string;
   is_trained: boolean;
   level_value: number;

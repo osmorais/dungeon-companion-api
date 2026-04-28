@@ -32,7 +32,8 @@ export class CharacterRepository {
           name, level, id_race, id_class, id_armour, id_alignment,
           proficiency_bonus, armour_class, initiative_value,
           current_hit_points, max_hit_points, hit_dice, passive_perception,
-          xp_points, total_po
+          xp_points, total_po,
+          spellcasting_ability, spell_save_dc, spell_attack_bonus
         ) VALUES (
           ${character_details?.name ?? 'Aventureiro'},
           ${core_build.level},
@@ -48,7 +49,10 @@ export class CharacterRepository {
           ${cs.combat_stats.hit_dice},
           ${cs.combat_stats.passive_perception},
           ${cs.header.experience_points},
-          ${cs.equipment.currency.gp}
+          ${cs.equipment.currency.gp},
+          ${cs.spellcasting_info?.spellcasting_ability ?? null},
+          ${cs.spellcasting_info?.spell_save_dc ?? null},
+          ${cs.spellcasting_info?.spell_attack_bonus ?? null}
         )
         RETURNING id_character
       `;
@@ -85,15 +89,10 @@ export class CharacterRepository {
       }
 
       if (choices.spells?.length) {
-        const spellcastingAbility = cs.spellcasting.spellcasting_ability;
-        const spellAttrId = spellcastingAbility
-          ? (attrByName[STAT_TO_PT[spellcastingAbility]] ?? null)
-          : null;
-
         for (const spell of choices.spells) {
           await sql`
             INSERT INTO character_spell (id_character, id_spell, id_attribute)
-            VALUES (${idCharacter}, ${spell.id_spell}, ${spellAttrId})
+            VALUES (${idCharacter}, ${spell.id_spell}, ${null})
           `;
         }
       }
@@ -146,6 +145,7 @@ export class CharacterRepository {
         c.proficiency_bonus, c.armour_class, c.initiative_value,
         c.current_hit_points, c.max_hit_points, c.hit_dice, c.passive_perception,
         c.xp_points, c.total_po,
+        c.spellcasting_ability, c.spell_save_dc, c.spell_attack_bonus,
         al.name   AS alignment_name,
         cb.id_background
       FROM character c
@@ -167,14 +167,17 @@ export class CharacterRepository {
     `;
 
     const skills = await this.db.sql<CharacterRawData['skills'][number][]>`
-      SELECT s.id_skill, s.name, s.id_attribute, s.description, cs.is_trained, cs.total_skill_value, cs.level_value
+      SELECT s.id_skill, s.name, s.id_attribute, at.name AS attribute_name, s.description, cs.is_trained, cs.total_skill_value, cs.level_value
       FROM character_skill cs
       JOIN skill s ON s.id_skill = cs.id_skill
+      JOIN attribute_type at ON at.id_attribute = s.id_attribute
       WHERE cs.id_character = ${id}
     `;
 
     const spells = await this.db.sql<CharacterRawData['spells'][number][]>`
-      SELECT sp.id_spell, sp.name, sp.spelllevel AS spell_level
+      SELECT sp.id_spell, sp.name, sp.description, sp.casting_time, sp.range_distance,
+             sp.duration, sp.is_verbal, sp.is_somatic, sp.is_material,
+             sp.spelllevel AS "spellLevel", sp.school
       FROM character_spell csp
       JOIN spell sp ON sp.id_spell = csp.id_spell
       WHERE csp.id_character = ${id}

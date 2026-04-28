@@ -49,8 +49,19 @@ export class CharacterSheetService {
     const maxHP = calcMaxHP(classRule.hitDie, level, getMod(stats.CON));
     const weaponActions = buildWeaponActions(equipment.weapons, stats, profBonus);
     const traits = collectTraits(raceRule, subraceRule, classRule, bgRule);
-    const spellcasting = buildSpellcasting(classRule, classKey, level, choices.spells ?? [], stats, profBonus);
+    const spells = choices.spells ?? [];
     const languages = buildLanguages(raceRule, bgRule);
+
+    const spellcastingInfo = (() => {
+      if (!classRule.isSpellcaster || !classRule.spellcastingAbility) return undefined;
+      const ability = classRule.spellcastingAbility;
+      const abilityMod = getMod(stats[ability]);
+      return {
+        spellcasting_ability: ability,
+        spell_save_dc: 8 + profBonus + abilityMod,
+        spell_attack_bonus: profBonus + abilityMod,
+      };
+    })();
 
     const isPerceptionProficient = proficientSkills.includes('perception');
     const passivePerception = 10 + getMod(stats.WIS) + (isPerceptionProficient ? profBonus : 0);
@@ -98,7 +109,8 @@ export class CharacterSheetService {
           currency: {cp: 0, sp: 0, ep: 0, gp: totalGold, pp: 0},
           items: allItems,
         },
-        spellcasting,
+        spellcasting_info: spellcastingInfo,
+        spells,
       },
     };
   }
@@ -191,6 +203,7 @@ export class CharacterSheetService {
       id_skill: s.id_skill,
       name: s.name,
       id_attribute: s.id_attribute,
+      attribute_name: s.attribute_name,
       description: s.description,
       is_trained: s.is_trained,
       level_value: s.level_value,
@@ -207,17 +220,16 @@ export class CharacterSheetService {
     const spellList: Spell[] = spells.map(s => ({
       id_spell: s.id_spell,
       name: s.name,
-      spellLevel: s.spell_level,
-      description: null,
-      casting_time: null,
-      range_distance: null,
-      duration: null,
-      is_verbal: false,
-      is_somatic: false,
-      is_material: false,
-      school: null,
+      spellLevel: s.spellLevel,
+      description: s.description,
+      casting_time: s.casting_time,
+      range_distance: s.range_distance,
+      duration: s.duration,
+      is_verbal: s.is_verbal,
+      is_somatic: s.is_somatic,
+      is_material: s.is_material,
+      school: s.school,
     }));
-    const spellcasting = buildSpellcasting(classRule, character.id_class, character.level, spellList, stats, profBonus);
 
     const traits = collectTraits(raceRule, null, classRule, bgRule);
     const languages = buildLanguages(raceRule, bgRule);
@@ -259,7 +271,14 @@ export class CharacterSheetService {
           currency: {cp: 0, sp: 0, ep: 0, gp: character.total_po, pp: 0},
           items: items.map(i => i.name),
         },
-        spellcasting,
+        spellcasting_info: character.spellcasting_ability
+          ? {
+              spellcasting_ability: character.spellcasting_ability,
+              spell_save_dc: character.spell_save_dc!,
+              spell_attack_bonus: character.spell_attack_bonus!,
+            }
+          : undefined,
+        spells: spellList,
       },
     };
   }

@@ -14,7 +14,11 @@ export class CharacterOptionsRepository {
   }
 
   async findSkills(): Promise<Skill[]> {
-    return this.db.sql<Skill[]>`SELECT id_skill, name, id_attribute FROM skill`;
+    return this.db.sql<Skill[]>`
+      SELECT s.id_skill, s.name, s.id_attribute, at.name AS attribute_name
+      FROM skill s
+      JOIN attribute_type at ON at.id_attribute = s.id_attribute
+    `;
   }
 
   async findRaces(): Promise<Race[]> {
