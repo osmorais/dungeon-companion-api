@@ -1,8 +1,10 @@
 import {inject} from '@loopback/core';
 import {get, response} from '@loopback/rest';
+import {authenticate} from '@loopback/authentication';
 import {CharacterOptionsService} from '../services';
 import {CharacterOptions} from '../models/character-options-types';
 
+@authenticate('jwt')
 export class CharacterOptionsController {
   constructor(
     @inject('services.CharacterOptionsService')

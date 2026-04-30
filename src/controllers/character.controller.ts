@@ -1,8 +1,10 @@
 import {inject} from '@loopback/core';
 import {get, param, post, requestBody, response, HttpErrors} from '@loopback/rest';
+import {authenticate} from '@loopback/authentication';
 import {AiAgentService, CharacterSheetService} from '../services';
 import {CharacterInput} from '../models/character-sheet-types';
 
+@authenticate('jwt')
 export class CharacterController {
   constructor(
     @inject('services.AiAgentService')
