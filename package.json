@@ -29,6 +29,7 @@
     "docker:build": "docker build -t dungeon-companion-api .",
     "docker:run": "docker run -p 3000:3000 -d dungeon-companion-api",
     "openapi-spec": "node ./dist/openapi-spec",
+    "prestart": "[ \"$NODE_ENV\" = \"production\" ] || npm run rebuild",
     "start": "node .",
     "prepare": "npm run build",
     "rebuild": "npm run clean && npm run build"
