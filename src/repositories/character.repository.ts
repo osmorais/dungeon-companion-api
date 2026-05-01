@@ -22,7 +22,7 @@ export class CharacterRepository {
     `;
   }
 
-  async saveCharacter(input: CharacterInput, sheet: CharacterSheet, skills: CharacterSkillInsert[]): Promise<number> {
+  async saveCharacter(input: CharacterInput, sheet: CharacterSheet, skills: CharacterSkillInsert[], userId: string): Promise<number> {
     const {core_build, equipment, choices, character_details} = input;
     const cs = sheet.character_sheet;
 
@@ -33,7 +33,8 @@ export class CharacterRepository {
           proficiency_bonus, armour_class, initiative_value,
           current_hit_points, max_hit_points, hit_dice, passive_perception,
           xp_points, total_po,
-          spellcasting_ability, spell_save_dc, spell_attack_bonus
+          spellcasting_ability, spell_save_dc, spell_attack_bonus,
+          user_id
         ) VALUES (
           ${character_details?.name ?? 'Aventureiro'},
           ${core_build.level},
@@ -52,7 +53,8 @@ export class CharacterRepository {
           ${cs.equipment.currency.gp},
           ${cs.spellcasting_info?.spellcasting_ability ?? null},
           ${cs.spellcasting_info?.spell_save_dc ?? null},
-          ${cs.spellcasting_info?.spell_attack_bonus ?? null}
+          ${cs.spellcasting_info?.spell_attack_bonus ?? null},
+          ${userId}
         )
         RETURNING id_character
       `;
@@ -123,7 +125,7 @@ export class CharacterRepository {
     });
   }
 
-  async findAllCharacters(): Promise<{id_character: number; name: string; level: number; race: string; class: string}[]> {
+  async findAllCharacters(userId: string): Promise<{id_character: number; name: string; level: number; race: string; class: string}[]> {
     return this.db.sql`
       SELECT
         c.id_character,
@@ -134,6 +136,7 @@ export class CharacterRepository {
       FROM character c
       LEFT JOIN race  r  ON r.id_race  = c.id_race
       LEFT JOIN class cl ON cl.id_class = c.id_class
+      WHERE c.user_id = ${userId}
       ORDER BY c.id_character DESC
     `;
   }
@@ -145,7 +148,7 @@ export class CharacterRepository {
         c.proficiency_bonus, c.armour_class, c.initiative_value,
         c.current_hit_points, c.max_hit_points, c.hit_dice, c.passive_perception,
         c.xp_points, c.total_po,
-        c.spellcasting_ability, c.spell_save_dc, c.spell_attack_bonus,
+        c.spellcasting_ability, c.spell_save_dc, c.spell_attack_bonus,c.user_id,
         al.name   AS alignment_name,
         cb.id_background
       FROM character c
