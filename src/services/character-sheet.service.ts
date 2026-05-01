@@ -115,15 +115,15 @@ export class CharacterSheetService {
     };
   }
 
-  async listCharacters(): Promise<{id_character: number; name: string; level: number; race: string; class: string}[]> {
-    return this.repository.findAllCharacters();
+  async listCharacters(userId: string): Promise<{id_character: number; name: string; level: number; race: string; class: string}[]> {
+    return this.repository.findAllCharacters(userId);
   }
 
-  async saveCharacter(input: CharacterInput): Promise<CharacterSheet | null> {
+  async saveCharacter(input: CharacterInput, userId: string): Promise<CharacterSheet | null> {
     const sheet = this.build(input);
     const allSkills = await this.repository.findAllSkills();
     const computedSkills = this.computeSkills(allSkills, input, sheet);
-    return this.loadCharacter(await this.repository.saveCharacter(input, sheet, computedSkills));
+    return this.loadCharacter(await this.repository.saveCharacter(input, sheet, computedSkills, userId), userId);
   }
 
   private computeSkills(
@@ -159,9 +159,13 @@ export class CharacterSheetService {
     });
   }
 
-  async loadCharacter(id: number): Promise<CharacterSheet | null> {
+  async loadCharacter(id: number, userId: string): Promise<CharacterSheet | null> {
     const raw = await this.repository.findCharacterById(id);
     if (!raw) return null;
+
+    if(raw.character.user_id !== userId) {
+      throw new Error('Unauthorized');
+    }
 
     const {character, attributes, skills, spells, weapons, items} = raw;
 

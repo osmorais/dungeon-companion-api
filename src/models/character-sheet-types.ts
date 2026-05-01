@@ -106,6 +106,7 @@ export interface CharacterRawData {
     spellcasting_ability: string | null;
     spell_save_dc: number | null;
     spell_attack_bonus: number | null;
+    user_id: string;
   };
   attributes: Array<{attribute_name: string; score: number; modifier: number}>;
   skills: Array<{id_skill: number; name: string; id_attribute: number; attribute_name: string; description: string; is_trained: boolean, level_value: number; total_skill_value: number}>;

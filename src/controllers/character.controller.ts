@@ -1,6 +1,7 @@
 import {inject} from '@loopback/core';
 import {get, param, post, requestBody, response, HttpErrors} from '@loopback/rest';
 import {authenticate} from '@loopback/authentication';
+import {SecurityBindings, UserProfile} from '@loopback/security';
 import {AiAgentService, CharacterSheetService} from '../services';
 import {CharacterInput} from '../models/character-sheet-types';
 
@@ -13,29 +14,29 @@ export class CharacterController {
     public characterSheetService: CharacterSheetService,
   ) {}
 
-  @get('/api/generate-character')
-  @response(200, {
-    description: 'Generates a D&D Character Sheet using AI',
-    content: {'application/json': {schema: {type: 'object'}}},
-  })
-  async generate(
-    @param.query.string('class') charClass = 'Rogue',
-    @param.query.number('level') level = 1,
-  ): Promise<object> {
-    return this.aiAgentService.generateCharacter(charClass, level);
-  }
+  // @get('/api/generate-character')
+  // @response(200, {
+  //   description: 'Generates a D&D Character Sheet using AI',
+  //   content: {'application/json': {schema: {type: 'object'}}},
+  // })
+  // async generate(
+  //   @param.query.string('class') charClass = 'Rogue',
+  //   @param.query.number('level') level = 1,
+  // ): Promise<object> {
+  //   return this.aiAgentService.generateCharacter(charClass, level);
+  // }
 
-  @get('/api/generate-character-with-tools')
-  @response(200, {
-    description: 'Generates a D&D Character Sheet — Claude rolls dice and looks up class features using tools',
-    content: {'application/json': {schema: {type: 'object'}}},
-  })
-  async generateWithTools(
-    @param.query.string('class') charClass = 'Fighter',
-    @param.query.number('level') level = 3,
-  ): Promise<object> {
-    return this.aiAgentService.generateCharacterWithTools(charClass, level);
-  }
+  // @get('/api/generate-character-with-tools')
+  // @response(200, {
+  //   description: 'Generates a D&D Character Sheet — Claude rolls dice and looks up class features using tools',
+  //   content: {'application/json': {schema: {type: 'object'}}},
+  // })
+  // async generateWithTools(
+  //   @param.query.string('class') charClass = 'Fighter',
+  //   @param.query.number('level') level = 3,
+  // ): Promise<object> {
+  //   return this.aiAgentService.generateCharacterWithTools(charClass, level);
+  // }
 
   @post('/api/character-sheet')
   @response(200, {
@@ -43,6 +44,7 @@ export class CharacterController {
     content: {'application/json': {schema: {type: 'object'}}},
   })
   buildSheet(
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
     @requestBody({
       description: 'Character build input',
       required: true,
@@ -50,7 +52,7 @@ export class CharacterController {
     })
     input: CharacterInput,
   ): object {
-    return this.characterSheetService.saveCharacter(input);
+    return this.characterSheetService.saveCharacter(input, currentUser.id);
   }
 
   @get('/api/character-sheet')
@@ -58,8 +60,10 @@ export class CharacterController {
     description: 'Returns a summary list of all characters',
     content: {'application/json': {schema: {type: 'array'}}},
   })
-  async listSheets(): Promise<object[]> {
-    return this.characterSheetService.listCharacters();
+  async listSheets(
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+  ): Promise<object[]> {
+    return this.characterSheetService.listCharacters(currentUser.id);
   }
 
   @get('/api/character-sheet/{id}')
@@ -69,8 +73,9 @@ export class CharacterController {
   })
   async getSheet(
     @param.path.number('id') id: number,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
   ): Promise<object> {
-    const sheet = await this.characterSheetService.loadCharacter(id);
+    const sheet = await this.characterSheetService.loadCharacter(id, currentUser.id);
     if (!sheet) throw new HttpErrors.NotFound(`Character with id ${id} not found`);
     return sheet;
   }
