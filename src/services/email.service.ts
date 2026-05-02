@@ -1,5 +1,6 @@
 import {injectable, BindingScope} from '@loopback/core';
 import nodemailer from 'nodemailer';
+import SMTPTransport from 'nodemailer/lib/smtp-transport';
 import {passwordResetTemplate} from './email-templates/password-reset.template';
 
 @injectable({scope: BindingScope.TRANSIENT})
@@ -13,7 +14,7 @@ export class EmailService {
       pass: process.env.SMTP_PASS,
     },
     family: 4, // force IPv4 — Render has no IPv6 egress
-  });
+  } as SMTPTransport.Options);
 
   async sendPasswordReset(email: string, token: string): Promise<void> {
     const frontendUrl = process.env.FRONTEND_URL ?? 'https://forjaarcana.com';
