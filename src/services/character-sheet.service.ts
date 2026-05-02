@@ -115,8 +115,22 @@ export class CharacterSheetService {
     };
   }
 
-  async listCharacters(userId: string): Promise<{id_character: number; name: string; level: number; race: string; class: string}[]> {
+  async listCharacters(userId: string): 
+    Promise<{id_character: number; name: string; level: number; race: string; class: string}[]> {
     return this.repository.findAllCharacters(userId);
+  }
+  
+  async listCharactersPagedList(userId: string, pageSize: number, page: number): 
+    Promise<{CharacterPagedList: object[], page: number; pageSize: number; total_count: number}> {
+    
+    const resultList = await this.repository.findCharactersPagedList(userId, pageSize, page);
+
+    return {
+      CharacterPagedList: resultList,
+      page,
+      pageSize,
+      total_count: resultList[0]?.total_count || 0
+    };
   }
 
   async saveCharacter(input: CharacterInput, userId: string): Promise<CharacterSheet | null> {

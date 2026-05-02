@@ -12,7 +12,11 @@ export class JWTStrategy implements AuthenticationStrategy {
 
   async authenticate(request: Request): Promise<UserProfile | undefined> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const token: string | undefined = (request as any).cookies?.token;
+    const tokenFromCookie: string | undefined = (request as any).cookies?.token;
+    const authHeader = request.headers.authorization;
+    const tokenFromHeader =
+      authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
+    const token = tokenFromCookie ?? tokenFromHeader;
     if (!token) {
       throw new HttpErrors.Unauthorized('Cookie de autenticação ausente');
     }

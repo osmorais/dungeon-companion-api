@@ -66,7 +66,7 @@ export class AuthController {
       body.full_name,
     );
     response.cookie(COOKIE_NAME, token, cookieOptions());
-    return {user};
+    return {token, user};
   }
 
   @authenticate.skip()
@@ -93,7 +93,7 @@ export class AuthController {
   ) {
     const {token, user} = await this.authService.login(body.email, body.password);
     response.cookie(COOKIE_NAME, token, cookieOptions());
-    return {user};
+    return {token, user};
   }
 
   @authenticate.skip()
