@@ -141,6 +141,27 @@ export class CharacterRepository {
     `;
   }
 
+  
+  async findCharactersPagedList(userId: string, pageSize: number, page: number): 
+    Promise<{id_character: number; name: string; level: number; race: string; class: string, total_count: number}[]> {
+    return this.db.sql`
+      SELECT
+          c.id_character,
+          c.name,
+          c.level,
+          r.name AS race,
+          cl.name AS class,
+          COUNT(*) OVER() AS total_count
+      FROM character c
+      LEFT JOIN race  r  ON r.id_race  = c.id_race
+      LEFT JOIN class cl ON cl.id_class = c.id_class
+      WHERE c.user_id = ${userId}
+      ORDER BY c.id_character
+      LIMIT ${pageSize}
+      OFFSET (${page} - 1) * ${pageSize};
+    `;
+  }
+
   async findCharacterById(id: number): Promise<CharacterRawData | null> {
     const rows = await this.db.sql<CharacterRawData['character'][]>`
       SELECT

@@ -62,8 +62,13 @@ export class CharacterController {
   })
   async listSheets(
     @inject(SecurityBindings.USER) currentUser: UserProfile,
-  ): Promise<object[]> {
-    return this.characterSheetService.listCharacters(currentUser.id);
+    @param.query.number('page') page?: number,
+    @param.query.number('pageSize') pageSize?: number,
+  ): Promise<object> {
+    const MAX_PAGE_SIZE = 50;
+    if ((pageSize || 50) > MAX_PAGE_SIZE) pageSize = MAX_PAGE_SIZE;
+
+    return this.characterSheetService.listCharactersPagedList(currentUser.id, pageSize || 10, page || 1);
   }
 
   @get('/api/character-sheet/{id}')
