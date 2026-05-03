@@ -30,6 +30,16 @@ export class UserRepository {
     return rows[0];
   }
 
+  async findByGoogleId(googleId: string): Promise<User | undefined> {
+    const rows = await this.db.sql<User[]>`
+      SELECT id, email, password_hash, full_name, google_id, reset_token, reset_token_expires, created_at
+      FROM users
+      WHERE google_id = ${googleId}
+      LIMIT 1
+    `;
+    return rows[0];
+  }
+
   async create(data: {email: string; password_hash: string; full_name?: string}): Promise<User> {
     const rows = await this.db.sql<User[]>`
       INSERT INTO users (email, password_hash, full_name)
@@ -37,6 +47,21 @@ export class UserRepository {
       RETURNING id, email, full_name, created_at
     `;
     return rows[0];
+  }
+
+  async createWithGoogle(data: {email: string; full_name?: string; google_id: string}): Promise<User> {
+    const rows = await this.db.sql<User[]>`
+      INSERT INTO users (email, full_name, google_id)
+      VALUES (${data.email}, ${data.full_name ?? null}, ${data.google_id})
+      RETURNING id, email, full_name, google_id, created_at
+    `;
+    return rows[0];
+  }
+
+  async linkGoogleAccount(id: string, googleId: string): Promise<void> {
+    await this.db.sql`
+      UPDATE users SET google_id = ${googleId} WHERE id = ${id}
+    `;
   }
 
   async updateResetToken(id: string, token: string, expires: Date): Promise<void> {
