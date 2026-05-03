@@ -155,6 +155,30 @@ export class AuthController {
     return {message: 'Senha redefinida com sucesso.'};
   }
 
+  @authenticate.skip()
+  @post('/auth/google', {
+    responses: {'200': {description: 'Google OAuth login'}},
+  })
+  async googleAuth(
+    @requestBody({
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            required: ['idToken'],
+            properties: {idToken: {type: 'string'}},
+          },
+        },
+      },
+    })
+    body: {idToken: string},
+    @inject(RestBindings.Http.RESPONSE) response: Response,
+  ) {
+    const {token, user} = await this.authService.googleAuth(body.idToken);
+    response.cookie(COOKIE_NAME, token, cookieOptions());
+    return {token, user};
+  }
+
   @authenticate('jwt')
   @get('/auth/me', {
     responses: {'200': {description: 'Current user profile'}},

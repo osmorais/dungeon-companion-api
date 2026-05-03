@@ -1,8 +1,9 @@
 export interface User {
   id: string;
   email: string;
-  password_hash: string;
+  password_hash?: string;
   full_name?: string;
+  google_id?: string;
   reset_token?: string;
   reset_token_expires?: Date;
   created_at?: Date;
