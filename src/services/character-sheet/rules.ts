@@ -70,9 +70,13 @@ export const RACES: Record<number, RaceRule> = {
     bonuses: {CON: 2},
     speed: '7,5m',
     languages: ['Comum', 'Anão'],
+    weaponProficiencies: ['Machados de Batalha', 'Machadinhas', 'Martelos leves', 'Martelos de guerra'],
     traits: [
       {name: 'Visão no Escuro', source: 'Raça', description: 'Você enxerga na meia-luz a até 18 metros como se fosse luz plena e na escuridão como se fosse meia-luz.'},
       {name: 'Resistência Anã', source: 'Raça', description: 'Você tem vantagem em testes de resistência contra veneno e resistência a dano de veneno.'},
+      {name: 'Especialização em Rochas', source: 'Raça', description: 'Sempre que você realizar um teste de Inteligência (História) relacionado à origem \
+        de um trabalho em pedra, você é considerado proficiente na perícia História e adiciona o dobro do seu \
+        bônus de proficiência ao teste, ao invés do seu bônus de proficiência normal.'},
     ],
   },
   2: {
