@@ -254,3 +254,10 @@ ADD CONSTRAINT fk_character_user
 FOREIGN KEY (user_id)
 REFERENCES users(id)
 ON DELETE CASCADE;
+
+-- ====================================================================================
+-- GOOGLE OAUTH
+-- ====================================================================================
+
+ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR(255) UNIQUE;

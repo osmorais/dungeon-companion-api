@@ -4,8 +4,11 @@ import {HttpErrors} from '@loopback/rest';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import {OAuth2Client} from 'google-auth-library';
 import {UserRepository} from '../repositories/user.repository';
 import {User, UserPublic} from '../models/user.model';
+
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? '';
 
 const JWT_SECRET = process.env.JWT_SECRET ?? 'changeme-set-JWT_SECRET-in-env';
 const JWT_EXPIRES_IN = '8h';
@@ -52,7 +55,7 @@ export class AuthService {
 
   async login(email: string, password: string): Promise<{token: string; user: UserPublic}> {
     const user = await this.userRepository.findByEmail(email);
-    if (!user) {
+    if (!user || !user.password_hash) {
       throw new HttpErrors.Unauthorized('Credenciais inválidas');
     }
     const valid = await this.comparePassword(password, user.password_hash);
@@ -82,5 +85,40 @@ export class AuthService {
     }
     const passwordHash = await this.hashPassword(newPassword);
     await this.userRepository.resetPassword(token, passwordHash);
+  }
+
+  async googleAuth(idToken: string): Promise<{token: string; user: UserPublic}> {
+    if (!GOOGLE_CLIENT_ID) {
+      throw new HttpErrors.InternalServerError('Google OAuth não configurado');
+    }
+    const client = new OAuth2Client(GOOGLE_CLIENT_ID);
+    let payload;
+    try {
+      const ticket = await client.verifyIdToken({idToken, audience: GOOGLE_CLIENT_ID});
+      payload = ticket.getPayload();
+    } catch {
+      throw new HttpErrors.Unauthorized('Token Google inválido');
+    }
+    if (!payload?.email) {
+      throw new HttpErrors.Unauthorized('Token Google inválido');
+    }
+
+    let user = await this.userRepository.findByGoogleId(payload.sub);
+    if (!user) {
+      const existing = await this.userRepository.findByEmail(payload.email);
+      if (existing) {
+        await this.userRepository.linkGoogleAccount(existing.id, payload.sub);
+        user = {...existing, google_id: payload.sub};
+      } else {
+        user = await this.userRepository.createWithGoogle({
+          email: payload.email,
+          full_name: payload.name,
+          google_id: payload.sub,
+        });
+      }
+    }
+
+    const jwtToken = this.generateToken(user);
+    return {token: jwtToken, user: {id: user.id, email: user.email, full_name: user.full_name}};
   }
 }
