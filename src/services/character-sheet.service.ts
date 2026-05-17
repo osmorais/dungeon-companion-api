@@ -35,6 +35,10 @@ export class CharacterSheetService {
     const raceRule = resolveRace(core_build.id_race);
     const subraceRule = resolveSubrace(core_build.subrace);
     const classRule = resolveClass(core_build.id_class);
+
+    if(raceRule.weaponProficiencies && raceRule.weaponProficiencies.length > 0) {
+      classRule.weaponProficiencies.push(...raceRule.weaponProficiencies);
+    }
     // const classKey = normalizeKey(core_build.class);
     const classKey = core_build.id_class ?? 0;
     const bgRule = resolveBackground(core_build.id_background);
@@ -186,6 +190,10 @@ export class CharacterSheetService {
     const classRule = resolveClass(character.id_class);
     const raceRule = resolveRace(character.id_race);
     const bgRule = resolveBackground(character.id_background ?? 1);
+
+    if(raceRule.weaponProficiencies && raceRule.weaponProficiencies.length > 0) {
+      classRule.weaponProficiencies.push(...raceRule.weaponProficiencies);
+    }
 
     const PT_TO_EN: Record<string, StatKeyEn> = {
       FOR: 'STR', DES: 'DEX', CON: 'CON', INT: 'INT', SAB: 'WIS', CAR: 'CHA',
