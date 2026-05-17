@@ -1,9 +1,9 @@
 import {inject} from '@loopback/core';
-import {get, param, post, requestBody, response, HttpErrors} from '@loopback/rest';
+import {get, param, patch, post, requestBody, response, HttpErrors} from '@loopback/rest';
 import {authenticate} from '@loopback/authentication';
 import {SecurityBindings, UserProfile} from '@loopback/security';
 import {AiAgentService, CharacterSheetService} from '../services';
-import {CharacterInput} from '../models/character-sheet-types';
+import {AvatarPreset, CharacterInput} from '../models/character-sheet-types';
 
 @authenticate('jwt')
 export class CharacterController {
@@ -69,6 +69,24 @@ export class CharacterController {
     if ((pageSize || 50) > MAX_PAGE_SIZE) pageSize = MAX_PAGE_SIZE;
 
     return this.characterSheetService.listCharactersPagedList(currentUser.id, pageSize || 10, page || 1);
+  }
+
+  @patch('/api/character-sheet/{id}/avatar')
+  @response(200, {
+    description: 'Updates the avatar preset for a character',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async updateAvatar(
+    @param.path.number('id') id: number,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      description: 'Avatar preset',
+      required: true,
+      content: {'application/json': {schema: {type: 'object'}}},
+    })
+    body: {avatar_preset: AvatarPreset},
+  ): Promise<object> {
+    return this.characterSheetService.updateAvatarPreset(id, body.avatar_preset, currentUser.id);
   }
 
   @get('/api/character-sheet/{id}')
