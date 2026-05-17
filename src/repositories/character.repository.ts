@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {inject, injectable, BindingScope} from '@loopback/core';
 import {PostgresDatasource} from '../datasources';
-import {CharacterInput, CharacterRawData, CharacterSheet, CharacterSkillInsert} from '../models/character-sheet-types';
+import {AvatarPreset, CharacterInput, CharacterRawData, CharacterSheet, CharacterSkillInsert} from '../models/character-sheet-types';
 
 const STAT_TO_PT: Record<string, string> = {
   STR: 'FOR', DEX: 'DES', CON: 'CON', INT: 'INT', WIS: 'SAB', CHA: 'CAR',
@@ -34,6 +34,7 @@ export class CharacterRepository {
           current_hit_points, max_hit_points, hit_dice, passive_perception,
           xp_points, total_po,
           spellcasting_ability, spell_save_dc, spell_attack_bonus,
+          avatar_preset,
           user_id
         ) VALUES (
           ${character_details?.name ?? 'Aventureiro'},
@@ -54,6 +55,7 @@ export class CharacterRepository {
           ${cs.spellcasting_info?.spellcasting_ability ?? null},
           ${cs.spellcasting_info?.spell_save_dc ?? null},
           ${cs.spellcasting_info?.spell_attack_bonus ?? null},
+          ${input.avatar_preset ? sql.json(input.avatar_preset as any) : null},
           ${userId}
         )
         RETURNING id_character
@@ -125,6 +127,14 @@ export class CharacterRepository {
     });
   }
 
+  async updateAvatarPreset(id: number, preset: AvatarPreset): Promise<void> {
+    await this.db.sql`
+      UPDATE character
+      SET avatar_preset = ${this.db.sql.json(preset as any)}
+      WHERE id_character = ${id}
+    `;
+  }
+
   async findAllCharacters(userId: string): Promise<{id_character: number; name: string; level: number; race: string; class: string}[]> {
     return this.db.sql`
       SELECT
@@ -169,7 +179,8 @@ export class CharacterRepository {
         c.proficiency_bonus, c.armour_class, c.initiative_value,
         c.current_hit_points, c.max_hit_points, c.hit_dice, c.passive_perception,
         c.xp_points, c.total_po,
-        c.spellcasting_ability, c.spell_save_dc, c.spell_attack_bonus,c.user_id,
+        c.spellcasting_ability, c.spell_save_dc, c.spell_attack_bonus, c.user_id,
+        c.avatar_preset,
         al.name   AS alignment_name,
         cb.id_background
       FROM character c

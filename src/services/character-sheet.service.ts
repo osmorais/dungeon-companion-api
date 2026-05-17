@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {injectable, BindingScope, service} from '@loopback/core';
-import {CharacterInput, CharacterSheet, CharacterSkillInsert, FinalStats, StatKeyEn} from '../models/character-sheet-types';
+import {CharacterInput, CharacterSheet, CharacterSkillInsert, FinalStats, StatKeyEn, AvatarPreset} from '../models/character-sheet-types';
 import {Spell, WeaponRow, Skill} from '../models/character-options-types';
 import {CharacterRepository} from '../repositories/character.repository';
 import {
@@ -115,6 +115,7 @@ export class CharacterSheetService {
         },
         spellcasting_info: spellcastingInfo,
         spells,
+        avatar_preset: input.avatar_preset ?? null,
       },
     };
   }
@@ -305,7 +306,17 @@ export class CharacterSheetService {
             }
           : undefined,
         spells: spellList,
+        avatar_preset: character.avatar_preset ?? null,
+        id_character: character.id_character,
       },
     };
+  }
+
+  async updateAvatarPreset(id: number, preset: AvatarPreset, userId: string): Promise<{success: boolean}> {
+    const raw = await this.repository.findCharacterById(id);
+    if (!raw) throw new Error('Character not found');
+    if (raw.character.user_id !== userId) throw new Error('Unauthorized');
+    await this.repository.updateAvatarPreset(id, preset);
+    return {success: true};
   }
 }

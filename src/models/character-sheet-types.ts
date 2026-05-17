@@ -4,6 +4,16 @@ import {Armour, Skill, Spell, WeaponRow} from './character-options-types';
 export type StatKeyPt = 'FOR' | 'DES' | 'CON' | 'INT' | 'SAB' | 'CAR';
 export type StatKeyEn = 'STR' | 'DEX' | 'CON' | 'INT' | 'WIS' | 'CHA';
 
+export interface AvatarPreset {
+  race: string;
+  classKey: string;
+  skinColor: string;
+  hairStyle: string | null;
+  hairColor: string;
+  beardStyle: string | null;
+  beardColor: string | null;
+}
+
 export interface CharacterInput {
   core_build: {
     level: number;
@@ -37,6 +47,7 @@ export interface CharacterInput {
     height?: string;
     weight?: string;
   };
+  avatar_preset?: AvatarPreset;
 }
 
 export interface FinalStats {
@@ -107,6 +118,7 @@ export interface CharacterRawData {
     spell_save_dc: number | null;
     spell_attack_bonus: number | null;
     user_id: string;
+    avatar_preset: AvatarPreset | null;
   };
   attributes: Array<{attribute_name: string; score: number; modifier: number}>;
   skills: Array<{id_skill: number; name: string; id_attribute: number; attribute_name: string; description: string; is_trained: boolean, level_value: number; total_skill_value: number}>;
@@ -129,6 +141,7 @@ export interface CharacterRawData {
 
 export interface CharacterSheet {
   character_sheet: {
+    id_character?: number;
     header: {
       name: string;
       class_and_level: string;
@@ -166,5 +179,6 @@ export interface CharacterSheet {
       spell_attack_bonus: number;
     };
     spells: Spell[];
+    avatar_preset?: AvatarPreset | null;
   };
 }
