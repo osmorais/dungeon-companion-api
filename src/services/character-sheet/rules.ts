@@ -77,6 +77,10 @@ export const RACES: Record<number, RaceRule> = {
       {name: 'Especialização em Rochas', source: 'Raça', description: 'Sempre que você realizar um teste de Inteligência (História) relacionado à origem \
         de um trabalho em pedra, você é considerado proficiente na perícia História e adiciona o dobro do seu \
         bônus de proficiência ao teste, ao invés do seu bônus de proficiência normal.'},
+      {name: 'Proficiência com Ferramentas', source: 'Raça', description: 'Você tem \
+        proficiência em uma ferramenta de artesão à sua escolha \
+        entre: ferramentas de ferreiro, suprimentos de cervejeiro \
+        ou ferramentas de pedreiro. '},
     ],
   },
   2: {
@@ -99,8 +103,10 @@ export const RACES: Record<number, RaceRule> = {
     speed: '7,5m',
     languages: ['Comum', 'Halfling'],
     traits: [
-      {name: 'Sorte', source: 'Raça', description: 'Quando você rola 1 num d20 em um teste de atributo, teste de resistência ou jogada de ataque, você pode rolar novamente o dado e deve usar o novo resultado.'},
+      {name: 'Sortudo', source: 'Raça', description: 'Quando você rola 1 num d20 em um teste de atributo, teste de resistência ou jogada de ataque, você pode rolar novamente o dado e deve usar o novo resultado.'},
       {name: 'Bravura', source: 'Raça', description: 'Você tem vantagem em testes de resistência contra medo.'},
+      {name: 'Agilidade Halfling', source: 'Raça', description: 'Você pode mover-se através do \
+        espaço de qualquer criatura que for de um tamanho maior que o seu.'},
     ],
   },
   4: {
@@ -110,8 +116,13 @@ export const RACES: Record<number, RaceRule> = {
     speed: '9m',
     languages: ['Comum', 'Dracônico'],
     traits: [
-      {name: 'Ancestralidade Dracônica', source: 'Raça', description: 'Você tem ancestralidade dracônica. Você pode usar uma ação para exalar energia destrutiva (Sopro de Fogo, CD 13).'},
+      {name: 'Ancestral Dracônica', source: 'Raça', description: 'Você tem ancestralidade dracônica. Você pode usar uma ação para exalar energia destrutiva (Sopro de Fogo, CD 13).'},
       {name: 'Resistência Dracônica', source: 'Raça', description: 'Você tem resistência ao tipo de dano associado à sua ancestralidade dracônica.'},
+      {name: 'Arma de Sopro', source: 'Raça', description: 'Você pode usar uma ação para exalar energia destrutiva. Seu ancestral dracônico \
+        determina o tamanho, formado e tipo de dano que você expele. Quando você usa sua arma de sopro, cada criatura na área exalada deve \
+        realizar um teste de resistência, o tipo do teste é determinado pelo seu ancestral dracônico. A CD do teste de resistência é 8 + seu modificador de \
+        Constituição + seu bônus de proficiência. Uma criatura sofre 2d6 de dano num fracasso e metade desse dano num sucesso. O dano aumenta para 3d6 no 6° nível,\
+        4d6 no 11° nível e 5d6 no 16° nível. Depois de usar sua arma de sopro, você não poderá utilizá-la novamente até completar um descanso curto ou longo. '},
     ],
   },
   5: {
@@ -145,8 +156,9 @@ export const RACES: Record<number, RaceRule> = {
     languages: ['Comum', 'Orc'],
     traits: [
       {name: 'Visão no Escuro', source: 'Raça', description: 'Você enxerga na meia-luz a até 18 metros como se fosse luz plena.'},
-      {name: 'Ameaçador', source: 'Raça', description: 'Você tem proficiência na perícia Intimidação.'},
-      {name: 'Tolerância Inabalável', source: 'Raça', description: 'Quando um dano te reduziria a 0 pontos de vida, você pode usar sua reação para cair a 1 ponto de vida em vez disso.'},
+      {name: 'Resistência Implacável', source: 'Raça', description: 'Quando um dano te reduziria a 0 pontos de vida, você pode usar sua reação para cair a 1 ponto de vida em vez disso.'},
+      {name: 'Ataques Selvagens', source: 'Raça', description: 'Quando você atinge um ataque crítico com uma arma corpo-a-corpo, você pode rolar um \
+        dos dados de dano da arma mais uma vez e adicioná-lo ao dano extra causado pelo acerto crítico. '},
     ],
   },
   8: {
