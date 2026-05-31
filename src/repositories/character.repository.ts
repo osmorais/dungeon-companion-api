@@ -22,7 +22,7 @@ export class CharacterRepository {
     `;
   }
 
-  async saveCharacter(input: CharacterInput, sheet: CharacterSheet, skills: CharacterSkillInsert[], userId: string): Promise<number> {
+  async createCharacter(input: CharacterInput, sheet: CharacterSheet, skills: CharacterSkillInsert[], userId: string): Promise<number> {
     const {core_build, equipment, choices, character_details} = input;
     const cs = sheet.character_sheet;
 
@@ -233,5 +233,29 @@ export class CharacterRepository {
     `;
 
     return {character, attributes, skills, spells, weapons, items};
+  }
+
+  
+  async findBackgroundCharacterById(id_character: number):
+    Promise<{id_character: number; user_id: string; full_history: string} | null> {
+    const rows = await this.db.sql<{id_character: number; user_id: string; full_history: string}[]>`
+      SELECT
+          c.id_character,
+          c.user_id,
+          cb.full_history
+      FROM character_background cb
+      LEFT JOIN character c ON c.id_character = cb.id_character
+      WHERE c.id_character = ${id_character}
+      LIMIT 1
+    `;
+    return rows[0] ?? null;
+  }
+
+  async updateCharacterBackground(id_character: number, full_history: string): Promise<void> {
+    await this.db.sql`
+      UPDATE character_background
+      SET full_history = ${full_history}
+      WHERE id_character = ${id_character}
+    `;
   }
 }

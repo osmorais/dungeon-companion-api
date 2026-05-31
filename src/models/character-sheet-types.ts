@@ -14,6 +14,12 @@ export interface AvatarPreset {
   beardColor: string | null;
 }
 
+export interface CharacterBackground {
+  id_character_background: number;
+  id_character: number;
+  full_history: string;
+}
+
 export interface CharacterInput {
   core_build: {
     level: number;

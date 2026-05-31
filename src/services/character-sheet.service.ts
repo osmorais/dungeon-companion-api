@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {injectable, BindingScope, service} from '@loopback/core';
-import {CharacterInput, CharacterSheet, CharacterSkillInsert, FinalStats, StatKeyEn, AvatarPreset} from '../models/character-sheet-types';
+import {CharacterInput, CharacterSheet, CharacterSkillInsert, FinalStats, StatKeyEn, AvatarPreset, CharacterBackground} from '../models/character-sheet-types';
 import {Spell, WeaponRow, Skill} from '../models/character-options-types';
 import {CharacterRepository} from '../repositories/character.repository';
 import {
@@ -138,11 +138,11 @@ export class CharacterSheetService {
     };
   }
 
-  async saveCharacter(input: CharacterInput, userId: string): Promise<CharacterSheet | null> {
+  async createCharacter(input: CharacterInput, userId: string): Promise<CharacterSheet | null> {
     const sheet = this.build(input);
     const allSkills = await this.repository.findAllSkills();
     const computedSkills = this.computeSkills(allSkills, input, sheet);
-    return this.loadCharacter(await this.repository.saveCharacter(input, sheet, computedSkills, userId), userId);
+    return this.loadCharacter(await this.repository.createCharacter(input, sheet, computedSkills, userId), userId);
   }
 
   private computeSkills(
@@ -317,6 +317,23 @@ export class CharacterSheetService {
     if (!raw) throw new Error('Character not found');
     if (raw.character.user_id !== userId) throw new Error('Unauthorized');
     await this.repository.updateAvatarPreset(id, preset);
+    return {success: true};
+  }
+
+  
+
+  async getCharacterBackground(id: number, userId: string): Promise<{id_character: number; full_history: string}> {
+    const raw = await this.repository.findBackgroundCharacterById(id);
+    if (!raw) throw new Error('Character not found');
+    if (raw.user_id !== userId) throw new Error('Unauthorized');
+    return {id_character: raw.id_character, full_history: raw.full_history};
+  }
+
+  async updateCharacterBackground(characterBackground: CharacterBackground, userId: string): Promise<{success: boolean}> {
+    const raw = await this.repository.findBackgroundCharacterById(characterBackground.id_character);
+    if (!raw) throw new Error('Character not found');
+    if (raw.user_id !== userId) throw new Error('Unauthorized');
+    await this.repository.updateCharacterBackground(characterBackground.id_character, characterBackground.full_history);
     return {success: true};
   }
 }
