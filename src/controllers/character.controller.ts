@@ -3,7 +3,7 @@ import {get, param, patch, post, requestBody, response, HttpErrors} from '@loopb
 import {authenticate} from '@loopback/authentication';
 import {SecurityBindings, UserProfile} from '@loopback/security';
 import {AiAgentService, CharacterSheetService} from '../services';
-import {AvatarPreset, CharacterInput} from '../models/character-sheet-types';
+import {AvatarPreset, CharacterInput, CharacterBackground} from '../models/character-sheet-types';
 
 @authenticate('jwt')
 export class CharacterController {
@@ -52,7 +52,24 @@ export class CharacterController {
     })
     input: CharacterInput,
   ): object {
-    return this.characterSheetService.saveCharacter(input, currentUser.id);
+    return this.characterSheetService.createCharacter(input, currentUser.id);
+  }
+
+  @post('/api/character-sheet/update-notes')
+  @response(200, {
+    description: 'Update character notes and history.',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  updateNotes(
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      description: 'Update character notes and history.',
+      required: true,
+      content: {'application/json': {schema: {type: 'object'}}},
+    })
+    input: CharacterBackground,
+  ): object {
+    return this.characterSheetService.updateCharacterBackground(input, currentUser.id);
   }
 
   @get('/api/character-sheet')
@@ -87,6 +104,25 @@ export class CharacterController {
     body: {avatar_preset: AvatarPreset},
   ): Promise<object> {
     return this.characterSheetService.updateAvatarPreset(id, body.avatar_preset, currentUser.id);
+  }
+
+  @get('/api/character-sheet/{id}/background')
+  @response(200, {
+    description: 'Returns the background (full_history) for the given character ID',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async getBackground(
+    @param.path.number('id') id: number,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+  ): Promise<object> {
+    try {
+      return await this.characterSheetService.getCharacterBackground(id, currentUser.id);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (message === 'Character not found') throw new HttpErrors.NotFound(`Character with id ${id} not found`);
+      if (message === 'Unauthorized') throw new HttpErrors.Forbidden();
+      throw e;
+    }
   }
 
   @get('/api/character-sheet/{id}')
