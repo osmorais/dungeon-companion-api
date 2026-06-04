@@ -267,3 +267,118 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR(255) UNIQUE;
 
 ALTER TABLE "character"
 ADD COLUMN IF NOT EXISTS avatar_preset JSONB;
+
+-- ==========================================
+-- GAME SESSION
+-- ==========================================
+
+CREATE TABLE game_session (
+    id_game_session UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_name VARCHAR(255) NOT NULL,
+    session_code VARCHAR(50) NOT NULL UNIQUE,
+    max_player_quantity INTEGER NOT NULL,
+    dm_name VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+
+ALTER TABLE "game_session"
+ADD COLUMN user_id UUID;
+
+ALTER TABLE "game_session"
+ADD CONSTRAINT fk_game_session_user
+FOREIGN KEY (user_id)
+REFERENCES users(id)
+ON DELETE CASCADE;
+
+
+-- ==========================================
+-- PLAYER SESSION
+-- ==========================================
+
+CREATE TABLE player_session (
+    id_player_session UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    id_game_session UUID NOT NULL,
+    id_character INT REFERENCES Character(id_character) ON DELETE CASCADE,
+
+    player_name VARCHAR(255) NOT NULL,
+
+    CONSTRAINT fk_player_session_game_session
+        FOREIGN KEY (id_game_session)
+        REFERENCES game_session(id_game_session)
+        ON DELETE CASCADE
+);
+
+ALTER TABLE "player_session"
+ADD COLUMN user_id UUID;
+
+ALTER TABLE "player_session"
+ADD CONSTRAINT fk_player_session_user
+FOREIGN KEY (user_id)
+REFERENCES users(id)
+ON DELETE CASCADE;
+
+
+-- ==========================================
+-- NPC SESSION
+-- ==========================================
+
+CREATE TABLE npc_session (
+    id_npc_session UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    id_game_session UUID NOT NULL,
+    id_character INT REFERENCES Character(id_character) ON DELETE CASCADE,
+
+    CONSTRAINT fk_npc_session_game_session
+        FOREIGN KEY (id_game_session)
+        REFERENCES game_session(id_game_session)
+        ON DELETE CASCADE
+);
+
+-- ==========================================
+-- MONSTER SESSION
+-- ==========================================
+
+CREATE TABLE monster_session (
+    id_monster_session UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    id_game_session UUID NOT NULL,
+
+    monster_api_slug VARCHAR(255) NOT NULL,
+    custom_name VARCHAR(255),
+
+    hp_current INTEGER NOT NULL,
+    hp_max INTEGER NOT NULL,
+    ac INTEGER NOT NULL,
+
+    data_snapshot JSONB NOT NULL,
+
+    CONSTRAINT fk_monster_session_game_session
+        FOREIGN KEY (id_game_session)
+        REFERENCES game_session(id_game_session)
+        ON DELETE CASCADE
+);
+
+-- ==========================================
+-- ÍNDICES
+-- ==========================================
+
+CREATE INDEX idx_player_session_game
+    ON player_session(id_game_session);
+
+CREATE INDEX idx_player_session_character
+    ON player_session(id_character);
+
+CREATE INDEX idx_npc_session_game
+    ON npc_session(id_game_session);
+
+CREATE INDEX idx_npc_session_character
+    ON npc_session(id_character);
+
+CREATE INDEX idx_monster_session_game
+    ON monster_session(id_game_session);
+
+CREATE INDEX idx_monster_snapshot_gin
+    ON monster_session
+    USING GIN (data_snapshot);

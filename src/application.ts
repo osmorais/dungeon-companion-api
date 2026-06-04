@@ -11,9 +11,10 @@ import {AuthenticationComponent, registerAuthenticationStrategy} from '@loopback
 import cookieParser from 'cookie-parser';
 import path from 'path';
 import {MySequence} from './sequence';
-import {AiAgentService, CharacterSheetService, CharacterOptionsService} from './services';
+import {AiAgentService, CharacterSheetService, CharacterOptionsService, GameSessionService} from './services';
 import {CharacterOptionsRepository} from './repositories/character-options.repository';
 import {CharacterRepository} from './repositories/character.repository';
+import {GameSessionRepository} from './repositories/game-session.repository';
 import {PostgresDatasource} from './datasources';
 import {JWTStrategy} from './strategies/jwt.strategy';
 
@@ -49,6 +50,8 @@ export class DungeonCompanionApiApplication extends BootMixin(
     this.service(CharacterSheetService, 'services.CharacterSheetService');
     this.repository(CharacterOptionsRepository);
     this.service(CharacterOptionsService, 'services.CharacterOptionsService');
+    this.repository(GameSessionRepository);
+    this.service(GameSessionService, 'services.GameSessionService');
 
     this.bind('db.Postgres').toDynamicValue(() =>
       PostgresDatasource.getInstance(),
