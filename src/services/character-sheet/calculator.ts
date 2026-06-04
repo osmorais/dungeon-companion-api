@@ -197,10 +197,10 @@ export function calcArmorClass(
   return hasShield ? ac + 2 : ac;
 }
 
-export function calcMaxHP(hitDie: number, level: number, conMod: number): number {
-  const levelOneHP = hitDie + conMod;
+export function calcMaxHP(hitDie: number, level: number, conMod: number, hpBonusPerLevel = 0): number {
+  const levelOneHP = hitDie + conMod + hpBonusPerLevel;
   if (level === 1) return Math.max(1, levelOneHP);
-  const higherLevels = (level - 1) * (Math.floor(hitDie / 2) + 1 + conMod);
+  const higherLevels = (level - 1) * (Math.floor(hitDie / 2) + 1 + conMod + hpBonusPerLevel);
   return Math.max(1, levelOneHP + higherLevels);
 }
 

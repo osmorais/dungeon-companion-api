@@ -1,5 +1,5 @@
 import {inject} from '@loopback/core';
-import {get, param, patch, post, requestBody, response, HttpErrors} from '@loopback/rest';
+import {get, param, patch, post, requestBody, response, HttpErrors, RestBindings, Response} from '@loopback/rest';
 import {authenticate} from '@loopback/authentication';
 import {SecurityBindings, UserProfile} from '@loopback/security';
 import {AiAgentService, CharacterSheetService} from '../services';
@@ -106,6 +106,34 @@ export class CharacterController {
     return this.characterSheetService.updateAvatarPreset(id, body.avatar_preset, currentUser.id);
   }
 
+  @patch('/api/character-sheet/{id}/hp')
+  @response(200, {
+    description: 'Updates the current HP for a character',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async updateHp(
+    @param.path.number('id') id: number,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      description: 'New current HP value',
+      required: true,
+      content: {'application/json': {schema: {type: 'object', required: ['current_hit_points'], properties: {current_hit_points: {type: 'integer'}}}}},
+    })
+    body: {current_hit_points: number},
+  ): Promise<object> {
+    if (typeof body.current_hit_points !== 'number' || !Number.isInteger(body.current_hit_points)) {
+      throw new HttpErrors.UnprocessableEntity('current_hit_points deve ser um número inteiro');
+    }
+    try {
+      return await this.characterSheetService.updateCurrentHitPoints(id, body.current_hit_points, currentUser.id);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (message === 'Character not found') throw new HttpErrors.NotFound(`Character with id ${id} not found`);
+      if (message === 'Unauthorized') throw new HttpErrors.Forbidden();
+      throw e;
+    }
+  }
+
   @get('/api/character-sheet/{id}/background')
   @response(200, {
     description: 'Returns the background (full_history) for the given character ID',
@@ -117,6 +145,29 @@ export class CharacterController {
   ): Promise<object> {
     try {
       return await this.characterSheetService.getCharacterBackground(id, currentUser.id);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (message === 'Character not found') throw new HttpErrors.NotFound(`Character with id ${id} not found`);
+      if (message === 'Unauthorized') throw new HttpErrors.Forbidden();
+      throw e;
+    }
+  }
+
+  @get('/api/character-sheet/{id}/print')
+  @response(200, {
+    description: 'Returns a printable HTML character sheet',
+    content: {'text/html': {schema: {type: 'string'}}},
+  })
+  async printSheet(
+    @param.path.number('id') id: number,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @inject(RestBindings.Http.RESPONSE) res: Response,
+  ): Promise<Response> {
+    try {
+      const html = await this.characterSheetService.getCharacterPrintHtml(id, currentUser.id);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.send(html);
+      return res;
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
       if (message === 'Character not found') throw new HttpErrors.NotFound(`Character with id ${id} not found`);

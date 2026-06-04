@@ -382,3 +382,9 @@ CREATE INDEX idx_monster_session_game
 CREATE INDEX idx_monster_snapshot_gin
     ON monster_session
     USING GIN (data_snapshot);
+
+-- ==========================================
+-- SUBRACE
+-- ==========================================
+
+ALTER TABLE character ADD COLUMN IF NOT EXISTS subrace VARCHAR(100);

@@ -106,6 +106,7 @@ export interface CharacterRawData {
     name: string;
     level: number;
     id_race: number;
+    subrace: string | null;
     id_class: number;
     id_armour: number | null;
     id_alignment: number | null;

@@ -10,12 +10,18 @@ export interface RaceRule {
   weaponProficiencies?: string[];
   skillProficiencies?: string[];
   languages: string[];
+  subraces?: string[];
 }
 
 export interface SubraceRule {
+  displayName: string;
   bonuses: Partial<Record<StatKeyEn, number>>;
   traits: Trait[];
   weaponProficiencies?: string[];
+  armorProficiencies?: string[];
+  toolProficiencies?: string[];
+  speedOverride?: string;
+  hpBonusPerLevel?: number;
 }
 
 export interface ClassRule {
@@ -70,6 +76,7 @@ export const RACES: Record<number, RaceRule> = {
     bonuses: {CON: 2},
     speed: '7,5m',
     languages: ['Comum', 'Anão'],
+    subraces: ['anao-da-colina', 'anao-da-montanha'],
     weaponProficiencies: ['Machados de Batalha', 'Machadinhas', 'Martelos leves', 'Martelos de guerra'],
     traits: [
       {name: 'Visão no Escuro', source: 'Raça', description: 'Você enxerga na meia-luz a até 18 metros como se fosse luz plena e na escuridão como se fosse meia-luz.'},
@@ -89,6 +96,7 @@ export const RACES: Record<number, RaceRule> = {
     bonuses: {DEX: 2},
     speed: '9m',
     languages: ['Comum', 'Élfico'],
+    subraces: ['alto-elfo', 'elfo-da-floresta'],
     skillProficiencies: ['perception'],
     traits: [
       {name: 'Visão no Escuro', source: 'Raça', description: 'Você enxerga na meia-luz a até 18 metros como se fosse luz plena e na escuridão como se fosse meia-luz.'},
@@ -102,6 +110,7 @@ export const RACES: Record<number, RaceRule> = {
     bonuses: {DEX: 2},
     speed: '7,5m',
     languages: ['Comum', 'Halfling'],
+    subraces: ['halfling-pes-leves', 'halfling-robusto'],
     traits: [
       {name: 'Sortudo', source: 'Raça', description: 'Quando você rola 1 num d20 em um teste de atributo, teste de resistência ou jogada de ataque, você pode rolar novamente o dado e deve usar o novo resultado.'},
       {name: 'Bravura', source: 'Raça', description: 'Você tem vantagem em testes de resistência contra medo.'},
@@ -131,6 +140,7 @@ export const RACES: Record<number, RaceRule> = {
     bonuses: {INT: 2},
     speed: '7,5m',
     languages: ['Comum', 'Gnômico'],
+    subraces: ['gnomo-das-rochas', 'gnomo-das-florestas'],
     traits: [
       {name: 'Visão no Escuro', source: 'Raça', description: 'Você enxerga na meia-luz a até 18 metros como se fosse luz plena.'},
       {name: 'Esperteza Gnômica', source: 'Raça', description: 'Você tem vantagem em todos os testes de resistência de Inteligência, Sabedoria e Carisma contra magia.'},
@@ -184,14 +194,14 @@ export const RACES: Record<number, RaceRule> = {
 };
 
 export const SUBRACES: Record<string, SubraceRule> = {
-  'anao-da-colina': {bonuses: {WIS: 1}, traits: [{name: 'Tenacidade Anã', source: 'Sub-raça', description: 'Seu máximo de pontos de vida aumenta em 1, e ele aumenta em 1 toda vez que você ganha um nível.'}]},
-  'anao-da-montanha': {bonuses: {STR: 2}, traits: [{name: 'Treinamento com Armaduras Anão', source: 'Sub-raça', description: 'Você tem proficiência com armaduras leves e médias.'}]},
-  'alto-elfo': {bonuses: {INT: 1}, traits: [{name: 'Truque', source: 'Sub-raça', description: 'Você conhece um truque de mago à sua escolha.'}], weaponProficiencies: ['Espadas Longas', 'Espadas Curtas', 'Arcos Longos', 'Arcos Curtos']},
-  'elfo-da-floresta': {bonuses: {WIS: 1}, traits: [{name: 'Passo Veloz', source: 'Sub-raça', description: 'Seu deslocamento base aumenta para 10,5m (35 pés).'}], weaponProficiencies: ['Espadas Longas', 'Espadas Curtas', 'Arcos Longos', 'Arcos Curtos']},
-  'halfling-pes-leves': {bonuses: {CHA: 1}, traits: [{name: 'Furtividade Natural', source: 'Sub-raça', description: 'Você pode tentar se esconder mesmo quando está obscurecido apenas por uma criatura que seja pelo menos um tamanho maior que você.'}]},
-  'halfling-robusto': {bonuses: {CON: 1}, traits: [{name: 'Resistência Robusto', source: 'Sub-raça', description: 'Você tem vantagem em testes de resistência contra veneno e tem resistência a dano de veneno.'}]},
-  'gnomo-das-rochas': {bonuses: {CON: 1}, traits: [{name: 'Conhecimento Artificial', source: 'Sub-raça', description: 'Você tem proficiência com ferramentas de artesão.'}]},
-  'gnomo-das-florestas': {bonuses: {DEX: 1}, traits: [{name: 'Ilusão Natural', source: 'Sub-raça', description: 'Você conhece o truque de mago Ilusão Menor.'}]},
+  'anao-da-colina':      {displayName: 'Anão da Colina',      bonuses: {WIS: 1}, hpBonusPerLevel: 1, traits: [{name: 'Tenacidade Anã', source: 'Sub-raça', description: 'Seu máximo de pontos de vida aumenta em 1, e ele aumenta em 1 toda vez que você ganha um nível.'}]},
+  'anao-da-montanha':    {displayName: 'Anão da Montanha',    bonuses: {STR: 2}, armorProficiencies: ['Leve', 'Média'], traits: [{name: 'Treinamento com Armaduras Anão', source: 'Sub-raça', description: 'Você tem proficiência com armaduras leves e médias.'}]},
+  'alto-elfo':           {displayName: 'Alto Elfo',           bonuses: {INT: 1}, weaponProficiencies: ['Espadas Longas', 'Espadas Curtas', 'Arcos Longos', 'Arcos Curtos'], traits: [{name: 'Truque', source: 'Sub-raça', description: 'Você conhece um truque de mago à sua escolha.'}]},
+  'elfo-da-floresta':    {displayName: 'Elfo da Floresta',    bonuses: {WIS: 1}, speedOverride: '10,5m', weaponProficiencies: ['Espadas Longas', 'Espadas Curtas', 'Arcos Longos', 'Arcos Curtos'], traits: [{name: 'Passo Veloz', source: 'Sub-raça', description: 'Seu deslocamento base aumenta para 10,5m (35 pés).'}]},
+  'halfling-pes-leves':  {displayName: 'Halfling Pés-Leves',  bonuses: {CHA: 1}, traits: [{name: 'Furtividade Natural', source: 'Sub-raça', description: 'Você pode tentar se esconder mesmo quando está obscurecido apenas por uma criatura que seja pelo menos um tamanho maior que você.'}]},
+  'halfling-robusto':    {displayName: 'Halfling Robusto',    bonuses: {CON: 1}, traits: [{name: 'Resistência Robusto', source: 'Sub-raça', description: 'Você tem vantagem em testes de resistência contra veneno e tem resistência a dano de veneno.'}]},
+  'gnomo-das-rochas':    {displayName: 'Gnomo das Rochas',    bonuses: {CON: 1}, toolProficiencies: ['Ferramentas de Artesão'], traits: [{name: 'Conhecimento Artificial', source: 'Sub-raça', description: 'Você tem proficiência com ferramentas de artesão.'}]},
+  'gnomo-das-florestas': {displayName: 'Gnomo das Florestas', bonuses: {DEX: 1}, traits: [{name: 'Ilusão Natural', source: 'Sub-raça', description: 'Você conhece o truque de mago Ilusão Menor.'}]},
 };
 
 // ---------------------------------------------------------------------------

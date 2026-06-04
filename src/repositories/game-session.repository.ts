@@ -133,11 +133,53 @@ export class GameSessionRepository {
         : null,
     }));
 
-    const npcs = await this.db.sql<NpcSession[]>`
-      SELECT id_npc_session, id_game_session, id_character
-      FROM npc_session
-      WHERE id_game_session = ${id}
+    const npcRows = await this.db.sql<{
+      id_npc_session: string;
+      id_game_session: string;
+      id_character: number;
+      character_name: string | null;
+      character_class: string | null;
+      character_race: string | null;
+      character_level: number | null;
+      max_hit_points: number | null;
+      current_hit_points: number | null;
+      avatar_preset: unknown | null;
+    }[]>`
+      SELECT
+        ns.id_npc_session,
+        ns.id_game_session,
+        ns.id_character,
+        c.name          AS character_name,
+        cl.name         AS character_class,
+        r.name          AS character_race,
+        c.level         AS character_level,
+        c.max_hit_points,
+        c.current_hit_points,
+        c.avatar_preset
+      FROM npc_session ns
+      LEFT JOIN character c  ON c.id_character = ns.id_character
+      LEFT JOIN class     cl ON cl.id_class    = c.id_class
+      LEFT JOIN race      r  ON r.id_race      = c.id_race
+      WHERE ns.id_game_session = ${id}
     `;
+
+    const npcs: NpcSession[] = npcRows.map(row => ({
+      id_npc_session: row.id_npc_session,
+      id_game_session: row.id_game_session,
+      id_character: row.id_character,
+      character: row.character_name != null
+        ? {
+            name: row.character_name,
+            class: row.character_class ?? '',
+            race: row.character_race ?? '',
+            level: row.character_level ?? 0,
+            max_hit_points: row.max_hit_points ?? 0,
+            current_hit_points: row.current_hit_points ?? 0,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            avatar_preset: (row.avatar_preset as any) ?? null,
+          }
+        : null,
+    }));
 
     const monsters = await this.db.sql<MonsterSession[]>`
       SELECT id_monster_session, id_game_session, monster_api_slug, custom_name,
@@ -253,6 +295,30 @@ export class GameSessionRepository {
     };
   }
 
+  async removeNpc(idNpcSession: string, userId: string): Promise<'not_found' | 'unauthorized' | 'ok'> {
+    const rows = await this.db.sql<{session_owner_id: string | null}[]>`
+      SELECT gs.user_id AS session_owner_id
+      FROM npc_session ns
+      JOIN game_session gs ON gs.id_game_session = ns.id_game_session
+      WHERE ns.id_npc_session = ${idNpcSession}
+      LIMIT 1
+    `;
+    if (!rows.length) return 'not_found';
+    if (rows[0].session_owner_id !== userId) return 'unauthorized';
+
+    await this.db.sql`DELETE FROM npc_session WHERE id_npc_session = ${idNpcSession}`;
+    return 'ok';
+  }
+
+  async addNpc(idGameSession: string, idCharacter: number): Promise<NpcSession> {
+    const [row] = await this.db.sql<NpcSession[]>`
+      INSERT INTO npc_session (id_game_session, id_character)
+      VALUES (${idGameSession}, ${idCharacter})
+      RETURNING id_npc_session, id_game_session, id_character
+    `;
+    return row;
+  }
+
   async removePlayer(idPlayerSession: string, userId: string): Promise<'not_found' | 'unauthorized' | 'ok'> {
     const rows = await this.db.sql<{user_id: string | null; session_owner_id: string | null}[]>`
       SELECT ps.user_id, gs.user_id AS session_owner_id
@@ -270,6 +336,29 @@ export class GameSessionRepository {
 
     await this.db.sql`
       DELETE FROM player_session WHERE id_player_session = ${idPlayerSession}
+    `;
+    return 'ok';
+  }
+
+  async updateCharacterHp(
+    idPlayerSession: string,
+    currentHitPoints: number,
+    userId: string,
+  ): Promise<'not_found' | 'unauthorized' | 'ok'> {
+    const rows = await this.db.sql<{id_character: number; player_user_id: string | null; session_owner_id: string | null}[]>`
+      SELECT ps.id_character, ps.user_id AS player_user_id, gs.user_id AS session_owner_id
+      FROM player_session ps
+      JOIN game_session gs ON gs.id_game_session = ps.id_game_session
+      WHERE ps.id_player_session = ${idPlayerSession}
+      LIMIT 1
+    `;
+    if (!rows.length) return 'not_found';
+
+    const {id_character, player_user_id, session_owner_id} = rows[0];
+    if (player_user_id !== userId && session_owner_id !== userId) return 'unauthorized';
+
+    await this.db.sql`
+      UPDATE character SET current_hit_points = ${currentHitPoints} WHERE id_character = ${id_character}
     `;
     return 'ok';
   }

@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {injectable, BindingScope, service} from '@loopback/core';
+import {HttpErrors} from '@loopback/rest';
+import {buildPrintHtml} from './character-sheet-print';
 import {CharacterInput, CharacterSheet, CharacterSkillInsert, FinalStats, StatKeyEn, AvatarPreset, CharacterBackground} from '../models/character-sheet-types';
 import {Spell, WeaponRow, Skill} from '../models/character-options-types';
 import {CharacterRepository} from '../repositories/character.repository';
@@ -19,6 +21,7 @@ import {
   buildSpellcasting,
   buildLanguages,
   collectProficientSkills,
+  normalizeKey,
 } from './character-sheet/calculator';
 
 @injectable({scope: BindingScope.TRANSIENT})
@@ -36,8 +39,11 @@ export class CharacterSheetService {
     const subraceRule = resolveSubrace(core_build.subrace);
     const classRule = resolveClass(core_build.id_class);
 
-    if(raceRule.weaponProficiencies && raceRule.weaponProficiencies.length > 0) {
+    if (raceRule.weaponProficiencies?.length) {
       classRule.weaponProficiencies.push(...raceRule.weaponProficiencies);
+    }
+    if (subraceRule?.weaponProficiencies?.length) {
+      classRule.weaponProficiencies.push(...subraceRule.weaponProficiencies);
     }
     // const classKey = normalizeKey(core_build.class);
     const classKey = core_build.id_class ?? 0;
@@ -50,7 +56,7 @@ export class CharacterSheetService {
     const attributeBlocks = buildAttributeBlocks(stats, classRule, profBonus);
     // const skillBlocks = buildSkillBlocks(stats, profBonus, proficientSkills);
     const ac = calcArmorClass(equipment.armour, stats, equipment.has_shield, classKey);
-    const maxHP = calcMaxHP(classRule.hitDie, level, getMod(stats.CON));
+    const maxHP = calcMaxHP(classRule.hitDie, level, getMod(stats.CON), subraceRule?.hpBonusPerLevel ?? 0);
     const weaponActions = buildWeaponActions(equipment.weapons, stats, profBonus);
     const traits = collectTraits(raceRule, subraceRule, classRule, bgRule);
     const spells = choices.spells ?? [];
@@ -70,7 +76,7 @@ export class CharacterSheetService {
     const isPerceptionProficient = proficientSkills.includes('perception');
     const passivePerception = 10 + getMod(stats.WIS) + (isPerceptionProficient ? profBonus : 0);
 
-    const raceDisplay = core_build.subrace ?? raceRule.displayName;
+    const raceDisplay = subraceRule ? subraceRule.displayName : raceRule.displayName;
 
     const startingItems = [...classRule.startingEquipment, ...bgRule.startingItems];
     const equippedWeapons = equipment.weapons
@@ -94,7 +100,7 @@ export class CharacterSheetService {
           proficiency_bonus: profBonus,
           armor_class: ac,
           initiative: getMod(stats.DEX),
-          speed: raceRule.speed,
+          speed: subraceRule?.speedOverride ?? raceRule.speed,
           hit_points: {max: maxHP, current: maxHP, temporary: 0},
           hit_dice: `${level}d${classRule.hitDie}`,
           passive_perception: passivePerception,
@@ -104,9 +110,9 @@ export class CharacterSheetService {
         weapons: weaponActions,
         features_and_traits: traits,
         proficiencies_and_languages: {
-          armor: classRule.armorProficiencies,
-          weapons: classRule.weaponProficiencies,
-          tools: bgRule.tools,
+          armor: [...new Set([...classRule.armorProficiencies, ...(subraceRule?.armorProficiencies ?? [])])],
+          weapons: [...new Set(classRule.weaponProficiencies)],
+          tools: [...new Set([...bgRule.tools, ...(subraceRule?.toolProficiencies ?? [])])],
           languages,
         },
         equipment: {
@@ -139,6 +145,14 @@ export class CharacterSheetService {
   }
 
   async createCharacter(input: CharacterInput, userId: string): Promise<CharacterSheet | null> {
+    const {core_build} = input;
+    const raceRule = resolveRace(core_build.id_race);
+    if (raceRule.subraces?.length && !core_build.subrace) {
+      throw new HttpErrors.UnprocessableEntity('Esta raça requer seleção de sub-raça');
+    }
+    if (core_build.subrace && !raceRule.subraces?.includes(normalizeKey(core_build.subrace))) {
+      throw new HttpErrors.UnprocessableEntity('Sub-raça inválida para a raça selecionada');
+    }
     const sheet = this.build(input);
     const allSkills = await this.repository.findAllSkills();
     const computedSkills = this.computeSkills(allSkills, input, sheet);
@@ -190,10 +204,14 @@ export class CharacterSheetService {
 
     const classRule = resolveClass(character.id_class);
     const raceRule = resolveRace(character.id_race);
+    const subraceRule = resolveSubrace(character.subrace ?? undefined);
     const bgRule = resolveBackground(character.id_background ?? 1);
 
-    if(raceRule.weaponProficiencies && raceRule.weaponProficiencies.length > 0) {
+    if (raceRule.weaponProficiencies?.length) {
       classRule.weaponProficiencies.push(...raceRule.weaponProficiencies);
+    }
+    if (subraceRule?.weaponProficiencies?.length) {
+      classRule.weaponProficiencies.push(...subraceRule.weaponProficiencies);
     }
 
     const PT_TO_EN: Record<string, StatKeyEn> = {
@@ -258,7 +276,7 @@ export class CharacterSheetService {
       school: s.school,
     }));
 
-    const traits = collectTraits(raceRule, null, classRule, bgRule);
+    const traits = collectTraits(raceRule, subraceRule, classRule, bgRule);
     const languages = buildLanguages(raceRule, bgRule);
 
     return {
@@ -266,7 +284,7 @@ export class CharacterSheetService {
         header: {
           name: character.name,
           class_and_level: `${classRule.displayName} ${character.level}`,
-          race: raceRule.displayName,
+          race: subraceRule ? subraceRule.displayName : raceRule.displayName,
           background: bgRule.displayName,
           alignment: character.alignment_name ?? 'Neutro',
           experience_points: character.xp_points,
@@ -275,7 +293,7 @@ export class CharacterSheetService {
           proficiency_bonus: character.proficiency_bonus,
           armor_class: character.armour_class,
           initiative: character.initiative_value,
-          speed: raceRule.speed,
+          speed: subraceRule?.speedOverride ?? raceRule.speed,
           hit_points: {
             max: character.max_hit_points,
             current: character.current_hit_points,
@@ -289,9 +307,9 @@ export class CharacterSheetService {
         weapons: weaponResult,
         features_and_traits: traits,
         proficiencies_and_languages: {
-          armor: classRule.armorProficiencies,
-          weapons: classRule.weaponProficiencies,
-          tools: bgRule.tools,
+          armor: [...new Set([...classRule.armorProficiencies, ...(subraceRule?.armorProficiencies ?? [])])],
+          weapons: [...new Set(classRule.weaponProficiencies)],
+          tools: [...new Set([...bgRule.tools, ...(subraceRule?.toolProficiencies ?? [])])],
           languages,
         },
         equipment: {
@@ -310,6 +328,20 @@ export class CharacterSheetService {
         id_character: character.id_character,
       },
     };
+  }
+
+  async getCharacterPrintHtml(id: number, userId: string): Promise<string> {
+    const sheet = await this.loadCharacter(id, userId);
+    if (!sheet) throw new Error('Character not found');
+    return buildPrintHtml(sheet);
+  }
+
+  async updateCurrentHitPoints(id: number, currentHitPoints: number, userId: string): Promise<{success: boolean}> {
+    const raw = await this.repository.findCharacterById(id);
+    if (!raw) throw new Error('Character not found');
+    if (raw.character.user_id !== userId) throw new Error('Unauthorized');
+    await this.repository.updateCurrentHitPoints(id, currentHitPoints);
+    return {success: true};
   }
 
   async updateAvatarPreset(id: number, preset: AvatarPreset, userId: string): Promise<{success: boolean}> {
