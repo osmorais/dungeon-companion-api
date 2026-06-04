@@ -128,6 +128,19 @@ export class CharacterRepository {
     });
   }
 
+  async isSessionDmOfCharacter(idCharacter: number, userId: string): Promise<boolean> {
+    const rows = await this.db.sql<{found: boolean}[]>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM player_session ps
+        JOIN game_session gs ON gs.id_game_session = ps.id_game_session
+        WHERE ps.id_character = ${idCharacter}
+          AND gs.user_id = ${userId}
+      ) AS found
+    `;
+    return rows[0].found;
+  }
+
   async updateCurrentHitPoints(id: number, currentHitPoints: number): Promise<void> {
     await this.db.sql`
       UPDATE character SET current_hit_points = ${currentHitPoints} WHERE id_character = ${id}

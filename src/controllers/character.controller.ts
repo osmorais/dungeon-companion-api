@@ -185,8 +185,15 @@ export class CharacterController {
     @param.path.number('id') id: number,
     @inject(SecurityBindings.USER) currentUser: UserProfile,
   ): Promise<object> {
-    const sheet = await this.characterSheetService.loadCharacter(id, currentUser.id);
-    if (!sheet) throw new HttpErrors.NotFound(`Character with id ${id} not found`);
-    return sheet;
+    try {
+      const sheet = await this.characterSheetService.loadCharacter(id, currentUser.id);
+      if (!sheet) throw new HttpErrors.NotFound(`Character with id ${id} not found`);
+      return sheet;
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (message === 'Character not found') throw new HttpErrors.NotFound(`Character with id ${id} not found`);
+      if (message === 'Unauthorized') throw new HttpErrors.Forbidden();
+      throw e;
+    }
   }
 }

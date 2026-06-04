@@ -196,8 +196,9 @@ export class CharacterSheetService {
     const raw = await this.repository.findCharacterById(id);
     if (!raw) return null;
 
-    if(raw.character.user_id !== userId) {
-      throw new Error('Unauthorized');
+    if (raw.character.user_id !== userId) {
+      const isDm = await this.repository.isSessionDmOfCharacter(raw.character.id_character, userId);
+      if (!isDm) throw new Error('Unauthorized');
     }
 
     const {character, attributes, skills, spells, weapons, items} = raw;
