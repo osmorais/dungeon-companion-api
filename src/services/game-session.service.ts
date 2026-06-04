@@ -2,7 +2,7 @@
 import {injectable, BindingScope, service} from '@loopback/core';
 import {HttpErrors} from '@loopback/rest';
 import {GameSessionRepository} from '../repositories/game-session.repository';
-import {AddPlayerInput, CreateGameSessionInput, GameSessionCreated, GameSessionDetail, GameSessionPagedList, PlayerSession} from '../models/game-session-types';
+import {AddPlayerInput, CreateGameSessionInput, GameSessionCreated, GameSessionDetail, GameSessionPagedList, NpcSession, PlayerSession} from '../models/game-session-types';
 
 @injectable({scope: BindingScope.TRANSIENT})
 export class GameSessionService {
@@ -50,10 +50,32 @@ export class GameSessionService {
     return this.repository.addPlayer({...input, user_id: userId}, session.id_game_session);
   }
 
+  async removeNpc(idNpcSession: string, userId: string): Promise<void> {
+    const result = await this.repository.removeNpc(idNpcSession, userId);
+    if (result === 'not_found') throw new HttpErrors.NotFound('NPC não encontrado na sessão');
+    if (result === 'unauthorized') throw new HttpErrors.Forbidden('Apenas o mestre pode remover NPCs');
+  }
+
+  async addNpc(idGameSession: string, idCharacter: number, userId: string): Promise<NpcSession> {
+    const session = await this.repository.findById(idGameSession);
+    if (!session) throw new HttpErrors.NotFound(`Sessão com id ${idGameSession} não encontrada`);
+    if (session.game_session.user_id !== userId) throw new HttpErrors.Forbidden('Apenas o mestre pode adicionar NPCs');
+    return this.repository.addNpc(idGameSession, idCharacter);
+  }
+
   async removePlayer(idPlayerSession: string, userId: string): Promise<void> {
     const result = await this.repository.removePlayer(idPlayerSession, userId);
     if (result === 'not_found') throw new HttpErrors.NotFound('Jogador não encontrado na sessão');
     if (result === 'unauthorized') throw new HttpErrors.Forbidden('Você não pode remover outro jogador da sessão');
+  }
+
+  async updateCharacterHp(idPlayerSession: string, currentHitPoints: number, userId: string): Promise<void> {
+    if (typeof currentHitPoints !== 'number' || !Number.isInteger(currentHitPoints)) {
+      throw new HttpErrors.UnprocessableEntity('current_hit_points deve ser um número inteiro');
+    }
+    const result = await this.repository.updateCharacterHp(idPlayerSession, currentHitPoints, userId);
+    if (result === 'not_found') throw new HttpErrors.NotFound('Jogador não encontrado na sessão');
+    if (result === 'unauthorized') throw new HttpErrors.Forbidden('Você não tem permissão para alterar a vida deste personagem');
   }
 
   async deleteSession(id: string): Promise<void> {

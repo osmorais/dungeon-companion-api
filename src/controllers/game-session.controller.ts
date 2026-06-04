@@ -1,9 +1,9 @@
 import {inject} from '@loopback/core';
-import {del, get, param, post, requestBody, response, HttpErrors} from '@loopback/rest';
+import {del, get, param, patch, post, requestBody, response, HttpErrors} from '@loopback/rest';
 import {authenticate} from '@loopback/authentication';
 import {SecurityBindings, UserProfile} from '@loopback/security';
 import {GameSessionService} from '../services/game-session.service';
-import {AddPlayerInput, CreateGameSessionInput, GameSessionCreated, GameSessionDetail, GameSessionPagedList, PlayerSession} from '../models/game-session-types';
+import {AddPlayerInput, CreateGameSessionInput, GameSessionCreated, GameSessionDetail, GameSessionPagedList, NpcSession, PlayerSession} from '../models/game-session-types';
 
 @authenticate('jwt')
 export class GameSessionController {
@@ -51,6 +51,24 @@ export class GameSessionController {
     return this.gameSessionService.listSessions(resolvedPageSize, resolvedPage);
   }
 
+  @post('/api/game-session/{id}/npc')
+  @response(201, {
+    description: 'Adds an NPC to a game session',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async addNpc(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      description: 'NPC to add',
+      required: true,
+      content: {'application/json': {schema: {type: 'object', required: ['id_character'], properties: {id_character: {type: 'integer'}}}}},
+    })
+    body: {id_character: number},
+  ): Promise<NpcSession> {
+    return this.gameSessionService.addNpc(id, body.id_character, currentUser.id);
+  }
+
   @post('/api/game-session/player')
   @response(201, {
     description: 'Adds a player to a game session by session code',
@@ -66,6 +84,30 @@ export class GameSessionController {
     input: AddPlayerInput,
   ): Promise<PlayerSession> {
     return this.gameSessionService.addPlayer(input, currentUser.id);
+  }
+
+  @patch('/api/game-session/player/{idPlayerSession}/hp')
+  @response(204, {description: 'Current HP updated'})
+  async updateCharacterHp(
+    @param.path.string('idPlayerSession') idPlayerSession: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      description: 'New current HP value',
+      required: true,
+      content: {'application/json': {schema: {type: 'object', required: ['current_hit_points'], properties: {current_hit_points: {type: 'integer'}}}}},
+    })
+    body: {current_hit_points: number},
+  ): Promise<void> {
+    return this.gameSessionService.updateCharacterHp(idPlayerSession, body.current_hit_points, currentUser.id);
+  }
+
+  @del('/api/game-session/npc/{idNpcSession}')
+  @response(204, {description: 'NPC removed from session'})
+  async removeNpc(
+    @param.path.string('idNpcSession') idNpcSession: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+  ): Promise<void> {
+    return this.gameSessionService.removeNpc(idNpcSession, currentUser.id);
   }
 
   @del('/api/game-session/player/{idPlayerSession}')

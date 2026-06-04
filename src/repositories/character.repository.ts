@@ -29,7 +29,7 @@ export class CharacterRepository {
     return this.db.sql.begin(async sql => {
       const [row] = await sql<{id_character: number}[]>`
         INSERT INTO character (
-          name, level, id_race, id_class, id_armour, id_alignment,
+          name, level, id_race, subrace, id_class, id_armour, id_alignment,
           proficiency_bonus, armour_class, initiative_value,
           current_hit_points, max_hit_points, hit_dice, passive_perception,
           xp_points, total_po,
@@ -40,6 +40,7 @@ export class CharacterRepository {
           ${character_details?.name ?? 'Aventureiro'},
           ${core_build.level},
           ${core_build.id_race},
+          ${core_build.subrace ?? null},
           ${core_build.id_class},
           ${equipment.armour?.id_armour ?? null},
           ${character_details?.id_alignment ?? null},
@@ -127,6 +128,12 @@ export class CharacterRepository {
     });
   }
 
+  async updateCurrentHitPoints(id: number, currentHitPoints: number): Promise<void> {
+    await this.db.sql`
+      UPDATE character SET current_hit_points = ${currentHitPoints} WHERE id_character = ${id}
+    `;
+  }
+
   async updateAvatarPreset(id: number, preset: AvatarPreset): Promise<void> {
     await this.db.sql`
       UPDATE character
@@ -175,7 +182,7 @@ export class CharacterRepository {
   async findCharacterById(id: number): Promise<CharacterRawData | null> {
     const rows = await this.db.sql<CharacterRawData['character'][]>`
       SELECT
-        c.id_character, c.name, c.level, c.id_race, c.id_class, c.id_armour, c.id_alignment,
+        c.id_character, c.name, c.level, c.id_race, c.subrace, c.id_class, c.id_armour, c.id_alignment,
         c.proficiency_bonus, c.armour_class, c.initiative_value,
         c.current_hit_points, c.max_hit_points, c.hit_dice, c.passive_perception,
         c.xp_points, c.total_po,

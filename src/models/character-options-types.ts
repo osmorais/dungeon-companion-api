@@ -34,10 +34,16 @@ export interface WeaponRow {
   isRanged: boolean;
 }
 
+export interface Subrace {
+  key: string;
+  name: string;
+}
+
 export interface Race {
   id_race: number;
   name: string;
   movement: string;
+  subraces: Subrace[];
 }
 
 export interface CharacterClass {
