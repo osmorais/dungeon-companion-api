@@ -282,6 +282,22 @@ export class GameSessionRepository {
     return rows[0].found;
   }
 
+  /** O mestre de qualquer sessão onde esse personagem participa (como jogador ou NPC) pode gerenciá-lo. */
+  async isDmOfCharacter(idCharacter: number, userId: string): Promise<boolean> {
+    const rows = await this.db.sql<{found: boolean}[]>`
+      SELECT EXISTS (
+        SELECT 1 FROM player_session ps
+        JOIN game_session gs ON gs.id_game_session = ps.id_game_session
+        WHERE ps.id_character = ${idCharacter} AND gs.user_id = ${userId}
+        UNION ALL
+        SELECT 1 FROM npc_session ns
+        JOIN game_session gs ON gs.id_game_session = ns.id_game_session
+        WHERE ns.id_character = ${idCharacter} AND gs.user_id = ${userId}
+      ) AS found
+    `;
+    return rows[0].found;
+  }
+
   async findSessionByCode(
     sessionCode: string,
   ): Promise<{id_game_session: string; max_player_quantity: number} | null> {
