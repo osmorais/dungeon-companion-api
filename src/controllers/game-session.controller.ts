@@ -143,11 +143,12 @@ export class GameSessionController {
     @inject(SecurityBindings.USER) currentUser: UserProfile,
     @param.query.number('page') page?: number,
     @param.query.number('pageSize') pageSize?: number,
+    @param.query.string('role') role?: 'dm' | 'player' | 'all',
   ): Promise<GameSessionPagedList> {
     const MAX_PAGE_SIZE = 50;
     const resolvedPageSize = Math.min(pageSize ?? 10, MAX_PAGE_SIZE);
     const resolvedPage = page ?? 1;
-    return this.gameSessionService.listUserSessions(currentUser.id, resolvedPageSize, resolvedPage);
+    return this.gameSessionService.listUserSessions(currentUser.id, resolvedPageSize, resolvedPage, role ?? 'all');
   }
 
   @post('/api/game-session/{id}/roll')
