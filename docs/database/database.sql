@@ -401,6 +401,53 @@ CREATE TABLE session_roll_log (
 );
 
 -- ==========================================
+-- COMBAT ENCOUNTER (iniciativa e ordem de turnos)
+-- ==========================================
+
+CREATE TABLE combat_encounter (
+    id_combat_encounter UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    id_game_session UUID NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'rolling_initiative', -- 'rolling_initiative' | 'active' | 'finished'
+    round_number INTEGER NOT NULL DEFAULT 1,
+    current_turn_index INTEGER NOT NULL DEFAULT 0,
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_combat_encounter_game_session
+        FOREIGN KEY (id_game_session)
+        REFERENCES game_session(id_game_session)
+        ON DELETE CASCADE
+);
+
+CREATE TABLE combat_participant (
+    id_combat_participant UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    id_combat_encounter UUID NOT NULL,
+    participant_type VARCHAR(10) NOT NULL, -- 'player' | 'npc'
+    id_player_session UUID,
+    id_npc_session UUID,
+
+    initiative_roll INTEGER,
+    initiative_total INTEGER,
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_combat_participant_encounter
+        FOREIGN KEY (id_combat_encounter)
+        REFERENCES combat_encounter(id_combat_encounter)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_combat_participant_player_session
+        FOREIGN KEY (id_player_session)
+        REFERENCES player_session(id_player_session)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_combat_participant_npc_session
+        FOREIGN KEY (id_npc_session)
+        REFERENCES npc_session(id_npc_session)
+        ON DELETE CASCADE
+);
+
+-- ==========================================
 -- ÍNDICES
 -- ==========================================
 
@@ -421,6 +468,12 @@ CREATE INDEX idx_npc_session_character
 
 CREATE INDEX idx_monster_session_game
     ON monster_session(id_game_session);
+
+CREATE INDEX idx_combat_encounter_game_session
+    ON combat_encounter(id_game_session);
+
+CREATE INDEX idx_combat_participant_encounter
+    ON combat_participant(id_combat_encounter);
 
 CREATE INDEX idx_monster_snapshot_gin
     ON monster_session

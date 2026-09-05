@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {AvatarPreset} from './character-sheet-types';
+import {CombatEncounterDetail} from './combat-types';
 
 export interface GameSession {
   id_game_session: string;
@@ -83,7 +84,13 @@ export interface GameSessionCreated {
   monsters: MonsterSession[];
 }
 
-export type RollType = 'dice' | 'attack' | 'skill' | 'save' | 'spell';
+export type RollType =
+  | 'dice'
+  | 'attack'
+  | 'skill'
+  | 'save'
+  | 'spell'
+  | 'initiative';
 export type AdvantageState = 'normal' | 'advantage' | 'disadvantage';
 
 export interface RollLogEntry {
@@ -119,6 +126,7 @@ export interface GameSessionDetail {
   npcs: NpcSession[];
   monsters: MonsterSession[];
   recent_rolls: RollLogEntry[];
+  combat: CombatEncounterDetail | null;
 }
 
 export interface GameSessionSummary {
