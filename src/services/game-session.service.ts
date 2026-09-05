@@ -140,8 +140,13 @@ export class GameSessionService {
     };
   }
 
-  async listUserSessions(userId: string, pageSize: number, page: number): Promise<GameSessionPagedList> {
-    const rows = await this.repository.findPagedByUser(userId, pageSize, page);
+  async listUserSessions(
+    userId: string,
+    pageSize: number,
+    page: number,
+    role: 'dm' | 'player' | 'all' = 'all',
+  ): Promise<GameSessionPagedList> {
+    const rows = await this.repository.findPagedByUser(userId, pageSize, page, role);
     return {
       GameSessionPagedList: rows,
       page,

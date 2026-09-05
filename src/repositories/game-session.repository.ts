@@ -415,7 +415,42 @@ export class GameSessionRepository {
     return result.count > 0;
   }
 
-  async findPagedByUser(userId: string, pageSize: number, page: number): Promise<GameSessionSummary[]> {
+  async findPagedByUser(
+    userId: string,
+    pageSize: number,
+    page: number,
+    role: 'dm' | 'player' | 'all' = 'all',
+  ): Promise<GameSessionSummary[]> {
+    if (role === 'dm') {
+      return this.db.sql<GameSessionSummary[]>`
+        SELECT
+          gs.id_game_session, gs.session_name, gs.session_code, gs.max_player_quantity,
+          gs.dm_name, gs.user_id, gs.created_at,
+          COUNT(*) OVER() AS total_count
+        FROM game_session gs
+        WHERE gs.user_id = ${userId}
+        ORDER BY gs.created_at DESC
+        LIMIT ${pageSize}
+        OFFSET (${page} - 1) * ${pageSize}
+      `;
+    }
+
+    if (role === 'player') {
+      return this.db.sql<GameSessionSummary[]>`
+        SELECT
+          gs.id_game_session, gs.session_name, gs.session_code, gs.max_player_quantity,
+          gs.dm_name, gs.user_id, gs.created_at,
+          COUNT(*) OVER() AS total_count
+        FROM game_session gs
+        JOIN player_session ps ON ps.id_game_session = gs.id_game_session
+        WHERE ps.user_id = ${userId}
+        ORDER BY gs.created_at DESC
+        LIMIT ${pageSize}
+        OFFSET (${page} - 1) * ${pageSize}
+      `;
+    }
+
+    // 'all' — mestre OU jogador, mantido por compatibilidade com quem não passar role.
     return this.db.sql<GameSessionSummary[]>`
       SELECT
         id_game_session,
