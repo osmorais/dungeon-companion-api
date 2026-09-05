@@ -236,6 +236,11 @@ ALTER TABLE Character
 ALTER TABLE Character_Spell
   ADD COLUMN IF NOT EXISTS is_prepared BOOLEAN NOT NULL DEFAULT FALSE;
 
+-- Dados de Vida já gastos num descanso curto (total disponível = nível do personagem).
+-- Um descanso longo recupera metade do total (mínimo 1); nunca reseta a 0 direto.
+ALTER TABLE Character
+  ADD COLUMN IF NOT EXISTS hit_dice_spent INT NOT NULL DEFAULT 0;
+
 -- ====================================================================================
 -- USUARIO
 -- ====================================================================================

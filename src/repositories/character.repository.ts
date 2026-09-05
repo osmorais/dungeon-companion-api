@@ -155,6 +155,14 @@ export class CharacterRepository {
     `;
   }
 
+  async updateHitDiceAndHp(id: number, hitDiceSpent: number, currentHitPoints: number): Promise<void> {
+    await this.db.sql`
+      UPDATE character
+      SET hit_dice_spent = ${hitDiceSpent}, current_hit_points = ${currentHitPoints}
+      WHERE id_character = ${id}
+    `;
+  }
+
   async countPreparedSpells(id: number): Promise<number> {
     const rows = await this.db.sql<{count: string}[]>`
       SELECT COUNT(*) AS count
@@ -224,7 +232,8 @@ export class CharacterRepository {
         c.proficiency_bonus, c.armour_class, c.initiative_value,
         c.current_hit_points, c.max_hit_points, c.hit_dice, c.passive_perception,
         c.xp_points, c.total_po,
-        c.spellcasting_ability, c.spell_save_dc, c.spell_attack_bonus, c.spell_slots_expended, c.user_id,
+        c.spellcasting_ability, c.spell_save_dc, c.spell_attack_bonus, c.spell_slots_expended,
+        c.hit_dice_spent, c.user_id,
         c.avatar_preset,
         al.name   AS alignment_name,
         cb.id_background
