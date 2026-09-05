@@ -39,12 +39,6 @@ export class CharacterSheetService {
     const subraceRule = resolveSubrace(core_build.subrace);
     const classRule = resolveClass(core_build.id_class);
 
-    if (raceRule.weaponProficiencies?.length) {
-      classRule.weaponProficiencies.push(...raceRule.weaponProficiencies);
-    }
-    if (subraceRule?.weaponProficiencies?.length) {
-      classRule.weaponProficiencies.push(...subraceRule.weaponProficiencies);
-    }
     // const classKey = normalizeKey(core_build.class);
     const classKey = core_build.id_class ?? 0;
     const bgRule = resolveBackground(core_build.id_background);
@@ -111,7 +105,7 @@ export class CharacterSheetService {
         features_and_traits: traits,
         proficiencies_and_languages: {
           armor: [...new Set([...classRule.armorProficiencies, ...(subraceRule?.armorProficiencies ?? [])])],
-          weapons: [...new Set(classRule.weaponProficiencies)],
+          weapons: [...new Set([...classRule.weaponProficiencies, ...(raceRule.weaponProficiencies ?? []), ...(subraceRule?.weaponProficiencies ?? [])])],
           tools: [...new Set([...bgRule.tools, ...(subraceRule?.toolProficiencies ?? [])])],
           languages,
         },
@@ -208,13 +202,6 @@ export class CharacterSheetService {
     const subraceRule = resolveSubrace(character.subrace ?? undefined);
     const bgRule = resolveBackground(character.id_background ?? 1);
 
-    if (raceRule.weaponProficiencies?.length) {
-      classRule.weaponProficiencies.push(...raceRule.weaponProficiencies);
-    }
-    if (subraceRule?.weaponProficiencies?.length) {
-      classRule.weaponProficiencies.push(...subraceRule.weaponProficiencies);
-    }
-
     const PT_TO_EN: Record<string, StatKeyEn> = {
       FOR: 'STR', DES: 'DEX', CON: 'CON', INT: 'INT', SAB: 'WIS', CAR: 'CHA',
     };
@@ -309,7 +296,7 @@ export class CharacterSheetService {
         features_and_traits: traits,
         proficiencies_and_languages: {
           armor: [...new Set([...classRule.armorProficiencies, ...(subraceRule?.armorProficiencies ?? [])])],
-          weapons: [...new Set(classRule.weaponProficiencies)],
+          weapons: [...new Set([...classRule.weaponProficiencies, ...(raceRule.weaponProficiencies ?? []), ...(subraceRule?.weaponProficiencies ?? [])])],
           tools: [...new Set([...bgRule.tools, ...(subraceRule?.toolProficiencies ?? [])])],
           languages,
         },

@@ -177,7 +177,7 @@ export function calcArmorClass(
   const dexMod = getMod(stats.DEX);
 
   let ac: number;
-  if (armor?.armour_type === null) {
+  if (armor?.armour_type == null) {
     if (classKey === CLASSES[1].id_class) { // Bárbaro
       ac = 10 + dexMod + getMod(stats.CON);
     } else if (classKey === CLASSES[10].id_class) { // Monge
@@ -185,13 +185,13 @@ export function calcArmorClass(
     } else {
       ac = 10 + dexMod;
     }
-  } else if (armor?.armour_type === 'Armadura Leve') {
-    ac = armor?.armour_class_base ?? 10 + dexMod;
-  } else if (armor?.armour_type === 'Armadura Média') {
+  } else if (armor.armour_type === 'Armadura Leve') {
+    ac = (armor.armour_class_base ?? 10) + dexMod;
+  } else if (armor.armour_type === 'Armadura Média') {
     const cappedDex = Math.min(dexMod, armor.max_dexterity_bonus ?? 2);
-    ac = armor?.armour_class_base ?? 10 + cappedDex;
+    ac = (armor.armour_class_base ?? 10) + cappedDex;
   } else {
-    ac = armor?.armour_class_base ?? 10;
+    ac = armor.armour_class_base ?? 10;
   }
 
   return hasShield ? ac + 2 : ac;
@@ -227,18 +227,17 @@ export function buildWeaponActions(
 
 
   return weaponsVerified.flatMap(w => {
-    // const rule = resolveWeapon(w.name);
-    // if (!rule) return [];
+    const props = w.properties ? w.properties.split(', ') : [];
+    const isFinesse = props.some(p => p.toLowerCase().startsWith('acuidade'));
 
     const strMod = getMod(stats.STR);
     const dexMod = getMod(stats.DEX);
     let abilityMod: number;
-    
 
     if (w.isRanged) {
       abilityMod = dexMod;
-    // } else if (rule.isFinesse) { //TO DO: Verificar necessidade de aplicar essa regra
-    //   abilityMod = Math.max(strMod, dexMod);
+    } else if (isFinesse) {
+      abilityMod = Math.max(strMod, dexMod);
     } else {
       abilityMod = strMod;
     }
