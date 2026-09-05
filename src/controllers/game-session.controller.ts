@@ -3,7 +3,7 @@ import {del, get, param, patch, post, requestBody, response, HttpErrors} from '@
 import {authenticate} from '@loopback/authentication';
 import {SecurityBindings, UserProfile} from '@loopback/security';
 import {GameSessionService} from '../services/game-session.service';
-import {AddPlayerInput, CreateGameSessionInput, GameSessionCreated, GameSessionDetail, GameSessionPagedList, NpcSession, PlayerSession} from '../models/game-session-types';
+import {AddPlayerInput, CreateGameSessionInput, GameSessionCreated, GameSessionDetail, GameSessionPagedList, NpcSession, PlayerSession, RollLogEntry, RollLogInput} from '../models/game-session-types';
 
 @authenticate('jwt')
 export class GameSessionController {
@@ -148,6 +148,24 @@ export class GameSessionController {
     const resolvedPageSize = Math.min(pageSize ?? 10, MAX_PAGE_SIZE);
     const resolvedPage = page ?? 1;
     return this.gameSessionService.listUserSessions(currentUser.id, resolvedPageSize, resolvedPage);
+  }
+
+  @post('/api/game-session/{id}/roll')
+  @response(201, {
+    description: 'Registers a dice roll in the game session log',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async addRoll(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      description: 'Roll to register',
+      required: true,
+      content: {'application/json': {schema: {type: 'object'}}},
+    })
+    body: RollLogInput,
+  ): Promise<RollLogEntry> {
+    return this.gameSessionService.addRoll(id, body, currentUser.id);
   }
 
   @get('/api/game-session/{id}')

@@ -124,6 +124,7 @@ export interface CharacterRawData {
     spellcasting_ability: string | null;
     spell_save_dc: number | null;
     spell_attack_bonus: number | null;
+    spell_slots_expended: Record<string, number> | null;
     user_id: string;
     avatar_preset: AvatarPreset | null;
   };
@@ -141,6 +142,7 @@ export interface CharacterRawData {
     is_material: boolean;
     spellLevel: number;
     school: string | null;
+    is_prepared: boolean;
   }>;
   weapons: Array<{id_weapon: number; name: string; has_proficiency: boolean; damage_die: string | null; damage_type: string | null; properties: string | null; weight: number; price_value: number}>;
   items: Array<{name: string}>;
@@ -184,6 +186,11 @@ export interface CharacterSheet {
       spellcasting_ability: string;
       spell_save_dc: number;
       spell_attack_bonus: number;
+      slots_total?: Record<string, number>;
+      slots_expended?: Record<string, number>;
+      spells_known?: Record<string, string[]>;
+      prepares_spells?: boolean;
+      max_prepared_spells?: number;
     };
     spells: Spell[];
     avatar_preset?: AvatarPreset | null;

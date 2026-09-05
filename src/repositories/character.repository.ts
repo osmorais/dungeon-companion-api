@@ -147,6 +147,31 @@ export class CharacterRepository {
     `;
   }
 
+  async updateSpellSlotsExpended(id: number, expended: Record<string, number>): Promise<void> {
+    await this.db.sql`
+      UPDATE character
+      SET spell_slots_expended = ${this.db.sql.json(expended)}
+      WHERE id_character = ${id}
+    `;
+  }
+
+  async countPreparedSpells(id: number): Promise<number> {
+    const rows = await this.db.sql<{count: string}[]>`
+      SELECT COUNT(*) AS count
+      FROM character_spell
+      WHERE id_character = ${id} AND is_prepared = TRUE
+    `;
+    return parseInt(rows[0].count, 10);
+  }
+
+  async setSpellPrepared(id: number, idSpell: number, isPrepared: boolean): Promise<void> {
+    await this.db.sql`
+      UPDATE character_spell
+      SET is_prepared = ${isPrepared}
+      WHERE id_character = ${id} AND id_spell = ${idSpell}
+    `;
+  }
+
   async updateAvatarPreset(id: number, preset: AvatarPreset): Promise<void> {
     await this.db.sql`
       UPDATE character
@@ -199,7 +224,7 @@ export class CharacterRepository {
         c.proficiency_bonus, c.armour_class, c.initiative_value,
         c.current_hit_points, c.max_hit_points, c.hit_dice, c.passive_perception,
         c.xp_points, c.total_po,
-        c.spellcasting_ability, c.spell_save_dc, c.spell_attack_bonus, c.user_id,
+        c.spellcasting_ability, c.spell_save_dc, c.spell_attack_bonus, c.spell_slots_expended, c.user_id,
         c.avatar_preset,
         al.name   AS alignment_name,
         cb.id_background
@@ -232,7 +257,7 @@ export class CharacterRepository {
     const spells = await this.db.sql<CharacterRawData['spells'][number][]>`
       SELECT sp.id_spell, sp.name, sp.description, sp.casting_time, sp.range_distance,
              sp.duration, sp.is_verbal, sp.is_somatic, sp.is_material,
-             sp.spelllevel AS "spellLevel", sp.school
+             sp.spelllevel AS "spellLevel", sp.school, csp.is_prepared
       FROM character_spell csp
       JOIN spell sp ON sp.id_spell = csp.id_spell
       WHERE csp.id_character = ${id}
