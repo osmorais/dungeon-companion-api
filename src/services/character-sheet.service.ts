@@ -89,6 +89,9 @@ export class CharacterSheetService {
           speed: subraceRule?.speedOverride ?? raceRule.speed,
           hit_points: {max: maxHP, current: maxHP, temporary: 0},
           hit_dice: `${level}d${classRule.hitDie}`,
+          hit_dice_total: level,
+          hit_dice_spent: 0,
+          hit_die_size: classRule.hitDie,
           passive_perception: passivePerception,
         },
         attributes_and_saves: attributeBlocks,
@@ -292,6 +295,9 @@ export class CharacterSheetService {
             temporary: 0,
           },
           hit_dice: character.hit_dice,
+          hit_dice_total: character.level,
+          hit_dice_spent: character.hit_dice_spent,
+          hit_die_size: classRule.hitDie,
           passive_perception: Number(character.passive_perception),
         },
         attributes_and_saves: attributesAndSaves,
@@ -376,13 +382,75 @@ export class CharacterSheetService {
     return {slots_expended: expended};
   }
 
-  async longRest(id: number, userId: string): Promise<{slots_expended: Record<string, number>}> {
+  async rollHitDie(id: number, userId: string): Promise<{
+    roll: number;
+    con_mod: number;
+    healed: number;
+    current_hit_points: number;
+    hit_dice_spent: number;
+    hit_dice_total: number;
+    die_size: number;
+  }> {
     const raw = await this.repository.findCharacterById(id);
     if (!raw) throw new HttpErrors.NotFound(`Character with id ${id} not found`);
     if (raw.character.user_id !== userId) throw new HttpErrors.Forbidden();
 
+    const classRule = resolveClass(raw.character.id_class);
+    const hitDiceTotal = raw.character.level;
+    const spent = raw.character.hit_dice_spent ?? 0;
+    if (spent >= hitDiceTotal) {
+      throw new HttpErrors.UnprocessableEntity('Nenhum Dado de Vida disponível para gastar');
+    }
+    if (raw.character.current_hit_points >= raw.character.max_hit_points) {
+      throw new HttpErrors.UnprocessableEntity('O personagem já está com os pontos de vida máximos');
+    }
+
+    const stats = this.statsFromRaw(raw.attributes);
+    const conMod = getMod(stats.CON);
+    const roll = Math.floor(Math.random() * classRule.hitDie) + 1;
+    const healed = Math.max(0, roll + conMod);
+    const nextHp = Math.min(raw.character.max_hit_points, raw.character.current_hit_points + healed);
+    const nextSpent = spent + 1;
+
+    await this.repository.updateHitDiceAndHp(id, nextSpent, nextHp);
+
+    return {
+      roll,
+      con_mod: conMod,
+      healed,
+      current_hit_points: nextHp,
+      hit_dice_spent: nextSpent,
+      hit_dice_total: hitDiceTotal,
+      die_size: classRule.hitDie,
+    };
+  }
+
+  async longRest(id: number, userId: string): Promise<{
+    slots_expended: Record<string, number>;
+    current_hit_points: number;
+    hit_dice_spent: number;
+  }> {
+    const raw = await this.repository.findCharacterById(id);
+    if (!raw) throw new HttpErrors.NotFound(`Character with id ${id} not found`);
+    if (raw.character.user_id !== userId) throw new HttpErrors.Forbidden();
+    if (raw.character.current_hit_points <= 0) {
+      throw new HttpErrors.UnprocessableEntity(
+        'O personagem precisa de pelo menos 1 ponto de vida para se beneficiar de um descanso longo',
+      );
+    }
+
+    const hitDiceTotal = raw.character.level;
+    const recoveredDice = Math.max(1, Math.floor(hitDiceTotal / 2));
+    const nextSpent = Math.max(0, (raw.character.hit_dice_spent ?? 0) - recoveredDice);
+
+    await this.repository.updateHitDiceAndHp(id, nextSpent, raw.character.max_hit_points);
     await this.repository.updateSpellSlotsExpended(id, {});
-    return {slots_expended: {}};
+
+    return {
+      slots_expended: {},
+      current_hit_points: raw.character.max_hit_points,
+      hit_dice_spent: nextSpent,
+    };
   }
 
   async setSpellPrepared(id: number, idSpell: number, isPrepared: boolean, userId: string): Promise<{success: boolean}> {

@@ -152,9 +152,21 @@ export class CharacterController {
     return this.characterSheetService.expendSpellSlot(id, body.level, body.delta, currentUser.id);
   }
 
+  @post('/api/character-sheet/{id}/short-rest/hit-die')
+  @response(200, {
+    description: 'Spends one Hit Die to recover HP during a short rest',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async rollHitDie(
+    @param.path.number('id') id: number,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+  ): Promise<object> {
+    return this.characterSheetService.rollHitDie(id, currentUser.id);
+  }
+
   @post('/api/character-sheet/{id}/long-rest')
   @response(200, {
-    description: 'Resets all expended spell slots for the character',
+    description: 'Restores all HP, recovers half the Hit Dice (min 1) and resets expended spell slots',
     content: {'application/json': {schema: {type: 'object'}}},
   })
   async longRest(
