@@ -261,6 +261,20 @@ export function collectTraits(
   ];
 }
 
+export type SpellcastingResult =
+  | {is_spellcaster: false}
+  | {
+      is_spellcaster: true;
+      spellcasting_ability: StatKeyEn;
+      spell_save_dc: number;
+      spell_attack_bonus: number;
+      slots_total?: Record<string, number>;
+      slots_expended?: Record<string, number>;
+      spells_known?: Record<string, string[]>;
+      prepares_spells: boolean;
+      max_prepared_spells?: number;
+    };
+
 export function buildSpellcasting(
   classRule: ClassRule,
   classKey: number,
@@ -268,7 +282,8 @@ export function buildSpellcasting(
   spells: Spell[],
   stats: FinalStats,
   profBonus: number,
-) {
+  expendedSlots: Record<string, number> = {},
+): SpellcastingResult {
   if (!classRule.isSpellcaster || !classRule.spellcastingAbility) {
     return {is_spellcaster: false};
   }
@@ -278,8 +293,7 @@ export function buildSpellcasting(
   const spellSaveDC = 8 + profBonus + abilityMod;
   const spellAttackBonus = profBonus + abilityMod;
 
-  const className = CLASSES[classKey]?.displayName ?? 'Classe Desconcida';
-  const classSlots = SPELL_SLOTS[className];
+  const classSlots = SPELL_SLOTS[classKey];
   const levelSlots = classSlots?.[level] ?? (classRule.spellSlotsLevel1 > 0 ? {level_1: classRule.spellSlotsLevel1} : {});
   const slots = Object.fromEntries(
     Object.entries(levelSlots).filter(([, v]) => (v as number) > 0),
@@ -300,12 +314,14 @@ export function buildSpellcasting(
     spell_attack_bonus: spellAttackBonus,
     slots_total: Object.keys(slots).length > 0 ? slots : undefined,
     slots_expended: Object.keys(slots).length > 0
-      ? Object.fromEntries(Object.keys(slots).map(k => [k, 0]))
+      ? Object.fromEntries(Object.keys(slots).map(k => [k, expendedSlots[k] ?? 0]))
       : undefined,
     spells_known:
       spells.length > 0
         ? {cantrips, ...leveledSpellsByCircle}
         : undefined,
+    prepares_spells: classRule.preparesSpells,
+    max_prepared_spells: classRule.preparesSpells ? Math.max(1, abilityMod + level) : undefined,
   };
 }
 

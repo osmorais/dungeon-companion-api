@@ -228,6 +228,14 @@ ALTER TABLE Character
   ADD COLUMN IF NOT EXISTS spell_save_dc INT,
   ADD COLUMN IF NOT EXISTS spell_attack_bonus INT;
 
+-- Espaços de magia gastos hoje, por nível (ex: {"level_1": 1, "level_2": 0}). Zerado num descanso longo.
+ALTER TABLE Character
+  ADD COLUMN IF NOT EXISTS spell_slots_expended JSONB NOT NULL DEFAULT '{}';
+
+-- Marca quais magias conhecidas estão preparadas no dia (só relevante pra classes que preparam magia).
+ALTER TABLE Character_Spell
+  ADD COLUMN IF NOT EXISTS is_prepared BOOLEAN NOT NULL DEFAULT FALSE;
+
 -- ====================================================================================
 -- USUARIO
 -- ====================================================================================
@@ -361,6 +369,33 @@ CREATE TABLE monster_session (
 );
 
 -- ==========================================
+-- SESSION ROLL LOG
+-- ==========================================
+
+CREATE TABLE session_roll_log (
+    id_roll UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    id_game_session UUID NOT NULL,
+    id_character INT REFERENCES Character(id_character) ON DELETE SET NULL,
+
+    actor_name VARCHAR(255) NOT NULL,
+    roll_type VARCHAR(20) NOT NULL,       -- 'dice' | 'attack' | 'skill' | 'save' | 'spell'
+    label VARCHAR(255) NOT NULL,
+    dice_notation VARCHAR(20) NOT NULL,   -- ex: '1d20'
+    rolls INTEGER[] NOT NULL,             -- resultados brutos (2 valores se vantagem/desvantagem)
+    advantage_state VARCHAR(12) NOT NULL DEFAULT 'normal', -- 'normal' | 'advantage' | 'disadvantage'
+    modifier INTEGER NOT NULL DEFAULT 0,
+    total INTEGER NOT NULL,
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_session_roll_log_game_session
+        FOREIGN KEY (id_game_session)
+        REFERENCES game_session(id_game_session)
+        ON DELETE CASCADE
+);
+
+-- ==========================================
 -- ÍNDICES
 -- ==========================================
 
@@ -369,6 +404,9 @@ CREATE INDEX idx_player_session_game
 
 CREATE INDEX idx_player_session_character
     ON player_session(id_character);
+
+CREATE INDEX idx_session_roll_log_session_created
+    ON session_roll_log(id_game_session, created_at DESC);
 
 CREATE INDEX idx_npc_session_game
     ON npc_session(id_game_session);

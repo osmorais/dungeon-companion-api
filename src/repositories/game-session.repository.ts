@@ -11,6 +11,8 @@ import {
   MonsterSession,
   NpcSession,
   PlayerSession,
+  RollLogEntry,
+  RollLogInput,
 } from '../models/game-session-types';
 
 @injectable({scope: BindingScope.TRANSIENT})
@@ -188,7 +190,49 @@ export class GameSessionRepository {
       WHERE id_game_session = ${id}
     `;
 
-    return {game_session: session, players, npcs, monsters};
+    const recent_rolls = await this.findRecentRolls(id);
+
+    return {game_session: session, players, npcs, monsters, recent_rolls};
+  }
+
+  async addRoll(idGameSession: string, input: RollLogInput): Promise<RollLogEntry> {
+    const [row] = await this.db.sql<RollLogEntry[]>`
+      INSERT INTO session_roll_log (
+        id_game_session, id_character, actor_name, roll_type, label,
+        dice_notation, rolls, advantage_state, modifier, total
+      ) VALUES (
+        ${idGameSession}, ${input.id_character}, ${input.actor_name}, ${input.roll_type}, ${input.label},
+        ${input.dice_notation}, ${input.rolls}, ${input.advantage_state}, ${input.modifier}, ${input.total}
+      )
+      RETURNING id_roll, id_game_session, id_character, actor_name, roll_type, label,
+                dice_notation, rolls, advantage_state, modifier, total, created_at
+    `;
+    return row;
+  }
+
+  async findRecentRolls(idGameSession: string, limit = 30): Promise<RollLogEntry[]> {
+    return this.db.sql<RollLogEntry[]>`
+      SELECT id_roll, id_game_session, id_character, actor_name, roll_type, label,
+             dice_notation, rolls, advantage_state, modifier, total, created_at
+      FROM session_roll_log
+      WHERE id_game_session = ${idGameSession}
+      ORDER BY created_at DESC
+      LIMIT ${limit}
+    `;
+  }
+
+  /** Mestre pode rolar por qualquer personagem da sessão; jogador só pelo seu próprio. */
+  async canPostRollFor(idGameSession: string, idCharacter: number | null, userId: string): Promise<boolean> {
+    if (idCharacter === null) return true;
+    const rows = await this.db.sql<{found: boolean}[]>`
+      SELECT EXISTS (
+        SELECT 1 FROM game_session WHERE id_game_session = ${idGameSession} AND user_id = ${userId}
+        UNION ALL
+        SELECT 1 FROM player_session
+        WHERE id_game_session = ${idGameSession} AND id_character = ${idCharacter} AND user_id = ${userId}
+      ) AS found
+    `;
+    return rows[0].found;
   }
 
   async hasSessionAccess(idGameSession: string, userId: string): Promise<boolean> {

@@ -2,7 +2,22 @@
 import {injectable, BindingScope, service} from '@loopback/core';
 import {HttpErrors} from '@loopback/rest';
 import {GameSessionRepository} from '../repositories/game-session.repository';
-import {AddPlayerInput, CreateGameSessionInput, GameSessionCreated, GameSessionDetail, GameSessionPagedList, NpcSession, PlayerSession} from '../models/game-session-types';
+import {
+  AddPlayerInput,
+  AdvantageState,
+  CreateGameSessionInput,
+  GameSessionCreated,
+  GameSessionDetail,
+  GameSessionPagedList,
+  NpcSession,
+  PlayerSession,
+  RollLogEntry,
+  RollLogInput,
+  RollType,
+} from '../models/game-session-types';
+
+const ROLL_TYPES: RollType[] = ['dice', 'attack', 'skill', 'save', 'spell'];
+const ADVANTAGE_STATES: AdvantageState[] = ['normal', 'advantage', 'disadvantage'];
 
 @injectable({scope: BindingScope.TRANSIENT})
 export class GameSessionService {
@@ -91,6 +106,28 @@ export class GameSessionService {
     if (!hasAccess) throw new HttpErrors.Forbidden('Você não tem acesso a esta sessão');
 
     return session;
+  }
+
+  async addRoll(idGameSession: string, input: RollLogInput, userId: string): Promise<RollLogEntry> {
+    const hasAccess = await this.repository.hasSessionAccess(idGameSession, userId);
+    if (!hasAccess) throw new HttpErrors.Forbidden('Você não tem acesso a esta sessão');
+
+    if (!input.actor_name?.trim()) throw new HttpErrors.UnprocessableEntity('actor_name é obrigatório');
+    if (!input.label?.trim()) throw new HttpErrors.UnprocessableEntity('label é obrigatório');
+    if (!input.dice_notation?.trim()) throw new HttpErrors.UnprocessableEntity('dice_notation é obrigatório');
+    if (!Array.isArray(input.rolls) || input.rolls.length === 0) {
+      throw new HttpErrors.UnprocessableEntity('rolls deve conter ao menos um valor');
+    }
+    if (!ROLL_TYPES.includes(input.roll_type)) throw new HttpErrors.UnprocessableEntity('roll_type inválido');
+    if (!ADVANTAGE_STATES.includes(input.advantage_state)) {
+      throw new HttpErrors.UnprocessableEntity('advantage_state inválido');
+    }
+
+    const idCharacter = input.id_character ?? null;
+    const canPost = await this.repository.canPostRollFor(idGameSession, idCharacter, userId);
+    if (!canPost) throw new HttpErrors.Forbidden('Você não pode registrar uma rolagem para esse personagem');
+
+    return this.repository.addRoll(idGameSession, {...input, id_character: idCharacter});
   }
 
   async listSessions(pageSize: number, page: number): Promise<GameSessionPagedList> {

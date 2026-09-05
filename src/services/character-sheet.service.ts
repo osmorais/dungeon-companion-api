@@ -56,16 +56,8 @@ export class CharacterSheetService {
     const spells = choices.spells ?? [];
     const languages = buildLanguages(raceRule, bgRule);
 
-    const spellcastingInfo = (() => {
-      if (!classRule.isSpellcaster || !classRule.spellcastingAbility) return undefined;
-      const ability = classRule.spellcastingAbility;
-      const abilityMod = getMod(stats[ability]);
-      return {
-        spellcasting_ability: ability,
-        spell_save_dc: 8 + profBonus + abilityMod,
-        spell_attack_bonus: profBonus + abilityMod,
-      };
-    })();
+    const spellcastingResult = buildSpellcasting(classRule, classKey, level, spells, stats, profBonus);
+    const spellcastingInfo = spellcastingResult.is_spellcaster ? spellcastingResult : undefined;
 
     const isPerceptionProficient = proficientSkills.includes('perception');
     const passivePerception = 10 + getMod(stats.WIS) + (isPerceptionProficient ? profBonus : 0);
@@ -262,10 +254,22 @@ export class CharacterSheetService {
       is_somatic: s.is_somatic,
       is_material: s.is_material,
       school: s.school,
+      is_prepared: s.is_prepared,
     }));
 
     const traits = collectTraits(raceRule, subraceRule, classRule, bgRule);
     const languages = buildLanguages(raceRule, bgRule);
+
+    const spellcastingResult = buildSpellcasting(
+      classRule,
+      character.id_class,
+      character.level,
+      spellList,
+      stats,
+      profBonus,
+      character.spell_slots_expended ?? {},
+    );
+    const spellcastingInfo = spellcastingResult.is_spellcaster ? spellcastingResult : undefined;
 
     return {
       character_sheet: {
@@ -304,13 +308,7 @@ export class CharacterSheetService {
           currency: {cp: 0, sp: 0, ep: 0, gp: character.total_po, pp: 0},
           items: items.map(i => i.name),
         },
-        spellcasting_info: character.spellcasting_ability
-          ? {
-              spellcasting_ability: character.spellcasting_ability,
-              spell_save_dc: character.spell_save_dc!,
-              spell_attack_bonus: character.spell_attack_bonus!,
-            }
-          : undefined,
+        spellcasting_info: spellcastingInfo,
         spells: spellList,
         avatar_preset: character.avatar_preset ?? null,
         id_character: character.id_character,
@@ -340,7 +338,80 @@ export class CharacterSheetService {
     return {success: true};
   }
 
-  
+  private statsFromRaw(attributes: {attribute_name: string; score: number}[]): FinalStats {
+    const PT_TO_EN: Record<string, StatKeyEn> = {
+      FOR: 'STR', DES: 'DEX', CON: 'CON', INT: 'INT', SAB: 'WIS', CAR: 'CHA',
+    };
+    const stats: FinalStats = {STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10};
+    for (const attr of attributes) {
+      const enKey = PT_TO_EN[attr.attribute_name];
+      if (enKey) stats[enKey] = attr.score;
+    }
+    return stats;
+  }
+
+  async expendSpellSlot(id: number, level: number, delta: number, userId: string): Promise<{slots_expended: Record<string, number>}> {
+    const raw = await this.repository.findCharacterById(id);
+    if (!raw) throw new HttpErrors.NotFound(`Character with id ${id} not found`);
+    if (raw.character.user_id !== userId) throw new HttpErrors.Forbidden();
+    if (!Number.isInteger(level) || level < 1) throw new HttpErrors.UnprocessableEntity('level inválido');
+    if (delta !== 1 && delta !== -1) throw new HttpErrors.UnprocessableEntity('delta deve ser 1 ou -1');
+
+    const classRule = resolveClass(raw.character.id_class);
+    const stats = this.statsFromRaw(raw.attributes);
+    const spellcasting = buildSpellcasting(
+      classRule, raw.character.id_class, raw.character.level, [], stats,
+      raw.character.proficiency_bonus, raw.character.spell_slots_expended ?? {},
+    );
+
+    const key = `level_${level}`;
+    const max = spellcasting.is_spellcaster ? spellcasting.slots_total?.[key] ?? 0 : 0;
+    if (max === 0) throw new HttpErrors.UnprocessableEntity('Este personagem não possui espaços de magia desse nível');
+
+    const current = raw.character.spell_slots_expended?.[key] ?? 0;
+    const next = Math.min(max, Math.max(0, current + delta));
+    const expended = {...(raw.character.spell_slots_expended ?? {}), [key]: next};
+
+    await this.repository.updateSpellSlotsExpended(id, expended);
+    return {slots_expended: expended};
+  }
+
+  async longRest(id: number, userId: string): Promise<{slots_expended: Record<string, number>}> {
+    const raw = await this.repository.findCharacterById(id);
+    if (!raw) throw new HttpErrors.NotFound(`Character with id ${id} not found`);
+    if (raw.character.user_id !== userId) throw new HttpErrors.Forbidden();
+
+    await this.repository.updateSpellSlotsExpended(id, {});
+    return {slots_expended: {}};
+  }
+
+  async setSpellPrepared(id: number, idSpell: number, isPrepared: boolean, userId: string): Promise<{success: boolean}> {
+    const raw = await this.repository.findCharacterById(id);
+    if (!raw) throw new HttpErrors.NotFound(`Character with id ${id} not found`);
+    if (raw.character.user_id !== userId) throw new HttpErrors.Forbidden();
+
+    const classRule = resolveClass(raw.character.id_class);
+    if (!classRule.preparesSpells) {
+      throw new HttpErrors.UnprocessableEntity('Esta classe não precisa preparar magias com antecedência');
+    }
+
+    if (isPrepared) {
+      const stats = this.statsFromRaw(raw.attributes);
+      const abilityMod = classRule.spellcastingAbility ? getMod(stats[classRule.spellcastingAbility]) : 0;
+      const maxPrepared = Math.max(1, abilityMod + raw.character.level);
+      const alreadyPrepared = raw.spells.some(s => s.id_spell === idSpell && s.is_prepared);
+
+      if (!alreadyPrepared) {
+        const currentCount = await this.repository.countPreparedSpells(id);
+        if (currentCount >= maxPrepared) {
+          throw new HttpErrors.UnprocessableEntity(`Limite de magias preparadas atingido (${maxPrepared})`);
+        }
+      }
+    }
+
+    await this.repository.setSpellPrepared(id, idSpell, isPrepared);
+    return {success: true};
+  }
 
   async getCharacterBackground(id: number, userId: string): Promise<{id_character: number; full_history: string}> {
     const raw = await this.repository.findBackgroundCharacterById(id);

@@ -83,11 +83,42 @@ export interface GameSessionCreated {
   monsters: MonsterSession[];
 }
 
+export type RollType = 'dice' | 'attack' | 'skill' | 'save' | 'spell';
+export type AdvantageState = 'normal' | 'advantage' | 'disadvantage';
+
+export interface RollLogEntry {
+  id_roll: string;
+  id_game_session: string;
+  id_character: number | null;
+  actor_name: string;
+  roll_type: RollType;
+  label: string;
+  dice_notation: string;
+  rolls: number[];
+  advantage_state: AdvantageState;
+  modifier: number;
+  total: number;
+  created_at: Date;
+}
+
+export interface RollLogInput {
+  id_character: number | null;
+  actor_name: string;
+  roll_type: RollType;
+  label: string;
+  dice_notation: string;
+  rolls: number[];
+  advantage_state: AdvantageState;
+  modifier: number;
+  total: number;
+}
+
 export interface GameSessionDetail {
   game_session: GameSession;
   players: PlayerSession[];
   npcs: NpcSession[];
   monsters: MonsterSession[];
+  recent_rolls: RollLogEntry[];
 }
 
 export interface GameSessionSummary {

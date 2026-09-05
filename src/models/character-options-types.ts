@@ -77,6 +77,8 @@ export interface Spell {
   is_material: boolean;
   spellLevel: number;
   school: string | null;
+  /** Só presente na ficha de um personagem já criado (não no catálogo de opções). */
+  is_prepared?: boolean;
 }
 
 export interface Armour {
