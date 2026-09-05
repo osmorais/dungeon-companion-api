@@ -287,7 +287,12 @@ export function buildSpellcasting(
   );
 
   const cantrips = spells.filter(s => s.spellLevel === 0).map(s => s.name);
-  const leveledSpells = spells.filter(s => s.spellLevel > 0).map(s => s.name);
+  const leveledSpellsByCircle: Record<string, string[]> = {};
+  for (const spell of spells) {
+    if (spell.spellLevel <= 0) continue;
+    const key = `level_${spell.spellLevel}`;
+    (leveledSpellsByCircle[key] ??= []).push(spell.name);
+  }
 
   return {
     is_spellcaster: true,
@@ -300,7 +305,7 @@ export function buildSpellcasting(
       : undefined,
     spells_known:
       spells.length > 0
-        ? {cantrips, level_1: leveledSpells}
+        ? {cantrips, ...leveledSpellsByCircle}
         : undefined,
   };
 }
