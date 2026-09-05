@@ -16,6 +16,7 @@ export interface ParticipantContext {
   status: CombatStatus;
   participant_type: 'player' | 'npc';
   player_user_id: string | null;
+  initiative_total: number | null;
 }
 
 export interface EncounterContext {
@@ -204,7 +205,8 @@ export class CombatRepository {
         gs.user_id AS dm_user_id,
         ce.status,
         cp.participant_type,
-        ps.user_id AS player_user_id
+        ps.user_id AS player_user_id,
+        cp.initiative_total
       FROM combat_participant cp
       JOIN combat_encounter ce ON ce.id_combat_encounter = cp.id_combat_encounter
       JOIN game_session gs ON gs.id_game_session = ce.id_game_session

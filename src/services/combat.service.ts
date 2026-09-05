@@ -149,6 +149,11 @@ export class CombatService {
         'Você não pode registrar essa rolagem de iniciativa',
       );
     }
+    if (context.initiative_total !== null) {
+      throw new HttpErrors.Conflict(
+        'Você já registrou sua rolagem de iniciativa',
+      );
+    }
     if (!Array.isArray(input.rolls) || input.rolls.length === 0) {
       throw new HttpErrors.UnprocessableEntity(
         'rolls deve conter ao menos um valor',
