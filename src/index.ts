@@ -16,23 +16,29 @@ export async function main(options: ApplicationConfig = {}) {
 
 if (require.main === module) {
   // Run the application
-  // CORS_ORIGIN must be the exact frontend URL (e.g. https://forjaarcana.com).
+  // CORS_ORIGIN must be the exact frontend URL(s), comma-separated if there is
+  // more than one (e.g. https://forjaarcana.com,https://www.forjaarcana.com).
   // 'credentials: true' + 'origin: *' is rejected by browsers — never use wildcard here.
   const corsOrigin = process.env.CORS_ORIGIN;
   if (!corsOrigin) {
     console.warn(
       '[WARN] CORS_ORIGIN env var is not set. ' +
-        'Set it to your frontend URL (e.g. https://forjaarcana.com) so authenticated ' +
-        'cross-origin requests work. Falling back to localhost for development only.',
+        'Set it to your frontend URL(s) (e.g. https://forjaarcana.com,https://www.forjaarcana.com) so ' +
+        'authenticated cross-origin requests work. Falling back to localhost for development only.',
     );
   }
+
+  const allowedOrigins = (corsOrigin ?? 'http://localhost:4200')
+    .split(',')
+    .map(origin => origin.trim().replace(/\/+$/, ''))
+    .filter(origin => origin.length > 0);
 
   const config = {
     rest: {
       port: +(process.env.PORT ?? 3000),
       host: process.env.HOST ?? '0.0.0.0',
       cors: {
-        origin: corsOrigin ?? 'http://localhost:4200',
+        origin: allowedOrigins,
         methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
         allowedHeaders: 'Content-Type,Authorization',
         preflightContinue: false,

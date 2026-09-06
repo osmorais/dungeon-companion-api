@@ -7,14 +7,23 @@ import {
 import {RepositoryMixin} from '@loopback/repository';
 import {ServiceMixin} from '@loopback/service-proxy';
 import {RestApplication} from '@loopback/rest';
-import {AuthenticationComponent, registerAuthenticationStrategy} from '@loopback/authentication';
+import {
+  AuthenticationComponent,
+  registerAuthenticationStrategy,
+} from '@loopback/authentication';
 import cookieParser from 'cookie-parser';
 import path from 'path';
 import {MySequence} from './sequence';
-import {AiAgentService, CharacterSheetService, CharacterOptionsService, GameSessionService} from './services';
+import {
+  AiAgentService,
+  CharacterSheetService,
+  CharacterOptionsService,
+  GameSessionService,
+} from './services';
 import {CharacterOptionsRepository} from './repositories/character-options.repository';
 import {CharacterRepository} from './repositories/character.repository';
 import {GameSessionRepository} from './repositories/game-session.repository';
+import {CombatRepository} from './repositories/combat.repository';
 import {PostgresDatasource} from './datasources';
 import {JWTStrategy} from './strategies/jwt.strategy';
 
@@ -43,7 +52,9 @@ export class DungeonCompanionApiApplication extends BootMixin(
     // Explicit key required because LoopBack infers binding name from factory.name,
     // and an anonymous arrow function has no name to infer from.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    this.expressMiddleware(cookieParser as any, undefined, {key: 'middleware.cookieParser'});
+    this.expressMiddleware(cookieParser as any, undefined, {
+      key: 'middleware.cookieParser',
+    });
 
     this.service(AiAgentService, 'services.AiAgentService');
     this.repository(CharacterRepository);
@@ -52,13 +63,17 @@ export class DungeonCompanionApiApplication extends BootMixin(
     this.service(CharacterOptionsService, 'services.CharacterOptionsService');
     this.repository(GameSessionRepository);
     this.service(GameSessionService, 'services.GameSessionService');
+    this.repository(CombatRepository);
+    // CombatService e SessionEventsService são descobertos automaticamente pelo boot
+    // (src/services/*.service.ts) — não registrar manualmente aqui, senão @service()
+    // encontra duas bindings pra mesma classe ("More than one bindings found").
 
     this.bind('db.Postgres').toDynamicValue(() =>
       PostgresDatasource.getInstance(),
     );
 
     this.projectRoot = __dirname;
-    
+
     this.bootOptions = {
       controllers: {
         dirs: ['controllers'],
