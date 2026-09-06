@@ -124,6 +124,8 @@ export interface CharacterRawData {
     spellcasting_ability: string | null;
     spell_save_dc: number | null;
     spell_attack_bonus: number | null;
+    spell_slots_expended: Record<string, number> | null;
+    hit_dice_spent: number;
     user_id: string;
     avatar_preset: AvatarPreset | null;
   };
@@ -141,6 +143,7 @@ export interface CharacterRawData {
     is_material: boolean;
     spellLevel: number;
     school: string | null;
+    is_prepared: boolean;
   }>;
   weapons: Array<{id_weapon: number; name: string; has_proficiency: boolean; damage_die: string | null; damage_type: string | null; properties: string | null; weight: number; price_value: number}>;
   items: Array<{name: string}>;
@@ -164,6 +167,9 @@ export interface CharacterSheet {
       speed: string;
       hit_points: {max: number; current: number; temporary: number};
       hit_dice: string;
+      hit_dice_total: number;
+      hit_dice_spent: number;
+      hit_die_size: number;
       passive_perception: number;
     };
     attributes_and_saves: Record<StatKeyEn, StatBlock>;
@@ -184,6 +190,11 @@ export interface CharacterSheet {
       spellcasting_ability: string;
       spell_save_dc: number;
       spell_attack_bonus: number;
+      slots_total?: Record<string, number>;
+      slots_expended?: Record<string, number>;
+      spells_known?: Record<string, string[]>;
+      prepares_spells?: boolean;
+      max_prepared_spells?: number;
     };
     spells: Spell[];
     avatar_preset?: AvatarPreset | null;

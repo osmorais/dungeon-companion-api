@@ -34,6 +34,8 @@ export interface ClassRule {
   isSpellcaster: boolean;
   spellcastingAbility?: StatKeyEn;
   spellSlotsLevel1: number;
+  /** Precisa escolher magias preparadas a cada dia (Clérigo/Druida/Paladino/Mago); os demais conjuradores já "sabem" suas magias fixas. */
+  preparesSpells: boolean;
   traits: Trait[];
   startingEquipment: string[];
   startingGold: number;
@@ -218,6 +220,7 @@ export const CLASSES: Record<number, ClassRule> = {
     weaponProficiencies: ['Armas Simples', 'Armas Marciais'],
     isSpellcaster: false,
     spellSlotsLevel1: 0,
+    preparesSpells: false,
     traits: [
       {name: 'Fúria', source: 'Classe', description: 'Em seu turno, você pode entrar em fúria como uma ação bônus. Enquanto em fúria, você tem vantagem em testes de Força e jogadas de ataque de Força, e recebe bônus nas jogadas de dano.'},
       {name: 'Defesa sem Armadura', source: 'Classe', description: 'Enquanto não estiver usando armadura, sua CA é igual a 10 + modificador de Destreza + modificador de Constituição.'},
@@ -235,6 +238,7 @@ export const CLASSES: Record<number, ClassRule> = {
     isSpellcaster: true,
     spellcastingAbility: 'CHA',
     spellSlotsLevel1: 2,
+    preparesSpells: false,
     traits: [
       {name: 'Conjuração', source: 'Classe', description: 'Você aprendeu a desvendar e reconfigurar a magia em si. Você pode lançar truques e magias niveladas.'},
       {name: 'Inspiração Bárdica', source: 'Classe', description: 'Você pode inspirar outros através de palavras ou música. Para tanto, use uma ação bônus no seu turno para escolher uma criatura que não seja você numa distância de 18 metros.'},
@@ -252,6 +256,7 @@ export const CLASSES: Record<number, ClassRule> = {
     isSpellcaster: true,
     spellcastingAbility: 'CHA',
     spellSlotsLevel1: 1,
+    preparesSpells: false,
     traits: [
       {name: 'Patrono Sobrenatural', source: 'Classe', description: 'Você fez um pacto com um ser sobrenatural de seu nível de poder, um ser cujos objetivos e motivações são diferentes dos mortais.'},
       {name: 'Magia do Pacto', source: 'Classe', description: 'Seu arcano pesquisado concedeu-lhe facilidade com feitiços. Você pode lançar feitiços de bruxo.'},
@@ -269,6 +274,7 @@ export const CLASSES: Record<number, ClassRule> = {
     isSpellcaster: true,
     spellcastingAbility: 'WIS',
     spellSlotsLevel1: 2,
+    preparesSpells: true,
     traits: [
       {name: 'Conjuração', source: 'Classe', description: 'Como um conduit para o poder divino, você pode lançar feitiços de clérigo.'},
       {name: 'Domínio Divino', source: 'Classe', description: 'Escolha um domínio divino relacionado à sua divindade. Sua escolha lhe concede truques de domínio e outras características quando você a faz, no nível 1.'},
@@ -286,6 +292,7 @@ export const CLASSES: Record<number, ClassRule> = {
     isSpellcaster: true,
     spellcastingAbility: 'WIS',
     spellSlotsLevel1: 2,
+    preparesSpells: true,
     traits: [
       {name: 'Druidico', source: 'Classe', description: 'Você conhece Druidico, a linguagem secreta dos druidas.'},
       {name: 'Conjuração', source: 'Classe', description: 'Em harmonia com a natureza, você pode lançar feitiços de druida.'},
@@ -303,6 +310,7 @@ export const CLASSES: Record<number, ClassRule> = {
     isSpellcaster: true,
     spellcastingAbility: 'CHA',
     spellSlotsLevel1: 2,
+    preparesSpells: false,
     traits: [
       {name: 'Origem de Feitiçaria', source: 'Classe', description: 'Escolha uma origem de feitiçaria que descreve a fonte de seu poder mágico inato. Sua escolha concede características a você no 1º nível e novamente nos níveis 6, 14 e 18.'},
       {name: 'Conjuração', source: 'Classe', description: 'A magia é parte de você, fluindo diretamente da sua herança. Você pode lançar feitiços de feiticeiro.'},
@@ -319,6 +327,7 @@ export const CLASSES: Record<number, ClassRule> = {
     weaponProficiencies: ['Armas Simples', 'Armas Marciais'],
     isSpellcaster: false,
     spellSlotsLevel1: 0,
+    preparesSpells: false,
     traits: [
       {name: 'Estilo de Combate', source: 'Classe', description: 'Você adota um estilo particular de combate como sua especialidade. Escolha uma das opções: Arqueria, Defesa, Duelo, Grande Arma, Proteção ou Combate com Duas Armas.'},
       {name: 'Retomar Fôlego', source: 'Classe', description: 'Você tem uma reserva de resistência que pode usar para se proteger. Em seu turno, você pode usar uma ação bônus para recuperar pontos de vida iguais a 1d10 + seu nível de guerreiro.'},
@@ -335,6 +344,7 @@ export const CLASSES: Record<number, ClassRule> = {
     weaponProficiencies: ['Armas Simples', 'Bestas de Mão', 'Espadas Longas', 'Espadas Curtas', 'Rapieiras'],
     isSpellcaster: false,
     spellSlotsLevel1: 0,
+    preparesSpells: false,
     traits: [
       {name: 'Especialização', source: 'Classe', description: 'Escolha duas das suas proficiências em perícias. Seu bônus de proficiência é dobrado para qualquer teste de habilidade que você faça usando essas perícias.'},
       {name: 'Ataque Furtivo', source: 'Classe', description: 'Você sabe como encontrar e explorar a fraqueza de um inimigo distraído. Uma vez por turno, você pode causar 1d6 de dano extra a uma criatura que acertar com um ataque se você tiver vantagem.'},
@@ -353,6 +363,7 @@ export const CLASSES: Record<number, ClassRule> = {
     isSpellcaster: true,
     spellcastingAbility: 'INT',
     spellSlotsLevel1: 2,
+    preparesSpells: true,
     traits: [
       {name: 'Conjuração', source: 'Classe', description: 'Como estudante da magia arcana, você possui um grimório com feitiços que você pode lançar.'},
       {name: 'Recuperação Arcana', source: 'Classe', description: 'Você aprendeu a recuperar parte de sua energia mágica estudando seu grimório. Uma vez por dia, quando você termina um descanso curto, pode recuperar espaços de magia.'},
@@ -369,6 +380,7 @@ export const CLASSES: Record<number, ClassRule> = {
     weaponProficiencies: ['Armas Simples', 'Espadas Curtas'],
     isSpellcaster: false,
     spellSlotsLevel1: 0,
+    preparesSpells: false,
     traits: [
       {name: 'Defesa sem Armadura', source: 'Classe', description: 'Enquanto não estiver vestindo armadura e não estiver empunhando um escudo, sua CA é igual a 10 + seu modificador de Destreza + seu modificador de Sabedoria.'},
       {name: 'Artes Marciais', source: 'Classe', description: 'Sua prática das artes marciais lhe dá o domínio de estilos de combate que usam ataques desarmados e armas de monge.'},
@@ -386,6 +398,7 @@ export const CLASSES: Record<number, ClassRule> = {
     isSpellcaster: true,
     spellcastingAbility: 'CHA',
     spellSlotsLevel1: 0,
+    preparesSpells: true,
     traits: [
       {name: 'Sentido Divino', source: 'Classe', description: 'A presença do forte mal registra nos seus sentidos como uma odor nauseante e o poder poderoso do bem soa como música celestial nos seus ouvidos.'},
       {name: 'Curar pelo Toque', source: 'Classe', description: 'A partir do 1º nível, você tem um reservatório de poder curativo que repõe quando você toma um descanso longo.'},
@@ -403,6 +416,7 @@ export const CLASSES: Record<number, ClassRule> = {
     isSpellcaster: true,
     spellcastingAbility: 'WIS',
     spellSlotsLevel1: 0,
+    preparesSpells: false,
     traits: [
       {name: 'Inimigo Favorito', source: 'Classe', description: 'Você tem experiência significativa estudando, rastreando, caçando e até conversando com um determinado tipo de inimigo.'},
       {name: 'Explorador Natural', source: 'Classe', description: 'Você é particularmente familiarizado com um tipo de ambiente natural e é adepto em viajar e sobreviver nesses ambientes.'},
@@ -666,47 +680,63 @@ export const WEAPONS: Record<string, WeaponRule> = {
 // Spell slots by class and level (simplified: level 1-5)
 // ---------------------------------------------------------------------------
 
-export const SPELL_SLOTS: Record<string, Record<number, Record<string, number>>> = {
-  mago: {
+// Indexado por id_class (mais robusto que casar pelo nome de exibição normalizado).
+export const SPELL_SLOTS: Record<number, Record<number, Record<string, number>>> = {
+  9: { // Mago
     1: {level_1: 2},
     2: {level_1: 3},
     3: {level_1: 4, level_2: 2},
     4: {level_1: 4, level_2: 3},
     5: {level_1: 4, level_2: 3, level_3: 2},
   },
-  clerigo: {
+  4: { // Clérigo
     1: {level_1: 2},
     2: {level_1: 3},
     3: {level_1: 4, level_2: 2},
     4: {level_1: 4, level_2: 3},
     5: {level_1: 4, level_2: 3, level_3: 2},
   },
-  bardo: {
+  2: { // Bardo
     1: {level_1: 2},
     2: {level_1: 3},
     3: {level_1: 4, level_2: 2},
     4: {level_1: 4, level_2: 3},
     5: {level_1: 4, level_2: 3, level_3: 2},
   },
-  druida: {
+  5: { // Druida
     1: {level_1: 2},
     2: {level_1: 3},
     3: {level_1: 4, level_2: 2},
     4: {level_1: 4, level_2: 3},
     5: {level_1: 4, level_2: 3, level_3: 2},
   },
-  feiticeiro: {
+  6: { // Feiticeiro
     1: {level_1: 2},
     2: {level_1: 3},
     3: {level_1: 4, level_2: 2},
     4: {level_1: 4, level_2: 3},
     5: {level_1: 4, level_2: 3, level_3: 2},
   },
-  bruxo: {
+  3: { // Bruxo (magia de pacto: todos os espaços ficam no nível mais alto disponível)
     1: {level_1: 1},
     2: {level_1: 2},
     3: {level_1: 0, level_2: 2},
     4: {level_1: 0, level_2: 2},
     5: {level_1: 0, level_2: 0, level_3: 2},
+  },
+  // Meio-conjuradores: só começam a lançar magia a partir do nível 2.
+  11: { // Paladino
+    1: {},
+    2: {level_1: 2},
+    3: {level_1: 3},
+    4: {level_1: 3},
+    5: {level_1: 4, level_2: 2},
+  },
+  12: { // Ranger (Patrulheiro)
+    1: {},
+    2: {level_1: 2},
+    3: {level_1: 3},
+    4: {level_1: 3},
+    5: {level_1: 4, level_2: 2},
   },
 };

@@ -134,6 +134,67 @@ export class CharacterController {
     }
   }
 
+  @patch('/api/character-sheet/{id}/spell-slots')
+  @response(200, {
+    description: 'Expends or restores one spell slot of the given level',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async updateSpellSlots(
+    @param.path.number('id') id: number,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      description: 'Spell level and delta (1 to expend, -1 to restore)',
+      required: true,
+      content: {'application/json': {schema: {type: 'object', required: ['level', 'delta'], properties: {level: {type: 'integer'}, delta: {type: 'integer'}}}}},
+    })
+    body: {level: number; delta: number},
+  ): Promise<object> {
+    return this.characterSheetService.expendSpellSlot(id, body.level, body.delta, currentUser.id);
+  }
+
+  @post('/api/character-sheet/{id}/short-rest/hit-die')
+  @response(200, {
+    description: 'Spends one Hit Die to recover HP during a short rest',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async rollHitDie(
+    @param.path.number('id') id: number,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+  ): Promise<object> {
+    return this.characterSheetService.rollHitDie(id, currentUser.id);
+  }
+
+  @post('/api/character-sheet/{id}/long-rest')
+  @response(200, {
+    description: 'Restores all HP, recovers half the Hit Dice (min 1) and resets expended spell slots',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async longRest(
+    @param.path.number('id') id: number,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+  ): Promise<object> {
+    return this.characterSheetService.longRest(id, currentUser.id);
+  }
+
+  @patch('/api/character-sheet/{id}/spells/{idSpell}/prepared')
+  @response(200, {
+    description: 'Marks a known spell as prepared or unprepared for the day',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async setSpellPrepared(
+    @param.path.number('id') id: number,
+    @param.path.number('idSpell') idSpell: number,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      description: 'Prepared state',
+      required: true,
+      content: {'application/json': {schema: {type: 'object', required: ['is_prepared'], properties: {is_prepared: {type: 'boolean'}}}}},
+    })
+    body: {is_prepared: boolean},
+  ): Promise<object> {
+    return this.characterSheetService.setSpellPrepared(id, idSpell, body.is_prepared, currentUser.id);
+  }
+
   @get('/api/character-sheet/{id}/background')
   @response(200, {
     description: 'Returns the background (full_history) for the given character ID',

@@ -228,6 +228,19 @@ ALTER TABLE Character
   ADD COLUMN IF NOT EXISTS spell_save_dc INT,
   ADD COLUMN IF NOT EXISTS spell_attack_bonus INT;
 
+-- Espaços de magia gastos hoje, por nível (ex: {"level_1": 1, "level_2": 0}). Zerado num descanso longo.
+ALTER TABLE Character
+  ADD COLUMN IF NOT EXISTS spell_slots_expended JSONB NOT NULL DEFAULT '{}';
+
+-- Marca quais magias conhecidas estão preparadas no dia (só relevante pra classes que preparam magia).
+ALTER TABLE Character_Spell
+  ADD COLUMN IF NOT EXISTS is_prepared BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Dados de Vida já gastos num descanso curto (total disponível = nível do personagem).
+-- Um descanso longo recupera metade do total (mínimo 1); nunca reseta a 0 direto.
+ALTER TABLE Character
+  ADD COLUMN IF NOT EXISTS hit_dice_spent INT NOT NULL DEFAULT 0;
+
 -- ====================================================================================
 -- USUARIO
 -- ====================================================================================
@@ -361,6 +374,80 @@ CREATE TABLE monster_session (
 );
 
 -- ==========================================
+-- SESSION ROLL LOG
+-- ==========================================
+
+CREATE TABLE session_roll_log (
+    id_roll UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    id_game_session UUID NOT NULL,
+    id_character INT REFERENCES Character(id_character) ON DELETE SET NULL,
+
+    actor_name VARCHAR(255) NOT NULL,
+    roll_type VARCHAR(20) NOT NULL,       -- 'dice' | 'attack' | 'skill' | 'save' | 'spell'
+    label VARCHAR(255) NOT NULL,
+    dice_notation VARCHAR(20) NOT NULL,   -- ex: '1d20'
+    rolls INTEGER[] NOT NULL,             -- resultados brutos (2 valores se vantagem/desvantagem)
+    advantage_state VARCHAR(12) NOT NULL DEFAULT 'normal', -- 'normal' | 'advantage' | 'disadvantage'
+    modifier INTEGER NOT NULL DEFAULT 0,
+    total INTEGER NOT NULL,
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_session_roll_log_game_session
+        FOREIGN KEY (id_game_session)
+        REFERENCES game_session(id_game_session)
+        ON DELETE CASCADE
+);
+
+-- ==========================================
+-- COMBAT ENCOUNTER (iniciativa e ordem de turnos)
+-- ==========================================
+
+CREATE TABLE combat_encounter (
+    id_combat_encounter UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    id_game_session UUID NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'rolling_initiative', -- 'rolling_initiative' | 'active' | 'finished'
+    round_number INTEGER NOT NULL DEFAULT 1,
+    current_turn_index INTEGER NOT NULL DEFAULT 0,
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_combat_encounter_game_session
+        FOREIGN KEY (id_game_session)
+        REFERENCES game_session(id_game_session)
+        ON DELETE CASCADE
+);
+
+CREATE TABLE combat_participant (
+    id_combat_participant UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    id_combat_encounter UUID NOT NULL,
+    participant_type VARCHAR(10) NOT NULL, -- 'player' | 'npc'
+    id_player_session UUID,
+    id_npc_session UUID,
+
+    initiative_roll INTEGER,
+    initiative_total INTEGER,
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_combat_participant_encounter
+        FOREIGN KEY (id_combat_encounter)
+        REFERENCES combat_encounter(id_combat_encounter)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_combat_participant_player_session
+        FOREIGN KEY (id_player_session)
+        REFERENCES player_session(id_player_session)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_combat_participant_npc_session
+        FOREIGN KEY (id_npc_session)
+        REFERENCES npc_session(id_npc_session)
+        ON DELETE CASCADE
+);
+
+-- ==========================================
 -- ÍNDICES
 -- ==========================================
 
@@ -370,6 +457,9 @@ CREATE INDEX idx_player_session_game
 CREATE INDEX idx_player_session_character
     ON player_session(id_character);
 
+CREATE INDEX idx_session_roll_log_session_created
+    ON session_roll_log(id_game_session, created_at DESC);
+
 CREATE INDEX idx_npc_session_game
     ON npc_session(id_game_session);
 
@@ -378,6 +468,12 @@ CREATE INDEX idx_npc_session_character
 
 CREATE INDEX idx_monster_session_game
     ON monster_session(id_game_session);
+
+CREATE INDEX idx_combat_encounter_game_session
+    ON combat_encounter(id_game_session);
+
+CREATE INDEX idx_combat_participant_encounter
+    ON combat_participant(id_combat_encounter);
 
 CREATE INDEX idx_monster_snapshot_gin
     ON monster_session

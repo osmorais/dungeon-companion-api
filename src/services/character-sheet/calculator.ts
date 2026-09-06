@@ -177,7 +177,7 @@ export function calcArmorClass(
   const dexMod = getMod(stats.DEX);
 
   let ac: number;
-  if (armor?.armour_type === null) {
+  if (armor?.armour_type == null) {
     if (classKey === CLASSES[1].id_class) { // Bárbaro
       ac = 10 + dexMod + getMod(stats.CON);
     } else if (classKey === CLASSES[10].id_class) { // Monge
@@ -185,13 +185,13 @@ export function calcArmorClass(
     } else {
       ac = 10 + dexMod;
     }
-  } else if (armor?.armour_type === 'Armadura Leve') {
-    ac = armor?.armour_class_base ?? 10 + dexMod;
-  } else if (armor?.armour_type === 'Armadura Média') {
+  } else if (armor.armour_type === 'Armadura Leve') {
+    ac = (armor.armour_class_base ?? 10) + dexMod;
+  } else if (armor.armour_type === 'Armadura Média') {
     const cappedDex = Math.min(dexMod, armor.max_dexterity_bonus ?? 2);
-    ac = armor?.armour_class_base ?? 10 + cappedDex;
+    ac = (armor.armour_class_base ?? 10) + cappedDex;
   } else {
-    ac = armor?.armour_class_base ?? 10;
+    ac = armor.armour_class_base ?? 10;
   }
 
   return hasShield ? ac + 2 : ac;
@@ -227,18 +227,17 @@ export function buildWeaponActions(
 
 
   return weaponsVerified.flatMap(w => {
-    // const rule = resolveWeapon(w.name);
-    // if (!rule) return [];
+    const props = w.properties ? w.properties.split(', ') : [];
+    const isFinesse = props.some(p => p.toLowerCase().startsWith('acuidade'));
 
     const strMod = getMod(stats.STR);
     const dexMod = getMod(stats.DEX);
     let abilityMod: number;
-    
 
     if (w.isRanged) {
       abilityMod = dexMod;
-    // } else if (rule.isFinesse) { //TO DO: Verificar necessidade de aplicar essa regra
-    //   abilityMod = Math.max(strMod, dexMod);
+    } else if (isFinesse) {
+      abilityMod = Math.max(strMod, dexMod);
     } else {
       abilityMod = strMod;
     }
@@ -262,6 +261,20 @@ export function collectTraits(
   ];
 }
 
+export type SpellcastingResult =
+  | {is_spellcaster: false}
+  | {
+      is_spellcaster: true;
+      spellcasting_ability: StatKeyEn;
+      spell_save_dc: number;
+      spell_attack_bonus: number;
+      slots_total?: Record<string, number>;
+      slots_expended?: Record<string, number>;
+      spells_known?: Record<string, string[]>;
+      prepares_spells: boolean;
+      max_prepared_spells?: number;
+    };
+
 export function buildSpellcasting(
   classRule: ClassRule,
   classKey: number,
@@ -269,7 +282,8 @@ export function buildSpellcasting(
   spells: Spell[],
   stats: FinalStats,
   profBonus: number,
-) {
+  expendedSlots: Record<string, number> = {},
+): SpellcastingResult {
   if (!classRule.isSpellcaster || !classRule.spellcastingAbility) {
     return {is_spellcaster: false};
   }
@@ -279,15 +293,19 @@ export function buildSpellcasting(
   const spellSaveDC = 8 + profBonus + abilityMod;
   const spellAttackBonus = profBonus + abilityMod;
 
-  const className = CLASSES[classKey]?.displayName ?? 'Classe Desconcida';
-  const classSlots = SPELL_SLOTS[className];
+  const classSlots = SPELL_SLOTS[classKey];
   const levelSlots = classSlots?.[level] ?? (classRule.spellSlotsLevel1 > 0 ? {level_1: classRule.spellSlotsLevel1} : {});
   const slots = Object.fromEntries(
     Object.entries(levelSlots).filter(([, v]) => (v as number) > 0),
   );
 
   const cantrips = spells.filter(s => s.spellLevel === 0).map(s => s.name);
-  const leveledSpells = spells.filter(s => s.spellLevel > 0).map(s => s.name);
+  const leveledSpellsByCircle: Record<string, string[]> = {};
+  for (const spell of spells) {
+    if (spell.spellLevel <= 0) continue;
+    const key = `level_${spell.spellLevel}`;
+    (leveledSpellsByCircle[key] ??= []).push(spell.name);
+  }
 
   return {
     is_spellcaster: true,
@@ -296,12 +314,14 @@ export function buildSpellcasting(
     spell_attack_bonus: spellAttackBonus,
     slots_total: Object.keys(slots).length > 0 ? slots : undefined,
     slots_expended: Object.keys(slots).length > 0
-      ? Object.fromEntries(Object.keys(slots).map(k => [k, 0]))
+      ? Object.fromEntries(Object.keys(slots).map(k => [k, expendedSlots[k] ?? 0]))
       : undefined,
     spells_known:
       spells.length > 0
-        ? {cantrips, level_1: leveledSpells}
+        ? {cantrips, ...leveledSpellsByCircle}
         : undefined,
+    prepares_spells: classRule.preparesSpells,
+    max_prepared_spells: classRule.preparesSpells ? Math.max(1, abilityMod + level) : undefined,
   };
 }
 
