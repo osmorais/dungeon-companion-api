@@ -535,6 +535,14 @@ export class CharacterSheetService {
     return {success: true};
   }
 
+  async deleteCharacter(id: number, userId: string): Promise<{success: boolean}> {
+    const raw = await this.repository.findCharacterById(id);
+    if (!raw) throw new Error('Character not found');
+    if (raw.character.user_id !== userId) throw new Error('Unauthorized');
+    await this.repository.deleteCharacter(id);
+    return {success: true};
+  }
+
   private statsFromRaw(
     attributes: {attribute_name: string; score: number}[],
   ): FinalStats {

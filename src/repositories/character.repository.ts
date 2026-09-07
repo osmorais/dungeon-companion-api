@@ -188,6 +188,18 @@ export class CharacterRepository {
     `;
   }
 
+  /**
+   * Remove o personagem. As tabelas filhas (atributos, perícias, magias, armas,
+   * itens, histórico) e os vínculos de sessão (player_session/npc_session) têm
+   * ON DELETE CASCADE, e session_roll_log.id_character vira NULL — o registro de
+   * rolagens da sessão é preservado mesmo depois do personagem removido.
+   */
+  async deleteCharacter(id: number): Promise<void> {
+    await this.db.sql`
+      DELETE FROM character WHERE id_character = ${id}
+    `;
+  }
+
   async findAllCharacters(userId: string): Promise<{id_character: number; name: string; level: number; race: string; class: string}[]> {
     return this.db.sql`
       SELECT
