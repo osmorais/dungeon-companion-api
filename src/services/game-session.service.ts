@@ -4,14 +4,18 @@ import {HttpErrors} from '@loopback/rest';
 import {GameSessionRepository} from '../repositories/game-session.repository';
 import {CombatService} from './combat.service';
 import {SessionEventsService} from './session-events.service';
+import {MonsterCatalogService} from './monster-catalog.service';
 import {
+  AddMonsterToSessionInput,
   AddPlayerInput,
   AdvantageState,
   CreateGameSessionInput,
   GameSessionCreated,
   GameSessionDetail,
   GameSessionPagedList,
+  MonsterSession,
   NpcSession,
+  RevealedMonster,
   PlayerSession,
   RollLogEntry,
   RollLogInput,
@@ -41,6 +45,8 @@ export class GameSessionService {
     private combatService: CombatService,
     @service(SessionEventsService)
     private events: SessionEventsService,
+    @service(MonsterCatalogService)
+    private monsterCatalogService: MonsterCatalogService,
   ) {}
 
   async createSession(
@@ -143,6 +149,49 @@ export class GameSessionService {
     return npc;
   }
 
+  /**
+   * Adiciona um monstro à sessão — a partir de um monstro já catalogado (`id_monster_catalog`)
+   * ou catalogando um novo na hora (`monster_api_slug`), que também fica salvo no bestiário do
+   * mestre pra reuso futuro.
+   */
+  async addMonster(
+    idGameSession: string,
+    userId: string,
+    input: AddMonsterToSessionInput,
+  ): Promise<MonsterSession> {
+    const session = await this.repository.findById(idGameSession);
+    if (!session)
+      throw new HttpErrors.NotFound(
+        `Sessão com id ${idGameSession} não encontrada`,
+      );
+    if (session.game_session.user_id !== userId)
+      throw new HttpErrors.Forbidden('Apenas o mestre pode adicionar monstros');
+
+    let catalogEntry;
+    if (input.id_monster_catalog) {
+      catalogEntry = await this.monsterCatalogService.getCatalogEntry(input.id_monster_catalog, userId);
+    } else if (input.monster_api_slug) {
+      catalogEntry = await this.monsterCatalogService.catalogMonster(
+        userId,
+        input.monster_api_slug,
+        input.custom_name ?? null,
+      );
+    } else {
+      throw new HttpErrors.BadRequest('Informe id_monster_catalog ou monster_api_slug');
+    }
+
+    const monster = await this.repository.addMonsterToSession(idGameSession, {
+      monster_api_slug: catalogEntry.monster_api_slug,
+      custom_name: catalogEntry.custom_name ?? undefined,
+      hp_current: catalogEntry.hp_max,
+      hp_max: catalogEntry.hp_max,
+      ac: catalogEntry.ac,
+      data_snapshot: catalogEntry.data_snapshot,
+    });
+    this.events.publish(idGameSession);
+    return monster;
+  }
+
   async removePlayer(idPlayerSession: string, userId: string): Promise<void> {
     const result = await this.repository.removePlayer(idPlayerSession, userId);
     if (result.status === 'not_found')
@@ -196,8 +245,98 @@ export class GameSessionService {
     if (!hasAccess)
       throw new HttpErrors.Forbidden('Você não tem acesso a esta sessão');
 
+    const isDm = session.game_session.user_id === userId;
+    const revealedMonsters: RevealedMonster[] = session.monsters
+      .filter(m => m.is_revealed)
+      .map(m => ({
+        id_monster_session: m.id_monster_session,
+        name: m.custom_name ?? this.monsterSnapshotName(m),
+      }));
+
     const combat = await this.combatService.getActiveEncounterDetail(id);
-    return {...session, combat};
+    return {
+      ...session,
+      monsters: isDm ? session.monsters : [],
+      revealed_monsters: revealedMonsters,
+      combat,
+    };
+  }
+
+  /** Só o mestre pode alterar o PV atual de um NPC. */
+  async updateNpcHp(
+    idNpcSession: string,
+    currentHitPoints: number,
+    userId: string,
+  ): Promise<void> {
+    if (
+      typeof currentHitPoints !== 'number' ||
+      !Number.isInteger(currentHitPoints)
+    ) {
+      throw new HttpErrors.UnprocessableEntity(
+        'current_hit_points deve ser um número inteiro',
+      );
+    }
+    const result = await this.repository.updateNpcHp(
+      idNpcSession,
+      currentHitPoints,
+      userId,
+    );
+    if (result.status === 'not_found')
+      throw new HttpErrors.NotFound('NPC não encontrado na sessão');
+    if (result.status === 'unauthorized')
+      throw new HttpErrors.Forbidden(
+        'Apenas o mestre pode alterar a vida deste NPC',
+      );
+    this.events.publish(result.idGameSession!);
+  }
+
+  /** Só o mestre pode alterar o PV atual de um monstro. */
+  async updateMonsterHp(
+    idMonsterSession: string,
+    hpCurrent: number,
+    userId: string,
+  ): Promise<void> {
+    if (typeof hpCurrent !== 'number' || !Number.isInteger(hpCurrent)) {
+      throw new HttpErrors.UnprocessableEntity(
+        'hp_current deve ser um número inteiro',
+      );
+    }
+    const result = await this.repository.updateMonsterHp(
+      idMonsterSession,
+      hpCurrent,
+      userId,
+    );
+    if (result.status === 'not_found')
+      throw new HttpErrors.NotFound('Monstro não encontrado na sessão');
+    if (result.status === 'unauthorized')
+      throw new HttpErrors.Forbidden(
+        'Você não tem permissão para alterar a vida deste monstro',
+      );
+    this.events.publish(result.idGameSession!);
+  }
+
+  /** Só o mestre pode revelar/esconder monstros da sessão. */
+  async revealMonster(idMonsterSession: string, userId: string): Promise<void> {
+    const result = await this.repository.setMonsterRevealed(idMonsterSession, true, userId);
+    if (result.status === 'not_found')
+      throw new HttpErrors.NotFound('Monstro não encontrado na sessão');
+    if (result.status === 'unauthorized')
+      throw new HttpErrors.Forbidden('Apenas o mestre pode revelar o monstro');
+    this.events.publish(result.idGameSession!);
+  }
+
+  async hideMonster(idMonsterSession: string, userId: string): Promise<void> {
+    const result = await this.repository.setMonsterRevealed(idMonsterSession, false, userId);
+    if (result.status === 'not_found')
+      throw new HttpErrors.NotFound('Monstro não encontrado na sessão');
+    if (result.status === 'unauthorized')
+      throw new HttpErrors.Forbidden('Apenas o mestre pode esconder o monstro');
+    this.events.publish(result.idGameSession!);
+  }
+
+  private monsterSnapshotName(monster: MonsterSession): string {
+    const snapshot = monster.data_snapshot as {name?: string};
+    return snapshot.name ?? 'Monstro';
   }
 
   async hasSessionAccess(id: string, userId: string): Promise<boolean> {

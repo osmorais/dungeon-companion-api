@@ -6,3 +6,5 @@ export * from './email.service';
 export * from './game-session.service';
 export * from './combat.service';
 export * from './session-events.service';
+export * from './srd-monster.service';
+export * from './monster-catalog.service';

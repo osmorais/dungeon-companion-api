@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {inject, injectable, BindingScope} from '@loopback/core';
+import {Sql, TransactionSql} from 'postgres';
 import {PostgresDatasource} from '../datasources';
 import {
   AddPlayerInput,
@@ -9,6 +10,7 @@ import {
   GameSessionDetail,
   GameSessionSummary,
   MonsterSession,
+  MonsterSessionInput,
   NpcSession,
   PlayerSession,
   RollLogEntry,
@@ -54,21 +56,7 @@ export class GameSessionRepository {
 
       const insertedMonsters: MonsterSession[] = [];
       for (const monster of monsters) {
-        const [row] = await sql<MonsterSession[]>`
-          INSERT INTO monster_session (
-            id_game_session, monster_api_slug, custom_name,
-            hp_current, hp_max, ac, data_snapshot
-          ) VALUES (
-            ${session.id_game_session},
-            ${monster.monster_api_slug},
-            ${monster.custom_name ?? null},
-            ${monster.hp_current},
-            ${monster.hp_max},
-            ${monster.ac},
-            ${sql.json(monster.data_snapshot as any)}
-          )
-          RETURNING id_monster_session, id_game_session, monster_api_slug, custom_name, hp_current, hp_max, ac, data_snapshot
-        `;
+        const row = await this.insertMonster(sql, session.id_game_session, monster);
         insertedMonsters.push(row);
       }
 
@@ -78,6 +66,37 @@ export class GameSessionRepository {
         monsters: insertedMonsters,
       };
     });
+  }
+
+  /** Compartilhado entre createSession (dentro de uma transação) e addMonsterToSession (fora dela). */
+  private async insertMonster(
+    sql: Sql | TransactionSql,
+    idGameSession: string,
+    monster: MonsterSessionInput,
+  ): Promise<MonsterSession> {
+    const [row] = await sql<MonsterSession[]>`
+      INSERT INTO monster_session (
+        id_game_session, monster_api_slug, custom_name,
+        hp_current, hp_max, ac, data_snapshot
+      ) VALUES (
+        ${idGameSession},
+        ${monster.monster_api_slug},
+        ${monster.custom_name ?? null},
+        ${monster.hp_current},
+        ${monster.hp_max},
+        ${monster.ac},
+        ${sql.json(monster.data_snapshot as any)}
+      )
+      RETURNING id_monster_session, id_game_session, monster_api_slug, custom_name, hp_current, hp_max, ac, data_snapshot, is_revealed
+    `;
+    return row;
+  }
+
+  async addMonsterToSession(
+    idGameSession: string,
+    monster: MonsterSessionInput,
+  ): Promise<MonsterSession> {
+    return this.insertMonster(this.db.sql, idGameSession, monster);
   }
 
   async findById(id: string): Promise<GameSessionDetail | null> {
@@ -201,7 +220,7 @@ export class GameSessionRepository {
 
     const monsters = await this.db.sql<MonsterSession[]>`
       SELECT id_monster_session, id_game_session, monster_api_slug, custom_name,
-             hp_current, hp_max, ac, data_snapshot
+             hp_current, hp_max, ac, data_snapshot, is_revealed
       FROM monster_session
       WHERE id_game_session = ${id}
     `;
@@ -213,6 +232,8 @@ export class GameSessionRepository {
       players,
       npcs,
       monsters,
+      // Recalculado no service, que sabe se quem está pedindo é o mestre ou um jogador.
+      revealed_monsters: [],
       recent_rolls,
       combat: null,
     };
@@ -506,6 +527,105 @@ export class GameSessionRepository {
       UPDATE character SET current_hit_points = ${currentHitPoints} WHERE id_character = ${id_character}
     `;
     return {status: 'ok', idGameSession: id_game_session};
+  }
+
+  /** Só o mestre da sessão pode alterar o PV atual de um NPC. */
+  async updateNpcHp(
+    idNpcSession: string,
+    currentHitPoints: number,
+    userId: string,
+  ): Promise<{
+    status: 'not_found' | 'unauthorized' | 'ok';
+    idGameSession?: string;
+  }> {
+    const rows = await this.db.sql<
+      {
+        id_game_session: string;
+        id_character: number;
+        session_owner_id: string | null;
+      }[]
+    >`
+      SELECT ns.id_game_session, ns.id_character, gs.user_id AS session_owner_id
+      FROM npc_session ns
+      JOIN game_session gs ON gs.id_game_session = ns.id_game_session
+      WHERE ns.id_npc_session = ${idNpcSession}
+      LIMIT 1
+    `;
+    if (!rows.length) return {status: 'not_found'};
+
+    const {id_game_session, id_character, session_owner_id} = rows[0];
+    if (session_owner_id !== userId) return {status: 'unauthorized'};
+
+    await this.db.sql`
+      UPDATE character SET current_hit_points = ${currentHitPoints} WHERE id_character = ${id_character}
+    `;
+    return {status: 'ok', idGameSession: id_game_session};
+  }
+
+  /** Só o mestre da sessão pode alterar o PV atual de um monstro. */
+  async updateMonsterHp(
+    idMonsterSession: string,
+    hpCurrent: number,
+    userId: string,
+  ): Promise<{
+    status: 'not_found' | 'unauthorized' | 'ok';
+    idGameSession?: string;
+  }> {
+    const rows = await this.db.sql<
+      {id_game_session: string; session_owner_id: string | null}[]
+    >`
+      SELECT ms.id_game_session, gs.user_id AS session_owner_id
+      FROM monster_session ms
+      JOIN game_session gs ON gs.id_game_session = ms.id_game_session
+      WHERE ms.id_monster_session = ${idMonsterSession}
+      LIMIT 1
+    `;
+    if (!rows.length) return {status: 'not_found'};
+
+    const {id_game_session, session_owner_id} = rows[0];
+    if (session_owner_id !== userId) return {status: 'unauthorized'};
+
+    await this.db.sql`
+      UPDATE monster_session SET hp_current = ${hpCurrent} WHERE id_monster_session = ${idMonsterSession}
+    `;
+    return {status: 'ok', idGameSession: id_game_session};
+  }
+
+  /** Só o mestre da sessão pode revelar/esconder um monstro. */
+  async setMonsterRevealed(
+    idMonsterSession: string,
+    revealed: boolean,
+    userId: string,
+  ): Promise<{
+    status: 'not_found' | 'unauthorized' | 'ok';
+    idGameSession?: string;
+  }> {
+    const rows = await this.db.sql<
+      {id_game_session: string; session_owner_id: string | null}[]
+    >`
+      SELECT ms.id_game_session, gs.user_id AS session_owner_id
+      FROM monster_session ms
+      JOIN game_session gs ON gs.id_game_session = ms.id_game_session
+      WHERE ms.id_monster_session = ${idMonsterSession}
+      LIMIT 1
+    `;
+    if (!rows.length) return {status: 'not_found'};
+
+    const {id_game_session, session_owner_id} = rows[0];
+    if (session_owner_id !== userId) return {status: 'unauthorized'};
+
+    await this.db.sql`
+      UPDATE monster_session SET is_revealed = ${revealed} WHERE id_monster_session = ${idMonsterSession}
+    `;
+    return {status: 'ok', idGameSession: id_game_session};
+  }
+
+  /** Esconde todos os monstros revelados da sessão — chamado ao encerrar o combate. */
+  async hideAllMonsters(idGameSession: string): Promise<void> {
+    await this.db.sql`
+      UPDATE monster_session SET is_revealed = false
+      WHERE id_game_session = ${idGameSession} AND is_revealed = true
+    `;
   }
 
   async deleteById(id: string): Promise<boolean> {

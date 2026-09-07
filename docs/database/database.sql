@@ -484,3 +484,43 @@ CREATE INDEX idx_monster_snapshot_gin
 -- ==========================================
 
 ALTER TABLE character ADD COLUMN IF NOT EXISTS subrace VARCHAR(100);
+
+-- ==========================================
+-- MONSTER CATALOG (bestiário do mestre, cadastrado a partir do SRD de D&D 5e)
+-- ==========================================
+
+CREATE TABLE monster_catalog (
+    id_monster_catalog UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    user_id UUID NOT NULL,
+    monster_api_slug VARCHAR(255) NOT NULL,
+    custom_name VARCHAR(255),
+
+    hp_max INTEGER NOT NULL,
+    ac INTEGER NOT NULL,
+
+    data_snapshot JSONB NOT NULL,
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_monster_catalog_user
+        FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE
+);
+
+CREATE INDEX idx_monster_catalog_user
+    ON monster_catalog(user_id);
+
+-- ==========================================
+-- REVELAÇÃO DE MONSTROS E MONSTROS EM COMBATE
+-- ==========================================
+
+-- O mestre vê todo monstro adicionado à sessão; jogadores só o veem (nome, sem status/PV)
+-- depois que o mestre revela.
+ALTER TABLE monster_session ADD COLUMN IF NOT EXISTS is_revealed BOOLEAN NOT NULL DEFAULT false;
+
+-- Permite que um monstro participe do combate como 'monster' (junto de 'player' e 'npc').
+ALTER TABLE combat_participant ADD COLUMN IF NOT EXISTS id_monster_session UUID
+    REFERENCES monster_session(id_monster_session)
+    ON DELETE CASCADE;
