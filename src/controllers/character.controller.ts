@@ -1,5 +1,5 @@
 import {inject} from '@loopback/core';
-import {get, param, patch, post, requestBody, response, HttpErrors, RestBindings, Response} from '@loopback/rest';
+import {del, get, param, patch, post, requestBody, response, HttpErrors, RestBindings, Response} from '@loopback/rest';
 import {authenticate} from '@loopback/authentication';
 import {SecurityBindings, UserProfile} from '@loopback/security';
 import {AiAgentService, CharacterSheetService} from '../services';
@@ -229,6 +229,25 @@ export class CharacterController {
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.send(html);
       return res;
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (message === 'Character not found') throw new HttpErrors.NotFound(`Character with id ${id} not found`);
+      if (message === 'Unauthorized') throw new HttpErrors.Forbidden();
+      throw e;
+    }
+  }
+
+  @del('/api/character-sheet/{id}')
+  @response(200, {
+    description: 'Deletes a character and all its related data (session links, spells, etc.)',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async deleteSheet(
+    @param.path.number('id') id: number,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+  ): Promise<object> {
+    try {
+      return await this.characterSheetService.deleteCharacter(id, currentUser.id);
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
       if (message === 'Character not found') throw new HttpErrors.NotFound(`Character with id ${id} not found`);
