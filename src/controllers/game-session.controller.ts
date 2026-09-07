@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/naming-convention */
 import {inject, service} from '@loopback/core';
 import {
   del,
@@ -16,11 +17,13 @@ import {SecurityBindings, UserProfile} from '@loopback/security';
 import {GameSessionService} from '../services/game-session.service';
 import {SessionEventsService} from '../services/session-events.service';
 import {
+  AddMonsterToSessionInput,
   AddPlayerInput,
   CreateGameSessionInput,
   GameSessionCreated,
   GameSessionDetail,
   GameSessionPagedList,
+  MonsterSession,
   NpcSession,
   PlayerSession,
   RollLogEntry,
@@ -108,6 +111,77 @@ export class GameSessionController {
     );
   }
 
+  @post('/api/game-session/{id}/monster')
+  @response(201, {
+    description:
+      'Adds a monster to a game session — from an already-cataloged monster or by cataloging a new one on the fly',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async addMonster(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      description: 'Monster to add: either id_monster_catalog or monster_api_slug',
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            properties: {
+              id_monster_catalog: {type: 'string'},
+              monster_api_slug: {type: 'string'},
+              custom_name: {type: 'string'},
+            },
+          },
+        },
+      },
+    })
+    body: AddMonsterToSessionInput,
+  ): Promise<MonsterSession> {
+    return this.gameSessionService.addMonster(id, currentUser.id, body);
+  }
+
+  @patch('/api/game-session/monster-session/{id}/hp')
+  @response(204, {description: 'Monster current HP updated'})
+  async updateMonsterHp(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      description: 'New current HP value',
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            required: ['hp_current'],
+            properties: {hp_current: {type: 'integer'}},
+          },
+        },
+      },
+    })
+    body: {hp_current: number},
+  ): Promise<void> {
+    return this.gameSessionService.updateMonsterHp(id, body.hp_current, currentUser.id);
+  }
+
+  @post('/api/game-session/monster-session/{id}/reveal')
+  @response(204, {description: 'Reveals a monster to the players (name only, no stats/HP)'})
+  async revealMonster(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+  ): Promise<void> {
+    return this.gameSessionService.revealMonster(id, currentUser.id);
+  }
+
+  @post('/api/game-session/monster-session/{id}/hide')
+  @response(204, {description: 'Hides a previously revealed monster from the players again'})
+  async hideMonster(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+  ): Promise<void> {
+    return this.gameSessionService.hideMonster(id, currentUser.id);
+  }
+
   @post('/api/game-session/player')
   @response(201, {
     description: 'Adds a player to a game session by session code',
@@ -147,6 +221,33 @@ export class GameSessionController {
   ): Promise<void> {
     return this.gameSessionService.updateCharacterHp(
       idPlayerSession,
+      body.current_hit_points,
+      currentUser.id,
+    );
+  }
+
+  @patch('/api/game-session/npc/{idNpcSession}/hp')
+  @response(204, {description: 'Current HP updated'})
+  async updateNpcHp(
+    @param.path.string('idNpcSession') idNpcSession: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      description: 'New current HP value',
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            required: ['current_hit_points'],
+            properties: {current_hit_points: {type: 'integer'}},
+          },
+        },
+      },
+    })
+    body: {current_hit_points: number},
+  ): Promise<void> {
+    return this.gameSessionService.updateNpcHp(
+      idNpcSession,
       body.current_hit_points,
       currentUser.id,
     );

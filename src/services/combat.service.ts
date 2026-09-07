@@ -84,6 +84,9 @@ export class CombatService {
     const idNpcSessions = participants
       .filter(p => p.participant_type === 'npc')
       .map(p => p.id);
+    const idMonsterSessions = participants
+      .filter(p => p.participant_type === 'monster')
+      .map(p => p.id);
 
     const validPlayerIds = await this.repository.filterValidPlayerSessions(
       idGameSession,
@@ -93,10 +96,15 @@ export class CombatService {
       idGameSession,
       idNpcSessions,
     );
+    const monsterInfos = await this.repository.getValidMonsterDexModifiers(
+      idGameSession,
+      idMonsterSessions,
+    );
 
     if (
       validPlayerIds.length !== idPlayerSessions.length ||
-      npcInfos.length !== idNpcSessions.length
+      npcInfos.length !== idNpcSessions.length ||
+      monsterInfos.length !== idMonsterSessions.length
     ) {
       throw new HttpErrors.UnprocessableEntity(
         'Um ou mais participantes não pertencem a essa sessão',
@@ -117,6 +125,18 @@ export class CombatService {
         npc.id_npc_session,
         roll,
         roll + npc.dex_modifier,
+      );
+    }
+
+    // Monstros não jogam: a rolagem de iniciativa é automática, igual aos NPCs.
+    for (const monster of monsterInfos) {
+      const roll = this.rollD20();
+      const dexModifier = Math.floor((monster.dexterity - 10) / 2);
+      await this.repository.addMonsterParticipant(
+        encounter.id_combat_encounter,
+        monster.id_monster_session,
+        roll,
+        roll + dexModifier,
       );
     }
 
@@ -226,6 +246,7 @@ export class CombatService {
     }
 
     await this.repository.finishEncounter(idCombatEncounter);
+    await this.gameSessionRepository.hideAllMonsters(context.id_game_session);
     this.events.publish(context.id_game_session);
   }
 

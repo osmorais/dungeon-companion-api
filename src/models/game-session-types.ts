@@ -25,6 +25,17 @@ export interface MonsterSessionInput {
   data_snapshot: Record<string, unknown>;
 }
 
+/**
+ * Adiciona um monstro a uma sessão em andamento — ou a partir de um monstro já catalogado
+ * (`id_monster_catalog`) ou catalogando um novo na hora (`monster_api_slug`), exatamente um
+ * dos dois deve ser informado.
+ */
+export interface AddMonsterToSessionInput {
+  id_monster_catalog?: string;
+  monster_api_slug?: string;
+  custom_name?: string;
+}
+
 export interface AddPlayerInput {
   session_code: string;
   player_name: string;
@@ -76,6 +87,13 @@ export interface MonsterSession {
   hp_max: number;
   ac: number;
   data_snapshot: Record<string, unknown>;
+  is_revealed: boolean;
+}
+
+/** Versão pública de um monstro revelado — só o que os jogadores podem ver: nome, sem status/PV. */
+export interface RevealedMonster {
+  id_monster_session: string;
+  name: string;
 }
 
 export interface GameSessionCreated {
@@ -124,7 +142,10 @@ export interface GameSessionDetail {
   game_session: GameSession;
   players: PlayerSession[];
   npcs: NpcSession[];
+  /** Só preenchido para o mestre — jogadores recebem sempre um array vazio aqui. */
   monsters: MonsterSession[];
+  /** Monstros revelados pelo mestre — visível para todos, sem status/PV. */
+  revealed_monsters: RevealedMonster[];
   recent_rolls: RollLogEntry[];
   combat: CombatEncounterDetail | null;
 }

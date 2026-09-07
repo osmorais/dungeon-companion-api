@@ -108,6 +108,31 @@ export class CombatRepository {
     `;
   }
 
+  /** Retorna, para cada monstro válido da sessão, sua Destreza (usada pra rolar a iniciativa). */
+  async getValidMonsterDexModifiers(
+    idGameSession: string,
+    idMonsterSessions: string[],
+  ): Promise<{id_monster_session: string; dexterity: number}[]> {
+    if (!idMonsterSessions.length) return [];
+    return this.db.sql<{id_monster_session: string; dexterity: number}[]>`
+      SELECT id_monster_session, COALESCE((data_snapshot->>'dexterity')::int, 10) AS dexterity
+      FROM monster_session
+      WHERE id_game_session = ${idGameSession} AND id_monster_session = ANY(${idMonsterSessions})
+    `;
+  }
+
+  async addMonsterParticipant(
+    idCombatEncounter: string,
+    idMonsterSession: string,
+    initiativeRoll: number,
+    initiativeTotal: number,
+  ): Promise<void> {
+    await this.db.sql`
+      INSERT INTO combat_participant (id_combat_encounter, participant_type, id_monster_session, initiative_roll, initiative_total)
+      VALUES (${idCombatEncounter}, 'monster', ${idMonsterSession}, ${initiativeRoll}, ${initiativeTotal})
+    `;
+  }
+
   async findParticipants(
     idCombatEncounter: string,
   ): Promise<CombatParticipant[]> {
@@ -118,6 +143,7 @@ export class CombatRepository {
         cp.participant_type,
         cp.id_player_session,
         cp.id_npc_session,
+        cp.id_monster_session,
         cp.initiative_roll,
         cp.initiative_total,
         COALESCE(pchar.initiative_value, nchar.initiative_value, 0) AS dex_modifier
