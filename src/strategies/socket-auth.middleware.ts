@@ -26,13 +26,21 @@ function parseCookie(
 }
 
 /**
- * Autentica o handshake do socket.io lendo o mesmo cookie httpOnly (`token`) que a
- * estratégia JWT da API REST usa — mesma fonte de verdade (verifyJwtToken), só muda o
- * transporte de leitura do cookie (aqui não passa pelo cookie-parser do Express).
+ * Autentica o handshake do socket.io. Fonte primária: `socket.handshake.auth.token`, mandado
+ * explicitamente pelo cliente no payload do socket.io (não é header HTTP nem cookie) — o
+ * frontend usa isso porque `WebSocket` nativo não manda headers customizados, e o cookie
+ * `token` é bloqueado pelo navegador como cookie de terceiros nesse domínio cross-site, mesmo
+ * com SameSite=None (confirmado: nenhum `Cookie:` chega no handshake em produção). O cookie
+ * ainda é aceito como fallback (ex: dev local, onde é same-site e não sofre esse bloqueio) —
+ * mesma fonte de verdade de verificação (verifyJwtToken) que a estratégia JWT da API REST usa.
  */
 export function createSocketAuthMiddleware() {
   return (socket: Socket, next: (err?: Error) => void) => {
-    const token = parseCookie(socket.handshake.headers.cookie, 'token');
+    const authToken = socket.handshake.auth?.['token'];
+    const token =
+      typeof authToken === 'string' && authToken
+        ? authToken
+        : parseCookie(socket.handshake.headers.cookie, 'token');
     if (!token) return next(new Error('unauthorized'));
     try {
       const payload = verifyJwtToken(token);
