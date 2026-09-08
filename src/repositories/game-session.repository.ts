@@ -465,29 +465,47 @@ export class GameSessionRepository {
     return {status: 'ok', idGameSession: rows[0].id_game_session};
   }
 
-  /** Só o mestre da sessão pode remover um monstro. */
+  /**
+   * Só o mestre da sessão pode remover um monstro. Devolve nome/snapshot além do id da sessão
+   * porque `GameSessionService.defeatMonster` precisa montar o texto da notificação de
+   * derrota sem uma segunda query.
+   */
   async removeMonster(
     idMonsterSession: string,
     userId: string,
   ): Promise<{
     status: 'not_found' | 'unauthorized' | 'ok';
     idGameSession?: string;
+    customName?: string | null;
+    dataSnapshot?: Record<string, unknown>;
   }> {
     const rows = await this.db.sql<
-      {id_game_session: string; session_owner_id: string | null}[]
+      {
+        id_game_session: string;
+        session_owner_id: string | null;
+        custom_name: string | null;
+        data_snapshot: Record<string, unknown>;
+      }[]
     >`
-      SELECT ms.id_game_session, gs.user_id AS session_owner_id
+      SELECT ms.id_game_session, gs.user_id AS session_owner_id, ms.custom_name, ms.data_snapshot
       FROM monster_session ms
       JOIN game_session gs ON gs.id_game_session = ms.id_game_session
       WHERE ms.id_monster_session = ${idMonsterSession}
       LIMIT 1
     `;
     if (!rows.length) return {status: 'not_found'};
-    if (rows[0].session_owner_id !== userId) return {status: 'unauthorized'};
+    const {id_game_session, session_owner_id, custom_name, data_snapshot} =
+      rows[0];
+    if (session_owner_id !== userId) return {status: 'unauthorized'};
 
     await this.db
       .sql`DELETE FROM monster_session WHERE id_monster_session = ${idMonsterSession}`;
-    return {status: 'ok', idGameSession: rows[0].id_game_session};
+    return {
+      status: 'ok',
+      idGameSession: id_game_session,
+      customName: custom_name,
+      dataSnapshot: data_snapshot,
+    };
   }
 
   async addNpc(
