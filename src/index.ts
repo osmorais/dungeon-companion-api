@@ -1,4 +1,5 @@
 import {ApplicationConfig, DungeonCompanionApiApplication} from './application';
+import {SessionSocketGateway} from './services/session-socket.gateway';
 
 export * from './application';
 
@@ -6,6 +7,21 @@ export async function main(options: ApplicationConfig = {}) {
   const app = new DungeonCompanionApiApplication(options);
   await app.boot();
   await app.start();
+
+  // Só existe depois de app.start() — é onde o LoopBack cria o http.Server bruto.
+  const httpServer = app.restServer.httpServer?.server;
+  if (httpServer) {
+    const corsOrigin = options.rest?.cors?.origin;
+    const corsOrigins = Array.isArray(corsOrigin)
+      ? corsOrigin.map(String)
+      : corsOrigin
+        ? [String(corsOrigin)]
+        : [];
+    const gateway = await app.get<SessionSocketGateway>(
+      'services.SessionSocketGateway',
+    );
+    gateway.attach(httpServer, corsOrigins);
+  }
 
   const url = app.restServer.url;
   console.log(`Server is running at ${url}`);

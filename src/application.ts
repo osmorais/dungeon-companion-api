@@ -26,6 +26,7 @@ import {GameSessionRepository} from './repositories/game-session.repository';
 import {CombatRepository} from './repositories/combat.repository';
 import {PostgresDatasource} from './datasources';
 import {JWTStrategy} from './strategies/jwt.strategy';
+import {SessionSocketGateway} from './services/session-socket.gateway';
 
 export {ApplicationConfig};
 
@@ -67,6 +68,11 @@ export class DungeonCompanionApiApplication extends BootMixin(
     // CombatService e SessionEventsService são descobertos automaticamente pelo boot
     // (src/services/*.service.ts) — não registrar manualmente aqui, senão @service()
     // encontra duas bindings pra mesma classe ("More than one bindings found").
+    // SessionSocketGateway usa o sufixo .gateway.ts (não .service.ts) de propósito, pra NÃO
+    // ser descoberto automaticamente — por isso precisa do bind manual abaixo. Sem o segundo
+    // argumento: o LoopBack já deriva a key como `services.<NomeDaClasse>` sozinho — passar
+    // 'services.SessionSocketGateway' aqui duplicaria o namespace ('services.services.…').
+    this.service(SessionSocketGateway);
 
     this.bind('db.Postgres').toDynamicValue(() =>
       PostgresDatasource.getInstance(),

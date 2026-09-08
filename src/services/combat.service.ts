@@ -144,8 +144,13 @@ export class CombatService {
       await this.repository.activateEncounter(encounter.id_combat_encounter);
     }
 
-    this.events.publish(idGameSession);
-    return (await this.getActiveEncounterDetail(idGameSession))!;
+    const combat = (await this.getActiveEncounterDetail(idGameSession))!;
+    this.events.publish({
+      type: 'combat_started',
+      id_game_session: idGameSession,
+      combat,
+    });
+    return combat;
   }
 
   async submitInitiative(
@@ -193,7 +198,14 @@ export class CombatService {
       await this.repository.activateEncounter(context.id_combat_encounter);
     }
 
-    this.events.publish(context.id_game_session);
+    const combat = (await this.getActiveEncounterDetail(
+      context.id_game_session,
+    ))!;
+    this.events.publish({
+      type: 'initiative_submitted',
+      id_game_session: context.id_game_session,
+      combat,
+    });
   }
 
   async endTurn(idCombatEncounter: string, userId: string): Promise<void> {
@@ -234,7 +246,14 @@ export class CombatService {
       nextRound,
     );
 
-    this.events.publish(context.id_game_session);
+    const combat = (await this.getActiveEncounterDetail(
+      context.id_game_session,
+    ))!;
+    this.events.publish({
+      type: 'turn_ended',
+      id_game_session: context.id_game_session,
+      combat,
+    });
   }
 
   async endEncounter(idCombatEncounter: string, userId: string): Promise<void> {
@@ -246,8 +265,15 @@ export class CombatService {
     }
 
     await this.repository.finishEncounter(idCombatEncounter);
-    await this.gameSessionRepository.hideAllMonsters(context.id_game_session);
-    this.events.publish(context.id_game_session);
+    const hiddenMonsterIds = await this.gameSessionRepository.hideAllMonsters(
+      context.id_game_session,
+    );
+    this.events.publish({
+      type: 'combat_ended',
+      id_game_session: context.id_game_session,
+      id_combat_encounter: idCombatEncounter,
+      hidden_monster_ids: hiddenMonsterIds,
+    });
   }
 
   private rollD20(): number {

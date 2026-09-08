@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import {inject, service} from '@loopback/core';
+import {inject} from '@loopback/core';
 import {
   del,
   get,
@@ -9,13 +9,10 @@ import {
   requestBody,
   response,
   HttpErrors,
-  Response,
-  RestBindings,
 } from '@loopback/rest';
 import {authenticate} from '@loopback/authentication';
 import {SecurityBindings, UserProfile} from '@loopback/security';
 import {GameSessionService} from '../services/game-session.service';
-import {SessionEventsService} from '../services/session-events.service';
 import {
   AddMonsterToSessionInput,
   AddPlayerInput,
@@ -30,15 +27,11 @@ import {
   RollLogInput,
 } from '../models/game-session-types';
 
-const SSE_HEARTBEAT_MS = 20_000;
-
 @authenticate('jwt')
 export class GameSessionController {
   constructor(
     @inject('services.GameSessionService')
     private gameSessionService: GameSessionService,
-    @service(SessionEventsService)
-    private sessionEvents: SessionEventsService,
   ) {}
 
   @post('/api/game-session')
@@ -121,7 +114,8 @@ export class GameSessionController {
     @param.path.string('id') id: string,
     @inject(SecurityBindings.USER) currentUser: UserProfile,
     @requestBody({
-      description: 'Monster to add: either id_monster_catalog or monster_api_slug',
+      description:
+        'Monster to add: either id_monster_catalog or monster_api_slug',
       required: true,
       content: {
         'application/json': {
@@ -161,11 +155,17 @@ export class GameSessionController {
     })
     body: {hp_current: number},
   ): Promise<void> {
-    return this.gameSessionService.updateMonsterHp(id, body.hp_current, currentUser.id);
+    return this.gameSessionService.updateMonsterHp(
+      id,
+      body.hp_current,
+      currentUser.id,
+    );
   }
 
   @post('/api/game-session/monster-session/{id}/reveal')
-  @response(204, {description: 'Reveals a monster to the players (name only, no stats/HP)'})
+  @response(204, {
+    description: 'Reveals a monster to the players (name only, no stats/HP)',
+  })
   async revealMonster(
     @param.path.string('id') id: string,
     @inject(SecurityBindings.USER) currentUser: UserProfile,
@@ -174,7 +174,9 @@ export class GameSessionController {
   }
 
   @post('/api/game-session/monster-session/{id}/hide')
-  @response(204, {description: 'Hides a previously revealed monster from the players again'})
+  @response(204, {
+    description: 'Hides a previously revealed monster from the players again',
+  })
   async hideMonster(
     @param.path.string('id') id: string,
     @inject(SecurityBindings.USER) currentUser: UserProfile,
@@ -341,48 +343,5 @@ export class GameSessionController {
     @inject(SecurityBindings.USER) currentUser: UserProfile,
   ): Promise<GameSessionDetail> {
     return this.gameSessionService.getSession(id, currentUser.id);
-  }
-
-  /**
-   * Canal de eventos em tempo real (Server-Sent Events) da sessão. Substitui o polling
-   * do painel: o cliente escuta esse stream e, a cada evento `update`, refaz um
-   * GET /api/game-session/{id} normal para buscar o estado completo mais recente.
-   */
-  @get('/api/game-session/{id}/events')
-  @response(200, {description: 'Server-Sent Events stream of session updates'})
-  async streamEvents(
-    @param.path.string('id') id: string,
-    @inject(SecurityBindings.USER) currentUser: UserProfile,
-    @inject(RestBindings.Http.RESPONSE) res: Response,
-  ): Promise<void> {
-    const hasAccess = await this.gameSessionService.hasSessionAccess(
-      id,
-      currentUser.id,
-    );
-    if (!hasAccess)
-      throw new HttpErrors.Forbidden('Você não tem acesso a esta sessão');
-
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
-      'X-Accel-Buffering': 'no',
-    });
-    res.write(':ok\n\n');
-
-    const send = () => res.write('event: update\ndata: {}\n\n');
-    const unsubscribe = this.sessionEvents.subscribe(id, send);
-    const heartbeat = setInterval(
-      () => res.write(':ping\n\n'),
-      SSE_HEARTBEAT_MS,
-    );
-
-    return new Promise<void>(resolve => {
-      res.on('close', () => {
-        clearInterval(heartbeat);
-        unsubscribe();
-        resolve();
-      });
-    });
   }
 }
