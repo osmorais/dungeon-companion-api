@@ -56,7 +56,11 @@ export class GameSessionRepository {
 
       const insertedMonsters: MonsterSession[] = [];
       for (const monster of monsters) {
-        const row = await this.insertMonster(sql, session.id_game_session, monster);
+        const row = await this.insertMonster(
+          sql,
+          session.id_game_session,
+          monster,
+        );
         insertedMonsters.push(row);
       }
 
@@ -298,6 +302,18 @@ export class GameSessionRepository {
         SELECT 1 FROM game_session WHERE id_game_session = ${idGameSession} AND user_id = ${userId}
         UNION ALL
         SELECT 1 FROM player_session WHERE id_game_session = ${idGameSession} AND user_id = ${userId}
+      ) AS found
+    `;
+    return rows[0].found;
+  }
+
+  async isSessionOwner(
+    idGameSession: string,
+    userId: string,
+  ): Promise<boolean> {
+    const rows = await this.db.sql<{found: boolean}[]>`
+      SELECT EXISTS (
+        SELECT 1 FROM game_session WHERE id_game_session = ${idGameSession} AND user_id = ${userId}
       ) AS found
     `;
     return rows[0].found;
@@ -599,11 +615,18 @@ export class GameSessionRepository {
   ): Promise<{
     status: 'not_found' | 'unauthorized' | 'ok';
     idGameSession?: string;
+    customName?: string | null;
+    dataSnapshot?: Record<string, unknown>;
   }> {
     const rows = await this.db.sql<
-      {id_game_session: string; session_owner_id: string | null}[]
+      {
+        id_game_session: string;
+        session_owner_id: string | null;
+        custom_name: string | null;
+        data_snapshot: Record<string, unknown>;
+      }[]
     >`
-      SELECT ms.id_game_session, gs.user_id AS session_owner_id
+      SELECT ms.id_game_session, gs.user_id AS session_owner_id, ms.custom_name, ms.data_snapshot
       FROM monster_session ms
       JOIN game_session gs ON gs.id_game_session = ms.id_game_session
       WHERE ms.id_monster_session = ${idMonsterSession}
@@ -611,21 +634,29 @@ export class GameSessionRepository {
     `;
     if (!rows.length) return {status: 'not_found'};
 
-    const {id_game_session, session_owner_id} = rows[0];
+    const {id_game_session, session_owner_id, custom_name, data_snapshot} =
+      rows[0];
     if (session_owner_id !== userId) return {status: 'unauthorized'};
 
     await this.db.sql`
       UPDATE monster_session SET is_revealed = ${revealed} WHERE id_monster_session = ${idMonsterSession}
     `;
-    return {status: 'ok', idGameSession: id_game_session};
+    return {
+      status: 'ok',
+      idGameSession: id_game_session,
+      customName: custom_name,
+      dataSnapshot: data_snapshot,
+    };
   }
 
-  /** Esconde todos os monstros revelados da sessão — chamado ao encerrar o combate. */
-  async hideAllMonsters(idGameSession: string): Promise<void> {
-    await this.db.sql`
+  /** Esconde todos os monstros revelados da sessão — chamado ao encerrar o combate. Devolve os ids afetados. */
+  async hideAllMonsters(idGameSession: string): Promise<string[]> {
+    const rows = await this.db.sql<{id_monster_session: string}[]>`
       UPDATE monster_session SET is_revealed = false
       WHERE id_game_session = ${idGameSession} AND is_revealed = true
+      RETURNING id_monster_session
     `;
+    return rows.map(r => r.id_monster_session);
   }
 
   async deleteById(id: string): Promise<boolean> {

@@ -119,7 +119,11 @@ export class GameSessionService {
       {...input, user_id: userId},
       session.id_game_session,
     );
-    this.events.publish(session.id_game_session);
+    this.events.publish({
+      type: 'player_added',
+      id_game_session: session.id_game_session,
+      player,
+    });
     return player;
   }
 
@@ -129,7 +133,11 @@ export class GameSessionService {
       throw new HttpErrors.NotFound('NPC não encontrado na sessão');
     if (result.status === 'unauthorized')
       throw new HttpErrors.Forbidden('Apenas o mestre pode remover NPCs');
-    this.events.publish(result.idGameSession!);
+    this.events.publish({
+      type: 'npc_removed',
+      id_game_session: result.idGameSession!,
+      id_npc_session: idNpcSession,
+    });
   }
 
   async addNpc(
@@ -145,7 +153,11 @@ export class GameSessionService {
     if (session.game_session.user_id !== userId)
       throw new HttpErrors.Forbidden('Apenas o mestre pode adicionar NPCs');
     const npc = await this.repository.addNpc(idGameSession, idCharacter);
-    this.events.publish(idGameSession);
+    this.events.publish({
+      type: 'npc_added',
+      id_game_session: idGameSession,
+      npc,
+    });
     return npc;
   }
 
@@ -169,7 +181,10 @@ export class GameSessionService {
 
     let catalogEntry;
     if (input.id_monster_catalog) {
-      catalogEntry = await this.monsterCatalogService.getCatalogEntry(input.id_monster_catalog, userId);
+      catalogEntry = await this.monsterCatalogService.getCatalogEntry(
+        input.id_monster_catalog,
+        userId,
+      );
     } else if (input.monster_api_slug) {
       catalogEntry = await this.monsterCatalogService.catalogMonster(
         userId,
@@ -177,7 +192,9 @@ export class GameSessionService {
         input.custom_name ?? null,
       );
     } else {
-      throw new HttpErrors.BadRequest('Informe id_monster_catalog ou monster_api_slug');
+      throw new HttpErrors.BadRequest(
+        'Informe id_monster_catalog ou monster_api_slug',
+      );
     }
 
     const monster = await this.repository.addMonsterToSession(idGameSession, {
@@ -188,7 +205,11 @@ export class GameSessionService {
       ac: catalogEntry.ac,
       data_snapshot: catalogEntry.data_snapshot,
     });
-    this.events.publish(idGameSession);
+    this.events.publish({
+      type: 'monster_added',
+      id_game_session: idGameSession,
+      monster,
+    });
     return monster;
   }
 
@@ -200,7 +221,11 @@ export class GameSessionService {
       throw new HttpErrors.Forbidden(
         'Você não pode remover outro jogador da sessão',
       );
-    this.events.publish(result.idGameSession!);
+    this.events.publish({
+      type: 'player_removed',
+      id_game_session: result.idGameSession!,
+      id_player_session: idPlayerSession,
+    });
   }
 
   async updateCharacterHp(
@@ -227,7 +252,12 @@ export class GameSessionService {
       throw new HttpErrors.Forbidden(
         'Você não tem permissão para alterar a vida deste personagem',
       );
-    this.events.publish(result.idGameSession!);
+    this.events.publish({
+      type: 'player_hp_updated',
+      id_game_session: result.idGameSession!,
+      id_player_session: idPlayerSession,
+      current_hit_points: currentHitPoints,
+    });
   }
 
   async deleteSession(id: string): Promise<void> {
@@ -250,7 +280,7 @@ export class GameSessionService {
       .filter(m => m.is_revealed)
       .map(m => ({
         id_monster_session: m.id_monster_session,
-        name: m.custom_name ?? this.monsterSnapshotName(m),
+        name: m.custom_name ?? this.monsterSnapshotName(m.data_snapshot),
       }));
 
     const combat = await this.combatService.getActiveEncounterDetail(id);
@@ -287,7 +317,12 @@ export class GameSessionService {
       throw new HttpErrors.Forbidden(
         'Apenas o mestre pode alterar a vida deste NPC',
       );
-    this.events.publish(result.idGameSession!);
+    this.events.publish({
+      type: 'npc_hp_updated',
+      id_game_session: result.idGameSession!,
+      id_npc_session: idNpcSession,
+      current_hit_points: currentHitPoints,
+    });
   }
 
   /** Só o mestre pode alterar o PV atual de um monstro. */
@@ -312,35 +347,60 @@ export class GameSessionService {
       throw new HttpErrors.Forbidden(
         'Você não tem permissão para alterar a vida deste monstro',
       );
-    this.events.publish(result.idGameSession!);
+    this.events.publish({
+      type: 'monster_hp_updated',
+      id_game_session: result.idGameSession!,
+      id_monster_session: idMonsterSession,
+      hp_current: hpCurrent,
+    });
   }
 
   /** Só o mestre pode revelar/esconder monstros da sessão. */
   async revealMonster(idMonsterSession: string, userId: string): Promise<void> {
-    const result = await this.repository.setMonsterRevealed(idMonsterSession, true, userId);
+    const result = await this.repository.setMonsterRevealed(
+      idMonsterSession,
+      true,
+      userId,
+    );
     if (result.status === 'not_found')
       throw new HttpErrors.NotFound('Monstro não encontrado na sessão');
     if (result.status === 'unauthorized')
       throw new HttpErrors.Forbidden('Apenas o mestre pode revelar o monstro');
-    this.events.publish(result.idGameSession!);
+    this.events.publish({
+      type: 'monster_revealed',
+      id_game_session: result.idGameSession!,
+      id_monster_session: idMonsterSession,
+      name: result.customName ?? this.monsterSnapshotName(result.dataSnapshot),
+    });
   }
 
   async hideMonster(idMonsterSession: string, userId: string): Promise<void> {
-    const result = await this.repository.setMonsterRevealed(idMonsterSession, false, userId);
+    const result = await this.repository.setMonsterRevealed(
+      idMonsterSession,
+      false,
+      userId,
+    );
     if (result.status === 'not_found')
       throw new HttpErrors.NotFound('Monstro não encontrado na sessão');
     if (result.status === 'unauthorized')
       throw new HttpErrors.Forbidden('Apenas o mestre pode esconder o monstro');
-    this.events.publish(result.idGameSession!);
+    this.events.publish({
+      type: 'monster_hidden',
+      id_game_session: result.idGameSession!,
+      id_monster_session: idMonsterSession,
+    });
   }
 
-  private monsterSnapshotName(monster: MonsterSession): string {
-    const snapshot = monster.data_snapshot as {name?: string};
-    return snapshot.name ?? 'Monstro';
+  private monsterSnapshotName(snapshot: unknown): string {
+    return (snapshot as {name?: string} | undefined)?.name ?? 'Monstro';
   }
 
   async hasSessionAccess(id: string, userId: string): Promise<boolean> {
     return this.repository.hasSessionAccess(id, userId);
+  }
+
+  async isSessionOwner(id: string, userId: string): Promise<boolean> {
+    return this.repository.isSessionOwner(id, userId);
   }
 
   async addRoll(
@@ -387,7 +447,11 @@ export class GameSessionService {
       ...input,
       id_character: idCharacter,
     });
-    this.events.publish(idGameSession);
+    this.events.publish({
+      type: 'roll_added',
+      id_game_session: idGameSession,
+      roll,
+    });
     return roll;
   }
 
