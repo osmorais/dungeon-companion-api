@@ -229,6 +229,26 @@ export class GameSessionService {
     });
   }
 
+  /** Remove o monstro (mesma query de removeMonster) e avisa a todos com o nome, pra notificação de derrota. */
+  async defeatMonster(idMonsterSession: string, userId: string): Promise<void> {
+    const result = await this.repository.removeMonster(
+      idMonsterSession,
+      userId,
+    );
+    if (result.status === 'not_found')
+      throw new HttpErrors.NotFound('Monstro não encontrado na sessão');
+    if (result.status === 'unauthorized')
+      throw new HttpErrors.Forbidden(
+        'Apenas o mestre pode marcar o monstro como derrotado',
+      );
+    this.events.publish({
+      type: 'monster_defeated',
+      id_game_session: result.idGameSession!,
+      id_monster_session: idMonsterSession,
+      name: result.customName ?? this.monsterSnapshotName(result.dataSnapshot),
+    });
+  }
+
   async removePlayer(idPlayerSession: string, userId: string): Promise<void> {
     const result = await this.repository.removePlayer(idPlayerSession, userId);
     if (result.status === 'not_found')

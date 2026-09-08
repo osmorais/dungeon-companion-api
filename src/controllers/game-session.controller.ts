@@ -184,6 +184,18 @@ export class GameSessionController {
     return this.gameSessionService.hideMonster(id, currentUser.id);
   }
 
+  @post('/api/game-session/monster-session/{id}/defeat')
+  @response(204, {
+    description:
+      'Marks a monster as defeated: removes it from the session and notifies everyone',
+  })
+  async defeatMonster(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+  ): Promise<void> {
+    return this.gameSessionService.defeatMonster(id, currentUser.id);
+  }
+
   @post('/api/game-session/player')
   @response(201, {
     description: 'Adds a player to a game session by session code',
