@@ -255,6 +255,15 @@ export class GameSessionController {
     );
   }
 
+  @del('/api/game-session/monster-session/{id}')
+  @response(204, {description: 'Monster removed from session'})
+  async removeMonster(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+  ): Promise<void> {
+    return this.gameSessionService.removeMonster(id, currentUser.id);
+  }
+
   @del('/api/game-session/npc/{idNpcSession}')
   @response(204, {description: 'NPC removed from session'})
   async removeNpc(

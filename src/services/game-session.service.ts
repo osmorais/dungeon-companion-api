@@ -213,6 +213,22 @@ export class GameSessionService {
     return monster;
   }
 
+  async removeMonster(idMonsterSession: string, userId: string): Promise<void> {
+    const result = await this.repository.removeMonster(
+      idMonsterSession,
+      userId,
+    );
+    if (result.status === 'not_found')
+      throw new HttpErrors.NotFound('Monstro não encontrado na sessão');
+    if (result.status === 'unauthorized')
+      throw new HttpErrors.Forbidden('Apenas o mestre pode remover monstros');
+    this.events.publish({
+      type: 'monster_removed',
+      id_game_session: result.idGameSession!,
+      id_monster_session: idMonsterSession,
+    });
+  }
+
   async removePlayer(idPlayerSession: string, userId: string): Promise<void> {
     const result = await this.repository.removePlayer(idPlayerSession, userId);
     if (result.status === 'not_found')
