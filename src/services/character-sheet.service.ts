@@ -406,6 +406,7 @@ export class CharacterSheetService {
     const weaponsForCalc: WeaponRow[] = weapons.map(w => ({
       ...w,
       attack_bonus: 0,
+      damage_modifier: 0,
       isRanged: false,
     }));
     const weaponResult = buildWeaponActions(weaponsForCalc, stats, profBonus);

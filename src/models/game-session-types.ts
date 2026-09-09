@@ -105,6 +105,7 @@ export interface GameSessionCreated {
 export type RollType =
   | 'dice'
   | 'attack'
+  | 'damage'
   | 'skill'
   | 'save'
   | 'spell'

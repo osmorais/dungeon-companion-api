@@ -25,6 +25,7 @@ import {
 const ROLL_TYPES: RollType[] = [
   'dice',
   'attack',
+  'damage',
   'skill',
   'save',
   'spell',
