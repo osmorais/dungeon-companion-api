@@ -205,6 +205,7 @@ export class GameSessionService {
       hp_max: catalogEntry.hp_max,
       ac: catalogEntry.ac,
       data_snapshot: catalogEntry.data_snapshot,
+      image_url: catalogEntry.image_url,
     });
     this.events.publish({
       type: 'monster_added',

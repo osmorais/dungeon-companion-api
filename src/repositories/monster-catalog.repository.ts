@@ -24,7 +24,7 @@ export class MonsterCatalogRepository {
       ) VALUES (
         ${userId}, ${slug}, ${customName}, ${hpMax}, ${ac}, ${this.db.sql.json(dataSnapshot as any)}
       )
-      RETURNING id_monster_catalog, user_id, monster_api_slug, custom_name, hp_max, ac, data_snapshot, created_at
+      RETURNING id_monster_catalog, user_id, monster_api_slug, custom_name, hp_max, ac, data_snapshot, created_at, image_url
     `;
     return row;
   }
@@ -35,7 +35,7 @@ export class MonsterCatalogRepository {
     page: number,
   ): Promise<(MonsterCatalogEntry & {total_count: number})[]> {
     return this.db.sql<(MonsterCatalogEntry & {total_count: number})[]>`
-      SELECT id_monster_catalog, user_id, monster_api_slug, custom_name, hp_max, ac, data_snapshot, created_at,
+      SELECT id_monster_catalog, user_id, monster_api_slug, custom_name, hp_max, ac, data_snapshot, created_at, image_url,
         COUNT(*) OVER() AS total_count
       FROM monster_catalog
       WHERE user_id = ${userId}
@@ -47,11 +47,20 @@ export class MonsterCatalogRepository {
 
   async findById(id: string): Promise<MonsterCatalogEntry | null> {
     const rows = await this.db.sql<MonsterCatalogEntry[]>`
-      SELECT id_monster_catalog, user_id, monster_api_slug, custom_name, hp_max, ac, data_snapshot, created_at
+      SELECT id_monster_catalog, user_id, monster_api_slug, custom_name, hp_max, ac, data_snapshot, created_at, image_url
       FROM monster_catalog
       WHERE id_monster_catalog = ${id}
     `;
     return rows[0] ?? null;
+  }
+
+  async updateImage(id: string, imageUrl: string): Promise<MonsterCatalogEntry> {
+    const [row] = await this.db.sql<MonsterCatalogEntry[]>`
+      UPDATE monster_catalog SET image_url = ${imageUrl}
+      WHERE id_monster_catalog = ${id}
+      RETURNING id_monster_catalog, user_id, monster_api_slug, custom_name, hp_max, ac, data_snapshot, created_at, image_url
+    `;
+    return row;
   }
 
   async delete(id: string): Promise<void> {

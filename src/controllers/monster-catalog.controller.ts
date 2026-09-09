@@ -1,11 +1,37 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {inject, service} from '@loopback/core';
-import {del, get, param, post, requestBody, response} from '@loopback/rest';
+import {
+  del,
+  get,
+  param,
+  post,
+  requestBody,
+  response,
+  HttpErrors,
+  Request,
+  Response,
+  RestBindings,
+} from '@loopback/rest';
 import {authenticate} from '@loopback/authentication';
 import {SecurityBindings, UserProfile} from '@loopback/security';
+import multer from 'multer';
 import {MonsterCatalogService} from '../services/monster-catalog.service';
 import {SrdMonsterSummary} from '../services/srd-monster.service';
 import {MonsterCatalogEntry, MonsterCatalogPagedList} from '../models/monster-catalog-types';
+
+const IMAGE_UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
+
+const imageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {fileSize: IMAGE_UPLOAD_MAX_BYTES},
+  fileFilter: (_req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) {
+      cb(new Error('O arquivo precisa ser uma imagem'));
+      return;
+    }
+    cb(null, true);
+  },
+});
 
 @authenticate('jwt')
 export class MonsterCatalogController {
@@ -67,6 +93,48 @@ export class MonsterCatalogController {
       body.monster_api_slug,
       body.custom_name ?? null,
     );
+  }
+
+  @post('/api/monster-catalog/{id}/image')
+  @response(200, {
+    description: "Uploads a custom image for one of the DM's cataloged monsters",
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async uploadImage(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @inject(RestBindings.Http.REQUEST) request: Request,
+    @inject(RestBindings.Http.RESPONSE) httpResponse: Response,
+  ): Promise<MonsterCatalogEntry> {
+    const file = await this.parseImageUpload(request, httpResponse);
+    return this.monsterCatalogService.setCatalogImage(
+      id,
+      currentUser.id,
+      file.buffer,
+      file.mimetype,
+      file.originalname,
+    );
+  }
+
+  /** multer não tem binding nativo no LoopBack — roda como middleware Express dentro do handler. */
+  private parseImageUpload(
+    request: Request,
+    httpResponse: Response,
+  ): Promise<Express.Multer.File> {
+    return new Promise((resolve, reject) => {
+      imageUpload.single('image')(request, httpResponse, err => {
+        if (err) {
+          reject(new HttpErrors.BadRequest(err.message));
+          return;
+        }
+        const file = (request as unknown as {file?: Express.Multer.File}).file;
+        if (!file) {
+          reject(new HttpErrors.UnprocessableEntity('Arquivo de imagem é obrigatório'));
+          return;
+        }
+        resolve(file);
+      });
+    });
   }
 
   @get('/api/monster-catalog')

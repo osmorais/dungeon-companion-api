@@ -14,6 +14,8 @@ export interface MonsterCatalogEntry {
   ac: number;
   data_snapshot: Record<string, unknown>;
   created_at: Date;
+  /** Arte customizada subida pelo mestre (Supabase Storage) — null enquanto não subir nenhuma. */
+  image_url: string | null;
 }
 
 export interface MonsterCatalogPagedList {

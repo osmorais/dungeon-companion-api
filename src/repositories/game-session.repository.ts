@@ -84,7 +84,7 @@ export class GameSessionRepository {
     const [row] = await sql<MonsterSession[]>`
       INSERT INTO monster_session (
         id_game_session, monster_api_slug, custom_name,
-        hp_current, hp_max, ac, data_snapshot
+        hp_current, hp_max, ac, data_snapshot, image_url
       ) VALUES (
         ${idGameSession},
         ${monster.monster_api_slug},
@@ -92,9 +92,10 @@ export class GameSessionRepository {
         ${monster.hp_current},
         ${monster.hp_max},
         ${monster.ac},
-        ${sql.json(monster.data_snapshot as any)}
+        ${sql.json(monster.data_snapshot as any)},
+        ${monster.image_url ?? null}
       )
-      RETURNING id_monster_session, id_game_session, monster_api_slug, custom_name, hp_current, hp_max, ac, data_snapshot, is_revealed
+      RETURNING id_monster_session, id_game_session, monster_api_slug, custom_name, hp_current, hp_max, ac, data_snapshot, is_revealed, image_url
     `;
     return row;
   }
@@ -227,7 +228,7 @@ export class GameSessionRepository {
 
     const monsters = await this.db.sql<MonsterSession[]>`
       SELECT id_monster_session, id_game_session, monster_api_slug, custom_name,
-             hp_current, hp_max, ac, data_snapshot, is_revealed
+             hp_current, hp_max, ac, data_snapshot, is_revealed, image_url
       FROM monster_session
       WHERE id_game_session = ${id}
     `;
