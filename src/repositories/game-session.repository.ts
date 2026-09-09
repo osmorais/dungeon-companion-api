@@ -253,13 +253,14 @@ export class GameSessionRepository {
     const [row] = await this.db.sql<RollLogEntry[]>`
       INSERT INTO session_roll_log (
         id_game_session, id_character, actor_name, roll_type, label,
-        dice_notation, rolls, advantage_state, modifier, total
+        dice_notation, rolls, advantage_state, modifier, total, is_hidden
       ) VALUES (
         ${idGameSession}, ${input.id_character}, ${input.actor_name}, ${input.roll_type}, ${input.label},
-        ${input.dice_notation}, ${input.rolls}, ${input.advantage_state}, ${input.modifier}, ${input.total}
+        ${input.dice_notation}, ${input.rolls}, ${input.advantage_state}, ${input.modifier}, ${input.total},
+        ${input.is_hidden ?? false}
       )
       RETURNING id_roll, id_game_session, id_character, actor_name, roll_type, label,
-                dice_notation, rolls, advantage_state, modifier, total, created_at
+                dice_notation, rolls, advantage_state, modifier, total, created_at, is_hidden
     `;
 
     // Poda o histórico pra não crescer pra sempre — mantém só as ROLL_LOG_RETENTION mais
@@ -285,7 +286,7 @@ export class GameSessionRepository {
   ): Promise<RollLogEntry[]> {
     return this.db.sql<RollLogEntry[]>`
       SELECT id_roll, id_game_session, id_character, actor_name, roll_type, label,
-             dice_notation, rolls, advantage_state, modifier, total, created_at
+             dice_notation, rolls, advantage_state, modifier, total, created_at, is_hidden
       FROM session_roll_log
       WHERE id_game_session = ${idGameSession}
       ORDER BY created_at DESC

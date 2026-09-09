@@ -3,7 +3,7 @@ import {Server as SocketIOServer, Socket} from 'socket.io';
 import http from 'http';
 import {GameSessionService} from './game-session.service';
 import {SessionEventsService} from './session-events.service';
-import {DM_ONLY_EVENT_TYPES, SessionEvent} from '../models/session-event-types';
+import {SessionEvent, isDmOnlyEvent} from '../models/session-event-types';
 import {createSocketAuthMiddleware} from '../strategies/socket-auth.middleware';
 
 const sessionRoom = (id: string) => `session:${id}`;
@@ -70,7 +70,7 @@ export class SessionSocketGateway {
   }
 
   private broadcast(event: SessionEvent): void {
-    const room = DM_ONLY_EVENT_TYPES.has(event.type)
+    const room = isDmOnlyEvent(event)
       ? dmRoom(event.id_game_session)
       : sessionRoom(event.id_game_session);
     this.io?.to(room).emit('session:event', event);
