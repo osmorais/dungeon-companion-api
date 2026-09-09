@@ -21,10 +21,21 @@ import {MonsterCatalogEntry, MonsterCatalogPagedList} from '../models/monster-ca
 
 const IMAGE_UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
 
+/** Só os campos que o controller realmente usa do arquivo que o multer entrega. */
+interface MulterFile {
+  buffer: Buffer;
+  mimetype: string;
+  originalname: string;
+}
+
 const imageUpload = multer({
   storage: multer.memoryStorage(),
   limits: {fileSize: IMAGE_UPLOAD_MAX_BYTES},
-  fileFilter: (_req, file, cb) => {
+  fileFilter: (
+    _req: unknown,
+    file: MulterFile,
+    cb: (error: Error | null, acceptFile?: boolean) => void,
+  ) => {
     if (!file.mimetype.startsWith('image/')) {
       cb(new Error('O arquivo precisa ser uma imagem'));
       return;
@@ -117,17 +128,14 @@ export class MonsterCatalogController {
   }
 
   /** multer não tem binding nativo no LoopBack — roda como middleware Express dentro do handler. */
-  private parseImageUpload(
-    request: Request,
-    httpResponse: Response,
-  ): Promise<Express.Multer.File> {
+  private parseImageUpload(request: Request, httpResponse: Response): Promise<MulterFile> {
     return new Promise((resolve, reject) => {
-      imageUpload.single('image')(request, httpResponse, err => {
+      imageUpload.single('image')(request, httpResponse, (err: Error | null) => {
         if (err) {
           reject(new HttpErrors.BadRequest(err.message));
           return;
         }
-        const file = (request as unknown as {file?: Express.Multer.File}).file;
+        const file = (request as unknown as {file?: MulterFile}).file;
         if (!file) {
           reject(new HttpErrors.UnprocessableEntity('Arquivo de imagem é obrigatório'));
           return;
