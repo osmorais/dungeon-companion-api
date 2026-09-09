@@ -17,6 +17,9 @@ import {
   RollLogInput,
 } from '../models/game-session-types';
 
+/** Quantas rolagens ficam guardadas por sessão — não precisa de histórico ilimitado. */
+const ROLL_LOG_RETENTION = 30;
+
 @injectable({scope: BindingScope.TRANSIENT})
 export class GameSessionRepository {
   constructor(
@@ -258,12 +261,27 @@ export class GameSessionRepository {
       RETURNING id_roll, id_game_session, id_character, actor_name, roll_type, label,
                 dice_notation, rolls, advantage_state, modifier, total, created_at
     `;
+
+    // Poda o histórico pra não crescer pra sempre — mantém só as ROLL_LOG_RETENTION mais
+    // recentes da sessão. Roda a cada rolagem: a subquery é barata (ordena por índice,
+    // LIMIT pequeno) mesmo com o histórico completo acumulado até aqui.
+    await this.db.sql`
+      DELETE FROM session_roll_log
+      WHERE id_game_session = ${idGameSession}
+        AND id_roll NOT IN (
+          SELECT id_roll FROM session_roll_log
+          WHERE id_game_session = ${idGameSession}
+          ORDER BY created_at DESC
+          LIMIT ${ROLL_LOG_RETENTION}
+        )
+    `;
+
     return row;
   }
 
   async findRecentRolls(
     idGameSession: string,
-    limit = 30,
+    limit = ROLL_LOG_RETENTION,
   ): Promise<RollLogEntry[]> {
     return this.db.sql<RollLogEntry[]>`
       SELECT id_roll, id_game_session, id_character, actor_name, roll_type, label,
