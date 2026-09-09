@@ -125,6 +125,8 @@ export interface RollLogEntry {
   modifier: number;
   total: number;
   created_at: Date;
+  /** Rolagem oculta do mestre — não aparece pros jogadores (nem no log, nem no toast/socket). */
+  is_hidden: boolean;
 }
 
 export interface RollLogInput {
@@ -137,6 +139,8 @@ export interface RollLogInput {
   advantage_state: AdvantageState;
   modifier: number;
   total: number;
+  /** Só o mestre pode marcar como oculta — o service ignora esse campo pra quem não é dono da sessão. */
+  is_hidden?: boolean;
 }
 
 export interface GameSessionDetail {

@@ -49,3 +49,13 @@ export const DM_ONLY_EVENT_TYPES: ReadonlySet<SessionEventType> = new Set([
   'monster_added',
   'monster_hp_updated',
 ]);
+
+/**
+ * Além dos tipos sempre restritos ao mestre (DM_ONLY_EVENT_TYPES), `roll_added` é DM-only só
+ * quando a própria rolagem foi marcada como oculta (roll.is_hidden) — daí precisar checar o
+ * payload, não só o `type`.
+ */
+export function isDmOnlyEvent(event: SessionEvent): boolean {
+  if (DM_ONLY_EVENT_TYPES.has(event.type)) return true;
+  return event.type === 'roll_added' && event.roll.is_hidden;
+}

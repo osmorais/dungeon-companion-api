@@ -325,6 +325,9 @@ export class GameSessionService {
       ...session,
       monsters: isDm ? session.monsters : [],
       revealed_monsters: revealedMonsters,
+      recent_rolls: isDm
+        ? session.recent_rolls
+        : session.recent_rolls.filter(r => !r.is_hidden),
       combat,
     };
   }
@@ -480,9 +483,16 @@ export class GameSessionService {
         'Você não pode registrar uma rolagem para esse personagem',
       );
 
+    // Só o mestre pode ocultar uma rolagem dos jogadores — ignora silenciosamente o campo
+    // pra quem não é dono da sessão, em vez de rejeitar a rolagem inteira por causa disso.
+    const isDm = input.is_hidden
+      ? await this.repository.isSessionOwner(idGameSession, userId)
+      : false;
+
     const roll = await this.repository.addRoll(idGameSession, {
       ...input,
       id_character: idCharacter,
+      is_hidden: isDm && !!input.is_hidden,
     });
     this.events.publish({
       type: 'roll_added',
