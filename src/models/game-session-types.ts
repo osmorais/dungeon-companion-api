@@ -23,6 +23,7 @@ export interface MonsterSessionInput {
   hp_max: number;
   ac: number;
   data_snapshot: Record<string, unknown>;
+  image_url?: string | null;
 }
 
 /**
@@ -88,6 +89,7 @@ export interface MonsterSession {
   ac: number;
   data_snapshot: Record<string, unknown>;
   is_revealed: boolean;
+  image_url: string | null;
 }
 
 /** Versão pública de um monstro revelado — só o que os jogadores podem ver: nome, sem status/PV. */

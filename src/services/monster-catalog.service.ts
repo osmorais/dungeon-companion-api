@@ -3,6 +3,7 @@ import {injectable, BindingScope, service} from '@loopback/core';
 import {HttpErrors} from '@loopback/rest';
 import {MonsterCatalogRepository} from '../repositories/monster-catalog.repository';
 import {SrdMonsterService, SrdMonsterSummary} from './srd-monster.service';
+import {SupabaseStorageService} from './supabase-storage.service';
 import {MonsterCatalogEntry, MonsterCatalogPagedList} from '../models/monster-catalog-types';
 
 interface SrdMonsterShape {
@@ -17,6 +18,8 @@ export class MonsterCatalogService {
     private repository: MonsterCatalogRepository,
     @service(SrdMonsterService)
     private srdMonsterService: SrdMonsterService,
+    @service(SupabaseStorageService)
+    private storageService: SupabaseStorageService,
   ) {}
 
   async searchSrdMonsters(): Promise<SrdMonsterSummary[]> {
@@ -64,6 +67,25 @@ export class MonsterCatalogService {
       throw new HttpErrors.Forbidden('Você não pode ver um monstro catalogado por outro mestre');
     }
     return entry;
+  }
+
+  /** Sobe a arte customizada de um monstro já catalogado e salva a URL pública no registro. */
+  async setCatalogImage(
+    id: string,
+    userId: string,
+    buffer: Buffer,
+    contentType: string,
+    originalName: string,
+  ): Promise<MonsterCatalogEntry> {
+    const entry = await this.repository.findById(id);
+    if (!entry) throw new HttpErrors.NotFound('Monstro não encontrado no catálogo');
+    if (entry.user_id !== userId) {
+      throw new HttpErrors.Forbidden(
+        'Você não pode alterar um monstro catalogado por outro mestre',
+      );
+    }
+    const imageUrl = await this.storageService.uploadImage(buffer, contentType, originalName);
+    return this.repository.updateImage(id, imageUrl);
   }
 
   async deleteCatalogEntry(id: string, userId: string): Promise<void> {
