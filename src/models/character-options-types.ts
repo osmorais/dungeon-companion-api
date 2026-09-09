@@ -25,6 +25,8 @@ export interface WeaponOption {
 export interface WeaponRow {
   id_weapon: number;
   attack_bonus: number;
+  /** Modificador de habilidade (FOR/DES) aplicado à rolagem de dano — sem a proficiência, que só entra no ataque. */
+  damage_modifier: number;
   name: string;
   damage_die: string | null;
   damage_type: string | null;

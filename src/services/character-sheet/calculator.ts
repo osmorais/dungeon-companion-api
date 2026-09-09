@@ -215,6 +215,7 @@ export function buildWeaponActions(
   return {
     id_weapon: w.id_weapon,
     attack_bonus: w.attack_bonus,
+    damage_modifier: w.damage_modifier,
     name: w.name,
     damage_die: w.damage_die,
     damage_type: w.damage_type,
@@ -243,6 +244,7 @@ export function buildWeaponActions(
     }
 
     w.attack_bonus = profBonus + abilityMod;
+    w.damage_modifier = abilityMod;
     return w;
   });
 }
