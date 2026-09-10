@@ -15,6 +15,8 @@ export interface LevelUpFeatOption {
 export interface LevelUpSubclassOption {
   id_subclass: string;
   display_name: string;
+  /** O que essa opção concederia já neste nível, se escolhida (pra mostrar antes de confirmar). */
+  features: LevelUpFeaturePreview[];
 }
 
 /** Conjuração concedida pela subclasse escolhida (ex: Cavaleiro Arcano) em vez da classe base. */
