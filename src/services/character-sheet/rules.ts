@@ -29,6 +29,18 @@ export interface ClassLevelFeature {
   description: string;
 }
 
+/**
+ * Especialização/Aptidão (Ladino nível 1 e 6, Bardo nível 2 e 9) ou Bênção do Conhecimento
+ * (Clérigo, Domínio do Conhecimento) — dobra o bônus de proficiência em `count` perícias.
+ * Sem `pool`, a escolha é restrita a perícias já treinadas pelo personagem (Especialização/
+ * Aptidão). Com `pool` (chaves normalizadas de `normalizeSkill`), concede proficiência nova
+ * nessas perícias específicas, mesmo que não fossem treinadas antes (Bênção do Conhecimento).
+ */
+export interface ExpertiseGrant {
+  count: number;
+  pool?: string[];
+}
+
 export interface ClassLevelData {
   /** Features novas concedidas *neste* nível (vazio se o nível só traz ASI e/ou é escala numérica de recurso). */
   features: ClassLevelFeature[];
@@ -42,6 +54,8 @@ export interface ClassLevelData {
   isSubclassFeatureLevel: boolean;
   /** Recursos de classe que escalam com o nível (ex: {"Fúrias": "3", "Dano de Fúria": "+2"}), pra exibição na ficha. */
   resources?: Record<string, string>;
+  /** Ver `ExpertiseGrant`. */
+  expertise?: ExpertiseGrant;
 }
 
 export interface ClassRule {
@@ -71,6 +85,8 @@ export interface ClassRule {
 export interface SubclassLevelData {
   features: ClassLevelFeature[];
   resources?: Record<string, string>;
+  /** Ver `ExpertiseGrant`. */
+  expertise?: ExpertiseGrant;
 }
 
 /**
@@ -100,6 +116,36 @@ export function firstSubclassChoiceLevel(classRule: ClassRule): number | null {
     .filter(([, data]) => data.isSubclassFeatureLevel)
     .map(([level]) => parseInt(level, 10));
   return levels.length ? Math.min(...levels) : null;
+}
+
+export type RestType = 'short_rest' | 'long_rest';
+
+/**
+ * Recurso consumível com contador de uso rastreado na ficha (Fúria/Pontos de Chi/Canalizar
+ * Divindade) — `key` bate com a mesma chave usada em `resources` de `featuresByLevel`, de onde
+ * vem o máximo disponível em cada nível (sem precisar duplicar uma segunda tabela). Cada classe
+ * só tem um recurso rastreável hoje.
+ */
+export interface TrackableResource {
+  key: string;
+  rechargeOn: RestType;
+}
+
+export const TRACKABLE_RESOURCES: Record<number, TrackableResource> = {
+  1: {key: 'Fúrias', rechargeOn: 'long_rest'}, // Bárbaro
+  4: {key: 'Canalizar Divindade', rechargeOn: 'short_rest'}, // Clérigo
+  10: {key: 'Pontos de Chi', rechargeOn: 'short_rest'}, // Monge
+};
+
+/** `null` = a classe não tem recurso rastreável (ou ainda não ganhou nesse nível); `'unlimited'` = usos ilimitados (ex: Fúria do Bárbaro no nível 20). */
+export function maxTrackableResourceUses(classRule: ClassRule, level: number): number | 'unlimited' | null {
+  const resource = TRACKABLE_RESOURCES[classRule.id_class];
+  if (!resource) return null;
+  const raw = classRule.featuresByLevel?.[level]?.resources?.[resource.key];
+  if (!raw) return null;
+  if (raw.toLowerCase() === 'ilimitadas') return 'unlimited';
+  const parsed = parseInt(raw, 10);
+  return Number.isNaN(parsed) ? null : parsed;
 }
 
 export interface BackgroundRule {
@@ -474,6 +520,7 @@ export const CLASSES: Record<number, ClassRule> = {
         features: [
           {name: 'Aptidão', description: 'Escolha duas das suas proficiências em perícias. Seu bônus de proficiência é dobrado para qualquer teste de habilidade que você faça usando essas perícias.'},
         ],
+        expertise: {count: 2},
         isAsiLevel: false,
         isSubclassFeatureLevel: true,
         resources: {'Truques Conhecidos': '2', 'Magias Conhecidas': '6'},
@@ -527,6 +574,7 @@ export const CLASSES: Record<number, ClassRule> = {
           {name: 'Aptidão', description: 'Escolha mais duas das suas proficiências em perícias. Seu bônus de proficiência é dobrado para qualquer teste de habilidade que você faça usando essas proficiências escolhidas.'},
           {name: 'Segredos Mágicos', description: 'Você aprende duas magias de qualquer classe conjuradora, escolhendo entre a lista de magias dessa classe. Uma magia escolhida dessa forma conta como magia de bardo pra você.'},
         ],
+        expertise: {count: 2},
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
         resources: {'Truques Conhecidos': '4', 'Magias Conhecidas': '14'},
@@ -793,19 +841,19 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: true,
-        resources: {'Truques Conhecidos': '3'},
+        resources: {'Truques Conhecidos': '3', 'Canalizar Divindade': '1'},
       },
       3: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '3'},
+        resources: {'Truques Conhecidos': '3', 'Canalizar Divindade': '1'},
       },
       4: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '4'},
+        resources: {'Truques Conhecidos': '4', 'Canalizar Divindade': '1'},
       },
       5: {
         features: [
@@ -813,7 +861,7 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '4'},
+        resources: {'Truques Conhecidos': '4', 'Canalizar Divindade': '1'},
       },
       6: {
         features: [
@@ -821,13 +869,13 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: true,
-        resources: {'Truques Conhecidos': '4'},
+        resources: {'Truques Conhecidos': '4', 'Canalizar Divindade': '2'},
       },
       7: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '4'},
+        resources: {'Truques Conhecidos': '4', 'Canalizar Divindade': '2'},
       },
       8: {
         features: [
@@ -835,13 +883,13 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: true,
         isSubclassFeatureLevel: true,
-        resources: {'Truques Conhecidos': '4'},
+        resources: {'Truques Conhecidos': '4', 'Canalizar Divindade': '2'},
       },
       9: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '4'},
+        resources: {'Truques Conhecidos': '4', 'Canalizar Divindade': '2'},
       },
       10: {
         features: [
@@ -849,7 +897,7 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '5'},
+        resources: {'Truques Conhecidos': '5', 'Canalizar Divindade': '2'},
       },
       11: {
         features: [
@@ -857,19 +905,19 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '5'},
+        resources: {'Truques Conhecidos': '5', 'Canalizar Divindade': '2'},
       },
       12: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '5'},
+        resources: {'Truques Conhecidos': '5', 'Canalizar Divindade': '2'},
       },
       13: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '5'},
+        resources: {'Truques Conhecidos': '5', 'Canalizar Divindade': '2'},
       },
       14: {
         features: [
@@ -877,19 +925,19 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '5'},
+        resources: {'Truques Conhecidos': '5', 'Canalizar Divindade': '2'},
       },
       15: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '5'},
+        resources: {'Truques Conhecidos': '5', 'Canalizar Divindade': '2'},
       },
       16: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '5'},
+        resources: {'Truques Conhecidos': '5', 'Canalizar Divindade': '2'},
       },
       17: {
         features: [
@@ -897,7 +945,7 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: true,
-        resources: {'Truques Conhecidos': '5'},
+        resources: {'Truques Conhecidos': '5', 'Canalizar Divindade': '2'},
       },
       18: {
         features: [
@@ -905,13 +953,13 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '5'},
+        resources: {'Truques Conhecidos': '5', 'Canalizar Divindade': '3'},
       },
       19: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '5'},
+        resources: {'Truques Conhecidos': '5', 'Canalizar Divindade': '3'},
       },
       20: {
         features: [
@@ -919,7 +967,7 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '5'},
+        resources: {'Truques Conhecidos': '5', 'Canalizar Divindade': '3'},
       },
     },
     startingEquipment: ['Maça', 'Escudo', 'Cota de Malha', 'Pacote do Padre'],
@@ -1393,6 +1441,7 @@ export const CLASSES: Record<number, ClassRule> = {
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
         resources: {'Ataque Furtivo': '1d6'},
+        expertise: {count: 2},
       },
       2: {
         features: [
@@ -1426,6 +1475,7 @@ export const CLASSES: Record<number, ClassRule> = {
         features: [
           {name: 'Especialização', description: 'Escolha mais duas das suas proficiências em perícias (ou uma perícia e suas ferramentas de ladrão). Seu bônus de proficiência é dobrado para qualquer teste de habilidade que você faça usando essas proficiências escolhidas.'},
         ],
+        expertise: {count: 2},
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
         resources: {'Ataque Furtivo': '3d6'},
@@ -2533,6 +2583,7 @@ export const SUBCLASSES: Record<number, SubclassRule[]> = {
           features: [
             {name: 'Bênção do Conhecimento', description: 'Você aprende dois idiomas à sua escolha e se torna proficiente em duas das seguintes perícias: Arcanismo, História, Natureza ou Religião. Seu bônus de proficiência é dobrado em qualquer teste de habilidade que você fizer usando essas duas perícias.'},
           ],
+          expertise: {count: 2, pool: ['arcana', 'history', 'nature', 'religion']},
         },
         2: {
           features: [

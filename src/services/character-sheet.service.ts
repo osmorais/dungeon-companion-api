@@ -33,6 +33,10 @@ import {
   getMod,
   getProfBonus,
   applyRacialBonuses,
+  applyLevelBasedAttributeBonuses,
+  grantsAllSavingThrowProficiency,
+  calcSpeedBonusMeters,
+  formatSpeedWithBonus,
   buildAttributeBlocks,
   calcArmorClass,
   calcMaxHP,
@@ -44,6 +48,7 @@ import {
   buildLanguages,
   collectProficientSkills,
   normalizeKey,
+  normalizeSkill,
 } from './character-sheet/calculator';
 import {
   SPELL_SLOTS,
@@ -55,6 +60,9 @@ import {
   SUBCLASSES,
   ClassRule,
   SubclassRule,
+  TRACKABLE_RESOURCES,
+  maxTrackableResourceUses,
+  RestType,
 } from './character-sheet/rules';
 import {FEATS} from './character-sheet/feats';
 import {CLASS_ARMOUR_RULES} from './character-sheet/armour-rules';
@@ -110,10 +118,14 @@ export class CharacterSheetService {
     }
     const subclassRule = resolveSubclass(classKey, core_build.id_subclass ?? null);
 
-    const stats = applyRacialBonuses(
-      attributes.base_values,
-      raceRule,
-      subraceRule,
+    const stats = applyLevelBasedAttributeBonuses(
+      applyRacialBonuses(
+        attributes.base_values,
+        raceRule,
+        subraceRule,
+      ),
+      classKey,
+      level,
     );
     const profBonus = getProfBonus(level);
     const proficientSkills = collectProficientSkills(
@@ -122,7 +134,7 @@ export class CharacterSheetService {
       raceRule,
     );
 
-    const attributeBlocks = buildAttributeBlocks(stats, classRule, profBonus);
+    const attributeBlocks = buildAttributeBlocks(stats, classRule, profBonus, grantsAllSavingThrowProficiency(classKey, level));
     // const skillBlocks = buildSkillBlocks(stats, profBonus, proficientSkills);
     const ac = calcArmorClass(
       equipment.armour,
@@ -198,7 +210,10 @@ export class CharacterSheetService {
           proficiency_bonus: profBonus,
           armor_class: ac,
           initiative: getMod(stats.DEX),
-          speed: subraceRule?.speedOverride ?? raceRule.speed,
+          speed: formatSpeedWithBonus(
+            subraceRule?.speedOverride ?? raceRule.speed,
+            calcSpeedBonusMeters(classKey, level, classRule.featuresByLevel, equipment.armour?.armour_type ?? null, equipment.has_shield),
+          ),
           hit_points: {max: maxHP, current: maxHP, temporary: 0},
           hit_dice: `${level}d${classRule.hitDie}`,
           hit_dice_total: level,
@@ -243,6 +258,7 @@ export class CharacterSheetService {
         spellcasting_info: spellcastingInfo,
         spells,
         avatar_preset: input.avatar_preset ?? null,
+        resource_tracker: this.buildResourceTracker(classRule, level, 0),
       },
     };
   }
@@ -318,9 +334,28 @@ export class CharacterSheetService {
     );
   }
 
+  /** Recurso consumível rastreado na ficha (Fúria/Pontos de Chi/Canalizar Divindade) — `usedCount` vem de `resource_uses_expended[key]`, 0 pra personagem recém-criado. */
+  private buildResourceTracker(
+    classRule: ClassRule,
+    level: number,
+    usedCount: number,
+  ): CharacterSheet['character_sheet']['resource_tracker'] {
+    const resource = TRACKABLE_RESOURCES[classRule.id_class];
+    if (!resource) return null;
+    const max = maxTrackableResourceUses(classRule, level);
+    if (max === null) return null;
+    return {
+      name: resource.key,
+      max,
+      used: max === 'unlimited' ? 0 : Math.min(usedCount, max),
+      recharge_on: resource.rechargeOn,
+    };
+  }
+
   private computeSkills(
     allSkills: {
       id_skill: number;
+      name: string;
       id_attribute: number;
       attribute_name: string;
     }[],
@@ -350,18 +385,56 @@ export class CharacterSheetService {
     const profBonus = sheet.character_sheet.combat_stats.proficiency_bonus;
     const level = input.core_build.level;
 
+    const classRule = resolveClass(input.core_build.id_class);
+    const subclassRule = resolveSubclass(input.core_build.id_class, input.core_build.id_subclass ?? null);
+    const expertiseGrant = subclassRule?.featuresByLevel[1]?.expertise ?? classRule.featuresByLevel?.[1]?.expertise ?? null;
+    const expertiseIds = this.validateExpertiseSelection(expertiseGrant, input.choices.expertise_skill_ids, trainedIds, allSkills);
+
     return allSkills.map(skill => {
-      const isTrained = trainedIds.has(skill.id_skill);
+      const grantsProficiency = !!expertiseGrant?.pool && expertiseIds.has(skill.id_skill);
+      const isTrained = trainedIds.has(skill.id_skill) || grantsProficiency;
+      const isExpert = expertiseIds.has(skill.id_skill);
       const trained_value = isTrained ? profBonus : 0;
       const modifier = ptToModifier[skill.attribute_name] ?? 0;
       return {
         id_skill: skill.id_skill,
         is_trained: isTrained,
+        is_expert: isExpert,
         trained_value,
         level_value: level,
-        total_skill_value: modifier + trained_value,
+        total_skill_value: modifier + trained_value + (isExpert ? profBonus : 0),
       };
     });
+  }
+
+  /**
+   * Valida a escolha de Especialização/Aptidão (Ladino/Bardo, perícias já treinadas) ou Bênção
+   * do Conhecimento (Clérigo, lista restrita, concede treino novo) contra o que a classe/
+   * subclasse realmente concede no nível 1 — única situação em que isso é aplicado na criação
+   * (as ocorrências em níveis mais altos só existem via level-up, ver `confirmLevelUp`).
+   */
+  private validateExpertiseSelection(
+    grant: {count: number; pool?: string[]} | null,
+    submitted: number[] | undefined,
+    trainedIds: Set<number>,
+    allSkills: {id_skill: number; name: string}[],
+  ): Set<number> {
+    const ids = submitted ?? [];
+    if (!grant) {
+      if (ids.length > 0) throw new Error('Expertise choice not allowed for this class');
+      return new Set();
+    }
+    if (ids.length !== grant.count) throw new Error(`Expertise requires exactly ${grant.count} skill(s)`);
+    if (new Set(ids).size !== ids.length) throw new Error('Duplicate skill in expertise selection');
+    if (grant.pool) {
+      const poolIds = new Set(
+        allSkills.filter(s => grant.pool!.includes(normalizeSkill(s.name))).map(s => s.id_skill),
+      );
+      if (ids.some(id => !poolIds.has(id))) throw new Error('Expertise skill not in allowed pool');
+    } else if (ids.some(id => !trainedIds.has(id))) {
+      throw new Error('Expertise skill must already be trained');
+    }
+    return new Set(ids);
   }
 
   async loadCharacter(
@@ -396,7 +469,7 @@ export class CharacterSheetService {
       CAR: 'CHA',
     };
 
-    const stats: FinalStats = {
+    const rawStats: FinalStats = {
       STR: 10,
       DEX: 10,
       CON: 10,
@@ -409,12 +482,15 @@ export class CharacterSheetService {
     for (const attr of attributes) {
       const enKey = PT_TO_EN[attr.attribute_name];
       if (enKey) {
-        stats[enKey] = attr.score;
+        rawStats[enKey] = attr.score;
         modifierByKey[enKey] = attr.modifier;
       }
     }
 
+    const stats = applyLevelBasedAttributeBonuses(rawStats, character.id_class, character.level);
+
     const profBonus = character.proficiency_bonus;
+    const allSavesProficient = grantsAllSavingThrowProficiency(character.id_class, character.level);
 
     const attributesAndSaves = (() => {
       const keys: StatKeyEn[] = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
@@ -429,8 +505,11 @@ export class CharacterSheetService {
       >;
       for (const key of keys) {
         const score = stats[key];
-        const modifier = modifierByKey[key] ?? getMod(score);
-        const hasSaveProf = classRule.savingThrows.includes(key);
+        // Só reaproveita o modificador persistido quando o atributo não foi alterado "ao vivo"
+        // (Campeão Primitivo) — nesse caso o modificador precisa ser recalculado a partir do
+        // score já ajustado, não do valor congelado no banco.
+        const modifier = stats[key] === rawStats[key] ? modifierByKey[key] ?? getMod(score) : getMod(score);
+        const hasSaveProf = allSavesProficient || classRule.savingThrows.includes(key);
         result[key] = {
           score,
           modifier,
@@ -441,16 +520,26 @@ export class CharacterSheetService {
       return result;
     })();
 
-    const skillsResult: Skill[] = skills.map(s => ({
-      id_skill: s.id_skill,
-      name: s.name,
-      id_attribute: s.id_attribute,
-      attribute_name: s.attribute_name,
-      description: s.description,
-      is_trained: s.is_trained,
-      level_value: s.level_value,
-      total_skill_value: s.total_skill_value,
-    }));
+    // Bônus de perícia recalculado "ao vivo" (mesmo padrão da CA/deslocamento) a partir de
+    // `is_trained`/`is_expert` (persistidos) + atributo/bônus de proficiência atuais — antes
+    // ficava congelado no `total_skill_value` gravado na criação, e não acompanhava ASI nem
+    // o bônus de proficiência subindo com o nível.
+    const skillsResult: Skill[] = skills.map(s => {
+      const modifier = attributesAndSaves[PT_TO_EN[s.attribute_name]]?.modifier ?? 0;
+      const trainedValue = s.is_trained ? profBonus : 0;
+      const expertValue = s.is_expert ? profBonus : 0;
+      return {
+        id_skill: s.id_skill,
+        name: s.name,
+        id_attribute: s.id_attribute,
+        attribute_name: s.attribute_name,
+        description: s.description,
+        is_trained: s.is_trained,
+        is_expert: s.is_expert,
+        level_value: s.level_value,
+        total_skill_value: modifier + trainedValue + expertValue,
+      };
+    });
 
     const weaponsForCalc: WeaponRow[] = weapons.map(w => ({
       ...w,
@@ -516,7 +605,10 @@ export class CharacterSheetService {
           proficiency_bonus: character.proficiency_bonus,
           armor_class: ac,
           initiative: character.initiative_value,
-          speed: subraceRule?.speedOverride ?? raceRule.speed,
+          speed: formatSpeedWithBonus(
+            subraceRule?.speedOverride ?? raceRule.speed,
+            calcSpeedBonusMeters(character.id_class, character.level, classRule.featuresByLevel, character.armour_type, character.has_shield),
+          ),
           hit_points: {
             max: character.max_hit_points,
             current: character.current_hit_points,
@@ -566,6 +658,11 @@ export class CharacterSheetService {
         spells: spellList,
         avatar_preset: character.avatar_preset ?? null,
         id_character: character.id_character,
+        resource_tracker: this.buildResourceTracker(
+          classRule,
+          character.level,
+          character.resource_uses_expended?.[TRACKABLE_RESOURCES[character.id_class]?.key ?? ''] ?? 0,
+        ),
       },
     };
   }
@@ -756,6 +853,7 @@ export class CharacterSheetService {
       subclass_spellcasting: subclassRule?.spellcasting
         ? {spell_list_class_id: subclassRule.spellcasting.spellListClassId, allowed_schools: subclassRule.spellcasting.allowedSchools}
         : null,
+      expertise_choice: levelData.expertise ? {count: levelData.expertise.count} : null,
     };
   }
 
@@ -765,7 +863,7 @@ export class CharacterSheetService {
     input: LevelUpConfirmInput,
   ): Promise<LevelUpResult> {
     const {raw, classRule, nextLevel, levelData} = await this.resolveLevelUpContext(id, userId);
-    const {character, attributes, spells} = raw;
+    const {character, attributes, spells, skills} = raw;
 
     if (
       !Number.isInteger(input.hit_die_roll) ||
@@ -826,6 +924,8 @@ export class CharacterSheetService {
       throw new Error('ASI or feat choice not allowed for this level');
     }
 
+    const expertiseSkillIds = this.validateLevelUpExpertiseSelection(levelData.expertise ?? null, input.expertise_skill_ids, skills);
+
     const stats = this.statsFromRaw(attributes);
     const conModifier = getMod(stats.CON);
     const subraceRule = resolveSubrace(character.subrace ?? undefined);
@@ -863,6 +963,7 @@ export class CharacterSheetService {
       asiStatIncreases,
       featId,
       newSpellIds,
+      expertiseSkillIds,
     });
 
     if (result.status === 'already_applied') {
@@ -881,6 +982,30 @@ export class CharacterSheetService {
       id_subclass: subclassOptions ? chosenSubclassId : null,
       updated_attributes: result.updatedAttributes,
     };
+  }
+
+  /**
+   * Especialização/Aptidão ganha via level-up (Ladino nível 6, Bardo nível 3/10) — sempre a
+   * partir de perícias já treinadas (nenhuma subclasse concede isso num nível de level-up hoje,
+   * só a Bênção do Conhecimento do Clérigo, que só acontece na criação — ver `computeSkills`).
+   */
+  private validateLevelUpExpertiseSelection(
+    grant: {count: number} | null,
+    submitted: number[] | undefined,
+    currentSkills: {id_skill: number; is_trained: boolean; is_expert: boolean}[],
+  ): number[] {
+    const ids = submitted ?? [];
+    if (!grant) {
+      if (ids.length > 0) throw new Error('Expertise choice not allowed for this level');
+      return [];
+    }
+    if (ids.length !== grant.count) throw new Error(`Expertise requires exactly ${grant.count} skill(s)`);
+    if (new Set(ids).size !== ids.length) throw new Error('Duplicate skill in expertise selection');
+    const eligible = new Set(currentSkills.filter(s => s.is_trained && !s.is_expert).map(s => s.id_skill));
+    if (ids.some(id => !eligible.has(id))) {
+      throw new Error('Expertise skill must already be trained and not already an expert skill');
+    }
+    return ids;
   }
 
   /** ASI padrão de 5e: até 2 pontos no total, no máximo +2 num único atributo. */
@@ -979,7 +1104,7 @@ export class CharacterSheetService {
 
     await this.repository.updateEquipment(id, input.id_armour, input.has_shield);
 
-    const stats = this.statsFromRaw(attributes);
+    const stats = applyLevelBasedAttributeBonuses(this.statsFromRaw(attributes), character.id_class, character.level);
     const ac = calcArmorClass(armour, stats, input.has_shield, character.id_class);
     return {armor_class: ac};
   }
@@ -1066,6 +1191,38 @@ export class CharacterSheetService {
     return {slots_expended: expended};
   }
 
+  /** Marca ou desfaz um uso do recurso consumível da classe (Fúria/Pontos de Chi/Canalizar Divindade). */
+  async expendResourceUse(
+    id: number,
+    delta: number,
+    userId: string,
+  ): Promise<{resource_tracker: CharacterSheet['character_sheet']['resource_tracker']}> {
+    const raw = await this.repository.findCharacterById(id);
+    if (!raw)
+      throw new HttpErrors.NotFound(`Character with id ${id} not found`);
+    if (!(await this.userCanManageCharacter(raw.character.user_id, id, userId)))
+      throw new HttpErrors.Forbidden();
+    if (delta !== 1 && delta !== -1)
+      throw new HttpErrors.UnprocessableEntity('delta deve ser 1 ou -1');
+
+    const classRule = resolveClass(raw.character.id_class);
+    const resource = TRACKABLE_RESOURCES[raw.character.id_class];
+    const max = resource ? maxTrackableResourceUses(classRule, raw.character.level) : null;
+    if (!resource || max === null) {
+      throw new HttpErrors.UnprocessableEntity('Este personagem não possui recurso consumível rastreável');
+    }
+
+    const current = raw.character.resource_uses_expended?.[resource.key] ?? 0;
+    const next = max === 'unlimited' ? Math.max(0, current + delta) : Math.min(max, Math.max(0, current + delta));
+    const expended = {
+      ...(raw.character.resource_uses_expended ?? {}),
+      [resource.key]: next,
+    };
+
+    await this.repository.updateResourceUsesExpended(id, expended);
+    return {resource_tracker: this.buildResourceTracker(classRule, raw.character.level, next)};
+  }
+
   async rollHitDie(
     id: number,
     userId: string,
@@ -1077,6 +1234,7 @@ export class CharacterSheetService {
     hit_dice_spent: number;
     hit_dice_total: number;
     die_size: number;
+    resource_tracker: CharacterSheet['character_sheet']['resource_tracker'];
   }> {
     const raw = await this.repository.findCharacterById(id);
     if (!raw)
@@ -1109,6 +1267,10 @@ export class CharacterSheetService {
     const nextSpent = spent + 1;
 
     await this.repository.updateHitDiceAndHp(id, nextSpent, nextHp);
+    await this.rechargeResourceOnRest(id, raw.character, 'short_rest');
+    const resourceAfterShortRest = TRACKABLE_RESOURCES[raw.character.id_class]?.rechargeOn === 'short_rest'
+      ? this.buildResourceTracker(classRule, raw.character.level, 0)
+      : this.buildResourceTracker(classRule, raw.character.level, raw.character.resource_uses_expended?.[TRACKABLE_RESOURCES[raw.character.id_class]?.key ?? ''] ?? 0);
 
     return {
       roll,
@@ -1118,7 +1280,25 @@ export class CharacterSheetService {
       hit_dice_spent: nextSpent,
       hit_dice_total: hitDiceTotal,
       die_size: classRule.hitDie,
+      resource_tracker: resourceAfterShortRest,
     };
+  }
+
+  /**
+   * Zera o recurso consumível da classe (Fúria/Pontos de Chi/Canalizar Divindade) se o tipo de
+   * descanso recarregar ele — descanso longo sempre recarrega (é um superconjunto do curto).
+   */
+  private async rechargeResourceOnRest(
+    id: number,
+    character: {id_class: number; resource_uses_expended: Record<string, number> | null},
+    restType: RestType,
+  ): Promise<void> {
+    const resource = TRACKABLE_RESOURCES[character.id_class];
+    if (!resource) return;
+    if (restType === 'short_rest' && resource.rechargeOn !== 'short_rest') return;
+    const expended = {...(character.resource_uses_expended ?? {})};
+    delete expended[resource.key];
+    await this.repository.updateResourceUsesExpended(id, expended);
   }
 
   async longRest(
@@ -1128,6 +1308,7 @@ export class CharacterSheetService {
     slots_expended: Record<string, number>;
     current_hit_points: number;
     hit_dice_spent: number;
+    resource_tracker: CharacterSheet['character_sheet']['resource_tracker'];
   }> {
     const raw = await this.repository.findCharacterById(id);
     if (!raw)
@@ -1153,11 +1334,14 @@ export class CharacterSheetService {
       raw.character.max_hit_points,
     );
     await this.repository.updateSpellSlotsExpended(id, {});
+    await this.rechargeResourceOnRest(id, raw.character, 'long_rest');
+    const classRule = resolveClass(raw.character.id_class);
 
     return {
       slots_expended: {},
       current_hit_points: raw.character.max_hit_points,
       hit_dice_spent: nextSpent,
+      resource_tracker: this.buildResourceTracker(classRule, raw.character.level, 0),
     };
   }
 

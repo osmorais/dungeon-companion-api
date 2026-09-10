@@ -133,17 +133,44 @@ export function applyRacialBonuses(
   return stats;
 }
 
+/**
+ * Aumento de atributo concedido automaticamente por uma feature de nível alto (ex: Campeão
+ * Primitivo do Bárbaro no nível 20: FOR e CON +4, máximo 24). Aplicado sempre "ao vivo" sobre
+ * os atributos já persistidos (mesmo padrão da CA), nunca gravado como um novo valor de base —
+ * assim não precisa de migração nem risco de aplicar em dobro.
+ */
+export function applyLevelBasedAttributeBonuses(
+  stats: FinalStats,
+  classKey: number,
+  level: number,
+): FinalStats {
+  if (classKey === CLASSES[1].id_class && level >= 20) { // Bárbaro: Campeão Primitivo
+    return {
+      ...stats,
+      STR: Math.min(24, stats.STR + 4),
+      CON: Math.min(24, stats.CON + 4),
+    };
+  }
+  return stats;
+}
+
+/** Alma de Diamante (Monge, nível 14): proficiência em todos os testes de resistência. */
+export function grantsAllSavingThrowProficiency(classKey: number, level: number): boolean {
+  return classKey === CLASSES[10].id_class && level >= 14;
+}
+
 export function buildAttributeBlocks(
   stats: FinalStats,
   classRule: ClassRule,
   profBonus: number,
+  allSavesProficient = false,
 ): Record<StatKeyEn, StatBlock> {
   const keys: StatKeyEn[] = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
   const result = {} as Record<StatKeyEn, StatBlock>;
   for (const key of keys) {
     const score = stats[key];
     const modifier = getMod(score);
-    const hasSaveProf = classRule.savingThrows.includes(key);
+    const hasSaveProf = allSavesProficient || classRule.savingThrows.includes(key);
     result[key] = {
       score,
       modifier,
@@ -152,6 +179,40 @@ export function buildAttributeBlocks(
     };
   }
   return result;
+}
+
+/**
+ * Bônus de deslocamento concedido por nível (Movimento Rápido do Bárbaro, Deslocamento sem
+ * Armadura do Monge) — condicionado ao equipamento atual, igual à CA. Reaproveita os valores já
+ * tabelados em `featuresByLevel[n].resources` do Monge em vez de duplicar uma segunda tabela.
+ */
+export function calcSpeedBonusMeters(
+  classKey: number,
+  level: number,
+  featuresByLevel: ClassRule['featuresByLevel'],
+  armourType: string | null,
+  hasShield: boolean,
+): number {
+  if (classKey === CLASSES[1].id_class) { // Bárbaro: Movimento Rápido
+    if (level >= 5 && armourType !== 'Armadura Pesada') return 3;
+    return 0;
+  }
+  if (classKey === CLASSES[10].id_class) { // Monge: Deslocamento sem Armadura
+    if (armourType != null || hasShield) return 0;
+    const raw = featuresByLevel?.[level]?.resources?.['Deslocamento sem Armadura'];
+    if (!raw || raw === '–') return 0;
+    return parseFloat(raw.replace(',', '.').replace('+', '').replace('m', ''));
+  }
+  return 0;
+}
+
+/** Soma um bônus de deslocamento (em metros) a um texto de velocidade base (ex: "9m", "7,5m"). */
+export function formatSpeedWithBonus(baseSpeedText: string, bonusMeters: number): string {
+  if (bonusMeters <= 0) return baseSpeedText;
+  const base = parseFloat(baseSpeedText.replace(',', '.').replace('m', ''));
+  const total = base + bonusMeters;
+  const formatted = Number.isInteger(total) ? `${total}` : total.toFixed(1).replace('.', ',');
+  return `${formatted}m`;
 }
 
 // export function buildSkillBlocks(

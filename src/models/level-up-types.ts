@@ -38,6 +38,15 @@ export interface LevelUpSpellChoices {
   already_known_spell_ids: number[];
 }
 
+/**
+ * Especialização/Aptidão (Ladino nível 6, Bardo nível 3/10): dobra o bônus de proficiência em
+ * `count` perícias já treinadas pelo personagem — o frontend já tem a lista de treinadas/já
+ * especializadas na ficha carregada, não precisa mandar catálogo nenhum aqui.
+ */
+export interface LevelUpExpertiseChoice {
+  count: number;
+}
+
 /** O que muda ao subir de nível, calculado sem gravar nada — pra tela de revisão. */
 export interface LevelUpPreview {
   id_class: number;
@@ -57,6 +66,7 @@ export interface LevelUpPreview {
   /** Só populado no nível em que a classe escolhe subclasse e o personagem ainda não tem uma. */
   subclass_options: LevelUpSubclassOption[] | null;
   subclass_spellcasting: LevelUpSubclassSpellcasting | null;
+  expertise_choice: LevelUpExpertiseChoice | null;
 }
 
 /** Resultado da rolagem do dado de vida — feita pelo jogador, sob demanda, sem gravar nada. */
@@ -74,6 +84,8 @@ export interface LevelUpConfirmInput {
   new_spell_ids?: number[];
   /** Obrigatório só no nível em que a classe escolhe subclasse e o personagem ainda não tem uma. */
   id_subclass?: string;
+  /** Obrigatório só no nível em que a classe concede Especialização/Aptidão (ver `expertise_choice` no preview). */
+  expertise_skill_ids?: number[];
 }
 
 export interface LevelUpResult {

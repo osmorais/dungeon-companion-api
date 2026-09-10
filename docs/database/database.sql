@@ -575,3 +575,19 @@ ALTER TABLE Character ADD COLUMN IF NOT EXISTS id_subclass VARCHAR(100);
 
 -- Registra em qual level-up a subclasse foi escolhida, junto do resto do histórico de nível.
 ALTER TABLE character_level_history ADD COLUMN IF NOT EXISTS id_subclass VARCHAR(100);
+
+-- ==========================================
+-- EFEITO MECÂNICO AUTOMÁTICO (Fase 3) — Especialização/Aptidão/Bênção do Conhecimento
+-- ==========================================
+
+-- Perícia com bônus de proficiência dobrado (Ladino nível 1/6, Bardo nível 3/10, Domínio do
+-- Conhecimento do Clérigo no nível 1). `total_skill_value` já vem com o dobro somado no momento
+-- em que a escolha é feita (criação ou level-up) — essa coluna só existe pra exibição (estrela/
+-- indicador na ficha) e pra impedir escolher a mesma perícia duas vezes num level-up futuro.
+ALTER TABLE character_skill ADD COLUMN IF NOT EXISTS is_expert BOOLEAN NOT NULL DEFAULT false;
+
+-- Recurso consumível rastreado (Fúria do Bárbaro, Pontos de Chi do Monge, Canalizar Divindade do
+-- Clérigo) — mesmo padrão de `spell_slots_expended` (JSON por chave, pra não precisar de uma
+-- coluna nova a cada recurso futuro). Zera no descanso apropriado (curto ou longo, ver
+-- `TRACKABLE_RESOURCES` em rules.ts) e no descanso longo sempre (superset do curto).
+ALTER TABLE character ADD COLUMN IF NOT EXISTS resource_uses_expended JSONB NOT NULL DEFAULT '{}';

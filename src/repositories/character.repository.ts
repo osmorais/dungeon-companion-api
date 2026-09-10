@@ -14,9 +14,9 @@ export class CharacterRepository {
     private db: PostgresDatasource,
   ) {}
 
-  async findAllSkills(): Promise<{id_skill: number; id_attribute: number; attribute_name: string}[]> {
+  async findAllSkills(): Promise<{id_skill: number; name: string; id_attribute: number; attribute_name: string}[]> {
     return this.db.sql`
-      SELECT s.id_skill, s.id_attribute, at.name AS attribute_name
+      SELECT s.id_skill, s.name, s.id_attribute, at.name AS attribute_name
       FROM skill s
       JOIN attribute_type at ON at.id_attribute = s.id_attribute
     `;
@@ -90,8 +90,8 @@ export class CharacterRepository {
 
       for (const skill of skills) {
         await sql`
-          INSERT INTO character_skill (id_character, id_skill, is_trained, trained_value, level_value, total_skill_value)
-          VALUES (${idCharacter}, ${skill.id_skill}, ${skill.is_trained}, ${skill.trained_value}, ${skill.level_value}, ${skill.total_skill_value})
+          INSERT INTO character_skill (id_character, id_skill, is_trained, is_expert, trained_value, level_value, total_skill_value)
+          VALUES (${idCharacter}, ${skill.id_skill}, ${skill.is_trained}, ${skill.is_expert}, ${skill.trained_value}, ${skill.level_value}, ${skill.total_skill_value})
         `;
       }
 
@@ -163,6 +163,14 @@ export class CharacterRepository {
     `;
   }
 
+  async updateResourceUsesExpended(id: number, expended: Record<string, number>): Promise<void> {
+    await this.db.sql`
+      UPDATE character
+      SET resource_uses_expended = ${this.db.sql.json(expended)}
+      WHERE id_character = ${id}
+    `;
+  }
+
   async updateHitDiceAndHp(id: number, hitDiceSpent: number, currentHitPoints: number): Promise<void> {
     await this.db.sql`
       UPDATE character
@@ -189,6 +197,8 @@ export class CharacterRepository {
       asiStatIncreases: Partial<Record<StatKeyEn, number>> | null;
       featId: string | null;
       newSpellIds: number[];
+      /** Especialização/Aptidão ganha neste nível — dobra o bônus de proficiência nessas perícias, já treinadas. */
+      expertiseSkillIds: number[];
       /** Só setado quando esse é o nível de escolha de subclasse; nos demais fica `null` e o
        *  COALESCE abaixo mantém a subclasse já escolhida antes intacta. */
       idSubclass: string | null;
@@ -255,6 +265,14 @@ export class CharacterRepository {
           await sql`
             INSERT INTO character_spell (id_character, id_spell, id_attribute)
             VALUES (${idCharacter}, ${idSpell}, ${null})
+          `;
+        }
+
+        for (const idSkill of input.expertiseSkillIds) {
+          await sql`
+            UPDATE character_skill
+            SET is_expert = TRUE, total_skill_value = total_skill_value + ${input.newProficiencyBonus}
+            WHERE id_character = ${idCharacter} AND id_skill = ${idSkill}
           `;
         }
       });
@@ -361,6 +379,7 @@ export class CharacterRepository {
         c.current_hit_points, c.max_hit_points, c.hit_dice, c.passive_perception,
         c.xp_points, c.total_po,
         c.spellcasting_ability, c.spell_save_dc, c.spell_attack_bonus, c.spell_slots_expended,
+        c.resource_uses_expended,
         c.hit_dice_spent, c.user_id,
         c.avatar_preset,
         al.name   AS alignment_name,
@@ -385,7 +404,7 @@ export class CharacterRepository {
     `;
 
     const skills = await this.db.sql<CharacterRawData['skills'][number][]>`
-      SELECT s.id_skill, s.name, s.id_attribute, at.name AS attribute_name, s.description, cs.is_trained, cs.total_skill_value, cs.level_value
+      SELECT s.id_skill, s.name, s.id_attribute, at.name AS attribute_name, s.description, cs.is_trained, cs.is_expert, cs.total_skill_value, cs.level_value
       FROM character_skill cs
       JOIN skill s ON s.id_skill = cs.id_skill
       JOIN attribute_type at ON at.id_attribute = s.id_attribute
