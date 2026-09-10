@@ -728,6 +728,37 @@ export class GameSessionRepository {
     };
   }
 
+  /** Só o mestre da sessão pode trocar a imagem de um monstro já adicionado à sessão. */
+  async setMonsterImage(
+    idMonsterSession: string,
+    userId: string,
+    imageUrl: string,
+  ): Promise<{
+    status: 'not_found' | 'unauthorized' | 'ok';
+    idGameSession?: string;
+    monster?: MonsterSession;
+  }> {
+    const rows = await this.db.sql<
+      {id_game_session: string; session_owner_id: string | null}[]
+    >`
+      SELECT ms.id_game_session, gs.user_id AS session_owner_id
+      FROM monster_session ms
+      JOIN game_session gs ON gs.id_game_session = ms.id_game_session
+      WHERE ms.id_monster_session = ${idMonsterSession}
+      LIMIT 1
+    `;
+    if (!rows.length) return {status: 'not_found'};
+    if (rows[0].session_owner_id !== userId) return {status: 'unauthorized'};
+
+    const [monster] = await this.db.sql<MonsterSession[]>`
+      UPDATE monster_session SET image_url = ${imageUrl}
+      WHERE id_monster_session = ${idMonsterSession}
+      RETURNING id_monster_session, id_game_session, monster_api_slug, custom_name,
+                hp_current, hp_max, ac, data_snapshot, is_revealed, image_url
+    `;
+    return {status: 'ok', idGameSession: rows[0].id_game_session, monster};
+  }
+
   /**
    * Revela em lote os monstros que ainda não estavam revelados (usado ao iniciar um combate —
    * "entrar na luta" já revela o monstro pros jogadores). Só devolve os que realmente mudaram de

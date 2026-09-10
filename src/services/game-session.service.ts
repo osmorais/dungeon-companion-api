@@ -5,6 +5,7 @@ import {GameSessionRepository} from '../repositories/game-session.repository';
 import {CombatService} from './combat.service';
 import {SessionEventsService} from './session-events.service';
 import {MonsterCatalogService} from './monster-catalog.service';
+import {SupabaseStorageService} from './supabase-storage.service';
 import {
   AddMonsterToSessionInput,
   AddPlayerInput,
@@ -48,6 +49,8 @@ export class GameSessionService {
     private events: SessionEventsService,
     @service(MonsterCatalogService)
     private monsterCatalogService: MonsterCatalogService,
+    @service(SupabaseStorageService)
+    private storageService: SupabaseStorageService,
   ) {}
 
   async createSession(
@@ -396,6 +399,39 @@ export class GameSessionService {
       id_monster_session: idMonsterSession,
       hp_current: hpCurrent,
     });
+  }
+
+  /** Só o mestre pode trocar a imagem de um monstro já adicionado à sessão. */
+  async setMonsterImage(
+    idMonsterSession: string,
+    userId: string,
+    buffer: Buffer,
+    contentType: string,
+    originalName: string,
+  ): Promise<MonsterSession> {
+    const imageUrl = await this.storageService.uploadImage(
+      buffer,
+      contentType,
+      originalName,
+    );
+    const result = await this.repository.setMonsterImage(
+      idMonsterSession,
+      userId,
+      imageUrl,
+    );
+    if (result.status === 'not_found')
+      throw new HttpErrors.NotFound('Monstro não encontrado na sessão');
+    if (result.status === 'unauthorized')
+      throw new HttpErrors.Forbidden(
+        'Apenas o mestre pode alterar a imagem do monstro',
+      );
+    this.events.publish({
+      type: 'monster_image_updated',
+      id_game_session: result.idGameSession!,
+      id_monster_session: idMonsterSession,
+      image_url: imageUrl,
+    });
+    return result.monster!;
   }
 
   /** Só o mestre pode revelar/esconder monstros da sessão. */
