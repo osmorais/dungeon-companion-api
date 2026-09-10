@@ -3,7 +3,8 @@ import {del, get, param, patch, post, requestBody, response, HttpErrors, RestBin
 import {authenticate} from '@loopback/authentication';
 import {SecurityBindings, UserProfile} from '@loopback/security';
 import {AiAgentService, CharacterSheetService} from '../services';
-import {AvatarPreset, CharacterInput, CharacterBackground} from '../models/character-sheet-types';
+import {AvatarPreset, CharacterInput, CharacterBackground, EquipmentUpdateInput} from '../models/character-sheet-types';
+import {LevelUpConfirmInput} from '../models/level-up-types';
 
 @authenticate('jwt')
 export class CharacterController {
@@ -104,6 +105,94 @@ export class CharacterController {
     body: {avatar_preset: AvatarPreset},
   ): Promise<object> {
     return this.characterSheetService.updateAvatarPreset(id, body.avatar_preset, currentUser.id);
+  }
+
+  @patch('/api/character-sheet/{id}/equipment')
+  @response(200, {
+    description: 'Changes the equipped armour/shield and recomputes armor class',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async updateEquipment(
+    @param.path.number('id') id: number,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      description: 'Armour id (or null for none) and whether a shield is equipped',
+      required: true,
+      content: {'application/json': {schema: {type: 'object'}}},
+    })
+    body: EquipmentUpdateInput,
+  ): Promise<object> {
+    try {
+      return await this.characterSheetService.updateEquipment(id, currentUser.id, body);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (message === 'Character not found') throw new HttpErrors.NotFound(`Character with id ${id} not found`);
+      if (message === 'Unauthorized') throw new HttpErrors.Forbidden();
+      throw new HttpErrors.UnprocessableEntity(message);
+    }
+  }
+
+  @get('/api/character-sheet/{id}/level-up/preview')
+  @response(200, {
+    description: 'Computes what would change if the character leveled up, without saving anything',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async previewLevelUp(
+    @param.path.number('id') id: number,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @param.query.string('id_subclass') idSubclass?: string,
+  ): Promise<object> {
+    try {
+      return await this.characterSheetService.getLevelUpPreview(id, currentUser.id, idSubclass);
+    } catch (e: unknown) {
+      throw this.mapLevelUpError(e, id);
+    }
+  }
+
+  @post('/api/character-sheet/{id}/level-up/roll-hp')
+  @response(200, {
+    description: 'Rolls the hit die for the next level (player-triggered, does not save anything)',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async rollLevelUpHitDie(
+    @param.path.number('id') id: number,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+  ): Promise<object> {
+    try {
+      return await this.characterSheetService.rollLevelUpHitDie(id, currentUser.id);
+    } catch (e: unknown) {
+      throw this.mapLevelUpError(e, id);
+    }
+  }
+
+  @post('/api/character-sheet/{id}/level-up/confirm')
+  @response(200, {
+    description: 'Applies a level-up: rolled HP, ASI/feat choice, and recomputed derived stats',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async confirmLevelUp(
+    @param.path.number('id') id: number,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      description: 'Hit die roll and, when applicable, the ASI or feat choice for this level',
+      required: true,
+      content: {'application/json': {schema: {type: 'object'}}},
+    })
+    body: LevelUpConfirmInput,
+  ): Promise<object> {
+    try {
+      return await this.characterSheetService.confirmLevelUp(id, currentUser.id, body);
+    } catch (e: unknown) {
+      throw this.mapLevelUpError(e, id);
+    }
+  }
+
+  private mapLevelUpError(e: unknown, id: number): Error {
+    const message = e instanceof Error ? e.message : String(e);
+    if (message === 'Character not found') return new HttpErrors.NotFound(`Character with id ${id} not found`);
+    if (message === 'Unauthorized') return new HttpErrors.Forbidden();
+    if (message === 'Level already applied') return new HttpErrors.Conflict(message);
+    return new HttpErrors.UnprocessableEntity(message);
   }
 
   @patch('/api/character-sheet/{id}/hp')

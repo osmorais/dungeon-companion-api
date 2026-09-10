@@ -10,14 +10,25 @@ import {
   StatKeyEn,
   AvatarPreset,
   CharacterBackground,
+  EquipmentUpdateInput,
 } from '../models/character-sheet-types';
-import {Spell, WeaponRow, Skill} from '../models/character-options-types';
+import {Armour, Spell, WeaponRow, Skill} from '../models/character-options-types';
+import {
+  LevelUpConfirmInput,
+  LevelUpHitDieRoll,
+  LevelUpPreview,
+  LevelUpResult,
+  LevelUpSpellChoices,
+  LevelUpSubclassOption,
+} from '../models/level-up-types';
 import {CharacterRepository} from '../repositories/character.repository';
 import {GameSessionRepository} from '../repositories/game-session.repository';
+import {CharacterOptionsRepository} from '../repositories/character-options.repository';
 import {
   resolveRace,
   resolveSubrace,
   resolveClass,
+  resolveSubclass,
   resolveBackground,
   getMod,
   getProfBonus,
@@ -25,13 +36,28 @@ import {
   buildAttributeBlocks,
   calcArmorClass,
   calcMaxHP,
+  calcRolledLevelUpHp,
   buildWeaponActions,
   collectTraits,
   buildSpellcasting,
+  SubclassCastingOverride,
   buildLanguages,
   collectProficientSkills,
   normalizeKey,
 } from './character-sheet/calculator';
+import {
+  SPELL_SLOTS,
+  KNOWN_CASTER_CLASS_IDS,
+  WIZARD_CLASS_ID,
+  THIRD_CASTER_SLOTS,
+  getWizardSpellbookSize,
+  firstSubclassChoiceLevel,
+  SUBCLASSES,
+  ClassRule,
+  SubclassRule,
+} from './character-sheet/rules';
+import {FEATS} from './character-sheet/feats';
+import {CLASS_ARMOUR_RULES} from './character-sheet/armour-rules';
 
 @injectable({scope: BindingScope.TRANSIENT})
 export class CharacterSheetService {
@@ -40,6 +66,8 @@ export class CharacterSheetService {
     private repository: CharacterRepository,
     @service(GameSessionRepository)
     private gameSessionRepository: GameSessionRepository,
+    @service(CharacterOptionsRepository)
+    private optionsRepository: CharacterOptionsRepository,
   ) {}
 
   /**
@@ -68,6 +96,19 @@ export class CharacterSheetService {
     // const classKey = normalizeKey(core_build.class);
     const classKey = core_build.id_class ?? 0;
     const bgRule = resolveBackground(core_build.id_background);
+
+    // Bruxo/Clérigo/Feiticeiro escolhem subclasse já na criação (nível 1) — as demais escolhem
+    // depois, via level-up (ver resolveSubclassForLevelUp). `subclassOptionsAtCreation` fica
+    // vazio pras classes ainda sem SUBCLASSES cadastradas, então não trava a criação delas.
+    const chooseLevel = firstSubclassChoiceLevel(classRule);
+    const subclassOptionsAtCreation = chooseLevel !== null && level >= chooseLevel ? SUBCLASSES[classKey] ?? [] : [];
+    if (subclassOptionsAtCreation.length > 0) {
+      const valid = subclassOptionsAtCreation.some(s => s.id_subclass === core_build.id_subclass);
+      if (!valid) throw new Error('Subclass choice required for this class');
+    } else if (core_build.id_subclass) {
+      throw new Error('Subclass choice not allowed for this class yet');
+    }
+    const subclassRule = resolveSubclass(classKey, core_build.id_subclass ?? null);
 
     const stats = applyRacialBonuses(
       attributes.base_values,
@@ -100,7 +141,7 @@ export class CharacterSheetService {
       stats,
       profBonus,
     );
-    const traits = collectTraits(raceRule, subraceRule, classRule, bgRule);
+    const traits = collectTraits(raceRule, subraceRule, classRule, bgRule, level, subclassRule);
     const spells = choices.spells ?? [];
     const languages = buildLanguages(raceRule, bgRule);
 
@@ -144,7 +185,10 @@ export class CharacterSheetService {
       character_sheet: {
         header: {
           name: character_details?.name ?? 'Aventureiro',
-          class_and_level: `${classRule.displayName} ${level}`,
+          class_and_level: subclassRule
+            ? `${classRule.displayName} (${subclassRule.displayName}) ${level}`
+            : `${classRule.displayName} ${level}`,
+          id_class: classKey,
           race: raceDisplay,
           background: bgRule.displayName,
           alignment: character_details?.alignment ?? 'Neutro',
@@ -191,6 +235,10 @@ export class CharacterSheetService {
         equipment: {
           currency: {cp: 0, sp: 0, ep: 0, gp: totalGold, pp: 0},
           items: allItems,
+          equipped_armour: equipment.armour
+            ? {id_armour: equipment.armour.id_armour, name: equipment.armour.name, armour_type: equipment.armour.armour_type}
+            : null,
+          has_shield: equipment.has_shield,
         },
         spellcasting_info: spellcastingInfo,
         spells,
@@ -334,6 +382,7 @@ export class CharacterSheetService {
     const {character, attributes, skills, spells, weapons, items} = raw;
 
     const classRule = resolveClass(character.id_class);
+    const subclassRule = resolveSubclass(character.id_class, character.id_subclass);
     const raceRule = resolveRace(character.id_race);
     const subraceRule = resolveSubrace(character.subrace ?? undefined);
     const bgRule = resolveBackground(character.id_background ?? 1);
@@ -426,8 +475,15 @@ export class CharacterSheetService {
       is_prepared: s.is_prepared,
     }));
 
-    const traits = collectTraits(raceRule, subraceRule, classRule, bgRule);
+    const traits = collectTraits(raceRule, subraceRule, classRule, bgRule, character.level, subclassRule);
     const languages = buildLanguages(raceRule, bgRule);
+
+    // CA deixou de ser congelada em `character.armour_class` — recalculada a cada carregamento
+    // (mesmo padrão já usado pros slots de magia), pra refletir troca de equipamento e ASI de DEX.
+    const equippedArmourRule = character.id_armour
+      ? {armour_type: character.armour_type, armour_class_base: character.armour_class_base, max_dexterity_bonus: character.max_dexterity_bonus}
+      : null;
+    const ac = calcArmorClass(equippedArmourRule, stats, character.has_shield, character.id_class);
 
     const spellcastingResult = buildSpellcasting(
       classRule,
@@ -437,6 +493,7 @@ export class CharacterSheetService {
       stats,
       profBonus,
       character.spell_slots_expended ?? {},
+      this.subclassCastingOverride(subclassRule),
     );
     const spellcastingInfo = spellcastingResult.is_spellcaster
       ? spellcastingResult
@@ -446,7 +503,10 @@ export class CharacterSheetService {
       character_sheet: {
         header: {
           name: character.name,
-          class_and_level: `${classRule.displayName} ${character.level}`,
+          class_and_level: subclassRule
+            ? `${classRule.displayName} (${subclassRule.displayName}) ${character.level}`
+            : `${classRule.displayName} ${character.level}`,
+          id_class: character.id_class,
           race: subraceRule ? subraceRule.displayName : raceRule.displayName,
           background: bgRule.displayName,
           alignment: character.alignment_name ?? 'Neutro',
@@ -454,7 +514,7 @@ export class CharacterSheetService {
         },
         combat_stats: {
           proficiency_bonus: character.proficiency_bonus,
-          armor_class: character.armour_class,
+          armor_class: ac,
           initiative: character.initiative_value,
           speed: subraceRule?.speedOverride ?? raceRule.speed,
           hit_points: {
@@ -497,6 +557,10 @@ export class CharacterSheetService {
         equipment: {
           currency: {cp: 0, sp: 0, ep: 0, gp: character.total_po, pp: 0},
           items: items.map(i => i.name),
+          equipped_armour: character.id_armour
+            ? {id_armour: character.id_armour, name: character.armour_name ?? '', armour_type: character.armour_type}
+            : null,
+          has_shield: character.has_shield,
         },
         spellcasting_info: spellcastingInfo,
         spells: spellList,
@@ -510,6 +574,357 @@ export class CharacterSheetService {
     const sheet = await this.loadCharacter(id, userId);
     if (!sheet) throw new Error('Character not found');
     return buildPrintHtml(sheet);
+  }
+
+  private static parseResourceCount(
+    resources: Record<string, string> | undefined,
+    key: string,
+  ): number {
+    const raw = resources?.[key];
+    const n = raw ? parseInt(raw, 10) : NaN;
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  /**
+   * Quantas magias/truques novos o personagem pode escolher neste nível — mesmo modelo do
+   * wizard de criação (`hasSharedSpellPool` em character-wizard.component.ts): Bardo/Bruxo/
+   * Feiticeiro/Ranger/Mago têm um pool livre distribuível entre círculos; Clérigo/Druida/
+   * Paladino têm uma cota fixa por círculo (igual à contagem de espaços de magia daquele
+   * círculo).
+   */
+  private computeSpellChoices(
+    classKey: number,
+    isSpellcaster: boolean,
+    currentLevel: number,
+    nextLevel: number,
+    currentLevelData: {resources?: Record<string, string>} | undefined,
+    nextLevelData: {resources?: Record<string, string>},
+    knownSpellIds: number[],
+    forceKnownCaster = false,
+  ): LevelUpSpellChoices | null {
+    if (!isSpellcaster) return null;
+
+    const cantripsBefore = CharacterSheetService.parseResourceCount(currentLevelData?.resources, 'Truques Conhecidos');
+    const cantripsAfter = CharacterSheetService.parseResourceCount(nextLevelData.resources, 'Truques Conhecidos');
+    const cantripsGained = Math.max(0, cantripsAfter - cantripsBefore);
+
+    let spellsGained = 0;
+    const spellsGainedByCircle: Record<string, number> = {};
+
+    if (forceKnownCaster || KNOWN_CASTER_CLASS_IDS.has(classKey)) {
+      const before = CharacterSheetService.parseResourceCount(currentLevelData?.resources, 'Magias Conhecidas');
+      const after = CharacterSheetService.parseResourceCount(nextLevelData.resources, 'Magias Conhecidas');
+      spellsGained = Math.max(0, after - before);
+    } else if (classKey === WIZARD_CLASS_ID) {
+      spellsGained = Math.max(0, getWizardSpellbookSize(nextLevel) - getWizardSpellbookSize(currentLevel));
+    } else {
+      const before = SPELL_SLOTS[classKey]?.[currentLevel] ?? {};
+      const after = SPELL_SLOTS[classKey]?.[nextLevel] ?? {};
+      for (const [circleKey, afterCount] of Object.entries(after)) {
+        const delta = afterCount - (before[circleKey] ?? 0);
+        if (delta > 0) spellsGainedByCircle[circleKey] = delta;
+      }
+    }
+
+    return {
+      cantrips_gained: cantripsGained,
+      spells_gained: spellsGained,
+      spells_gained_by_circle: spellsGainedByCircle,
+      already_known_spell_ids: knownSpellIds,
+    };
+  }
+
+  private subclassCastingOverride(subclassRule: SubclassRule | null): SubclassCastingOverride | undefined {
+    if (!subclassRule?.spellcasting) return undefined;
+    return {ability: subclassRule.spellcasting.spellcastingAbility, slotsTable: THIRD_CASTER_SLOTS};
+  }
+
+  /**
+   * Resolve a subclasse pro level-up: se `nextLevel` é o nível de escolha da classe e o
+   * personagem ainda não tem uma, expõe as opções (`subclassOptions`) e, se `pendingSubclassId`
+   * foi informado (preview especulativo ou confirm de verdade), passa a considerá-la escolhida
+   * — sem gravar nada aqui, só devolve a regra resolvida pro resto do cálculo usar.
+   */
+  private resolveSubclassForLevelUp(
+    classRule: ClassRule,
+    classKey: number,
+    currentIdSubclass: string | null,
+    nextLevel: number,
+    pendingSubclassId?: string,
+  ): {subclassRule: SubclassRule | null; subclassOptions: LevelUpSubclassOption[] | null; chosenSubclassId: string | null} {
+    const chooseLevel = firstSubclassChoiceLevel(classRule);
+    // ">=" (não só "===") funciona como resgate: um personagem que já passou do nível de escolha
+    // sem nunca ter escolhido (ex: criado antes dessa subclasse ter dados cadastrados) recebe a
+    // opção no próximo level-up, em vez de ficar preso sem subclasse pra sempre.
+    const isChooseLevel = chooseLevel !== null && nextLevel >= chooseLevel && !currentIdSubclass;
+
+    const subclassOptions = isChooseLevel
+      ? (SUBCLASSES[classKey] ?? []).map(s => ({id_subclass: s.id_subclass, display_name: s.displayName}))
+      : null;
+
+    let chosenSubclassId = currentIdSubclass;
+    if (isChooseLevel && pendingSubclassId) {
+      const valid = (SUBCLASSES[classKey] ?? []).some(s => s.id_subclass === pendingSubclassId);
+      if (!valid) throw new Error('Unknown subclass');
+      chosenSubclassId = pendingSubclassId;
+    }
+
+    return {subclassRule: resolveSubclass(classKey, chosenSubclassId), subclassOptions, chosenSubclassId};
+  }
+
+  /** Resolução comum a preview/roll-hp/confirm: personagem, permissão, próximo nível e seus dados de classe. */
+  private async resolveLevelUpContext(id: number, userId: string) {
+    const raw = await this.repository.findCharacterById(id);
+    if (!raw) throw new Error('Character not found');
+    if (!(await this.userCanManageCharacter(raw.character.user_id, id, userId))) {
+      throw new Error('Unauthorized');
+    }
+    if (raw.character.level >= 20) throw new Error('Max level reached');
+
+    const classRule = resolveClass(raw.character.id_class);
+    const nextLevel = raw.character.level + 1;
+    const levelData = classRule.featuresByLevel?.[nextLevel];
+    if (!levelData) throw new Error('Level data not found');
+
+    return {raw, classRule, nextLevel, levelData};
+  }
+
+  /** Rola o dado de vida do próximo nível — ação explícita do jogador, não grava nada (mesma
+   *  convenção de `rollHitDie` no descanso curto: o servidor rola pra evitar trapaça, mas quem
+   *  decide *quando* rolar é o jogador, clicando). */
+  async rollLevelUpHitDie(id: number, userId: string): Promise<LevelUpHitDieRoll> {
+    const {classRule} = await this.resolveLevelUpContext(id, userId);
+    return {hit_die_roll: Math.floor(Math.random() * classRule.hitDie) + 1};
+  }
+
+  async getLevelUpPreview(id: number, userId: string, pendingSubclassId?: string): Promise<LevelUpPreview> {
+    const {raw, classRule, nextLevel, levelData} = await this.resolveLevelUpContext(id, userId);
+    const {character, attributes, spells} = raw;
+
+    const stats = this.statsFromRaw(attributes);
+    const conModifier = getMod(stats.CON);
+    const subraceRule = resolveSubrace(character.subrace ?? undefined);
+
+    const {subclassRule, subclassOptions} = this.resolveSubclassForLevelUp(
+      classRule,
+      character.id_class,
+      character.id_subclass,
+      nextLevel,
+      pendingSubclassId,
+    );
+    const subclassLevelData = subclassRule?.featuresByLevel[nextLevel];
+    const isSubclassCaster = !classRule.isSpellcaster && !!subclassRule?.spellcasting;
+    const mergedResources = {...levelData.resources, ...subclassLevelData?.resources};
+
+    return {
+      id_class: character.id_class,
+      current_level: character.level,
+      next_level: nextLevel,
+      hit_die: classRule.hitDie,
+      con_modifier: conModifier,
+      hp_bonus_per_level: subraceRule?.hpBonusPerLevel ?? 0,
+      proficiency_bonus: getProfBonus(nextLevel),
+      is_asi_level: levelData.isAsiLevel,
+      is_subclass_feature_level: levelData.isSubclassFeatureLevel,
+      new_features: [
+        ...levelData.features.map(f => ({name: f.name, description: f.description})),
+        ...(subclassLevelData?.features.map(f => ({name: f.name, description: f.description})) ?? []),
+      ],
+      resources: Object.keys(mergedResources).length > 0 ? mergedResources : null,
+      spell_slots_total: classRule.isSpellcaster
+        ? SPELL_SLOTS[character.id_class]?.[nextLevel] ?? null
+        : isSubclassCaster
+          ? THIRD_CASTER_SLOTS[nextLevel] ?? null
+          : null,
+      feat_options: levelData.isAsiLevel
+        ? Object.values(FEATS).map(f => ({id_feat: f.id_feat, display_name: f.displayName, description: f.description}))
+        : [],
+      spell_choices: this.computeSpellChoices(
+        character.id_class,
+        classRule.isSpellcaster || isSubclassCaster,
+        character.level,
+        nextLevel,
+        isSubclassCaster ? subclassRule?.featuresByLevel[character.level] : classRule.featuresByLevel?.[character.level],
+        isSubclassCaster ? subclassLevelData ?? {} : levelData,
+        spells.map(s => s.id_spell),
+        isSubclassCaster,
+      ),
+      subclass_options: subclassOptions,
+      subclass_spellcasting: subclassRule?.spellcasting
+        ? {spell_list_class_id: subclassRule.spellcasting.spellListClassId, allowed_schools: subclassRule.spellcasting.allowedSchools}
+        : null,
+    };
+  }
+
+  async confirmLevelUp(
+    id: number,
+    userId: string,
+    input: LevelUpConfirmInput,
+  ): Promise<LevelUpResult> {
+    const {raw, classRule, nextLevel, levelData} = await this.resolveLevelUpContext(id, userId);
+    const {character, attributes, spells} = raw;
+
+    if (
+      !Number.isInteger(input.hit_die_roll) ||
+      input.hit_die_roll < 1 ||
+      input.hit_die_roll > classRule.hitDie
+    ) {
+      throw new Error('Invalid hit die roll');
+    }
+
+    const {subclassRule, subclassOptions, chosenSubclassId} = this.resolveSubclassForLevelUp(
+      classRule,
+      character.id_class,
+      character.id_subclass,
+      nextLevel,
+      input.id_subclass,
+    );
+    if (subclassOptions && !chosenSubclassId) {
+      throw new Error('Subclass choice required for this level');
+    }
+    if (!subclassOptions && input.id_subclass) {
+      throw new Error('Subclass choice not allowed for this level');
+    }
+    const subclassLevelData = subclassRule?.featuresByLevel[nextLevel];
+    const isSubclassCaster = !classRule.isSpellcaster && !!subclassRule?.spellcasting;
+
+    const knownSpellIds = spells.map(s => s.id_spell);
+    const spellChoices = this.computeSpellChoices(
+      character.id_class,
+      classRule.isSpellcaster || isSubclassCaster,
+      character.level,
+      nextLevel,
+      isSubclassCaster ? subclassRule?.featuresByLevel[character.level] : classRule.featuresByLevel?.[character.level],
+      isSubclassCaster ? subclassLevelData ?? {} : levelData,
+      knownSpellIds,
+      isSubclassCaster,
+    );
+    const newSpellIds = this.validateNewSpellIds(input.new_spell_ids, spellChoices, knownSpellIds);
+
+    let asiType: 'asi' | 'feat' | null = null;
+    let asiStatIncreases: Partial<Record<StatKeyEn, number>> | null = null;
+    let featId: string | null = null;
+
+    if (levelData.isAsiLevel) {
+      const choice = input.asi_or_feat;
+      if (!choice) throw new Error('ASI or feat choice required for this level');
+      asiType = choice.type;
+      if (choice.type === 'asi') {
+        asiStatIncreases = this.validateAsiIncreases(choice.increases);
+      } else {
+        const feat = FEATS[choice.feat_id];
+        if (!feat) throw new Error('Unknown feat');
+        featId = feat.id_feat;
+        if (feat.abilityIncrease) {
+          asiStatIncreases = {[feat.abilityIncrease.stat]: feat.abilityIncrease.amount};
+        }
+      }
+    } else if (input.asi_or_feat) {
+      throw new Error('ASI or feat choice not allowed for this level');
+    }
+
+    const stats = this.statsFromRaw(attributes);
+    const conModifier = getMod(stats.CON);
+    const subraceRule = resolveSubrace(character.subrace ?? undefined);
+    const hpGained = calcRolledLevelUpHp(input.hit_die_roll, conModifier, subraceRule?.hpBonusPerLevel ?? 0);
+
+    const newMaxHitPoints = character.max_hit_points + hpGained;
+    const newCurrentHitPoints = character.current_hit_points + hpGained;
+    const newProficiencyBonus = getProfBonus(nextLevel);
+    const newHitDice = `${nextLevel}d${classRule.hitDie}`;
+
+    const spellcastingAbility = isSubclassCaster ? subclassRule?.spellcasting?.spellcastingAbility : classRule.spellcastingAbility;
+    let newSpellSaveDc: number | null = null;
+    let newSpellAttackBonus: number | null = null;
+    if ((classRule.isSpellcaster || isSubclassCaster) && spellcastingAbility) {
+      const increase = asiStatIncreases?.[spellcastingAbility] ?? 0;
+      const newAbilityScore = stats[spellcastingAbility] + increase;
+      const newAbilityMod = getMod(newAbilityScore);
+      newSpellSaveDc = 8 + newProficiencyBonus + newAbilityMod;
+      newSpellAttackBonus = newProficiencyBonus + newAbilityMod;
+    }
+
+    const result = await this.repository.applyLevelUp(id, {
+      newLevel: nextLevel,
+      hitDieRoll: input.hit_die_roll,
+      conModifierAtLevel: conModifier,
+      hpGained,
+      newMaxHitPoints,
+      newCurrentHitPoints,
+      newProficiencyBonus,
+      newHitDice,
+      idSubclass: subclassOptions ? chosenSubclassId : null,
+      newSpellSaveDc,
+      newSpellAttackBonus,
+      asiType,
+      asiStatIncreases,
+      featId,
+      newSpellIds,
+    });
+
+    if (result.status === 'already_applied') {
+      throw new Error('Level already applied');
+    }
+
+    return {
+      level: nextLevel,
+      hp_gained: hpGained,
+      max_hit_points: newMaxHitPoints,
+      current_hit_points: newCurrentHitPoints,
+      proficiency_bonus: newProficiencyBonus,
+      hit_dice: newHitDice,
+      spell_save_dc: newSpellSaveDc,
+      spell_attack_bonus: newSpellAttackBonus,
+      id_subclass: subclassOptions ? chosenSubclassId : null,
+      updated_attributes: result.updatedAttributes,
+    };
+  }
+
+  /** ASI padrão de 5e: até 2 pontos no total, no máximo +2 num único atributo. */
+  private validateAsiIncreases(
+    increases: Partial<Record<StatKeyEn, number>>,
+  ): Partial<Record<StatKeyEn, number>> {
+    const entries = Object.entries(increases ?? {}).filter(([, v]) => (v ?? 0) !== 0);
+    const total = entries.reduce((sum, [, v]) => sum + (v ?? 0), 0);
+    if (total !== 2) throw new Error('ASI must total exactly 2 points');
+    if (entries.some(([, v]) => (v ?? 0) < 0 || (v ?? 0) > 2)) {
+      throw new Error('ASI increase per attribute must be between 0 and 2');
+    }
+    if (entries.length > 2) throw new Error('ASI can only affect up to 2 attributes');
+    return Object.fromEntries(entries) as Partial<Record<StatKeyEn, number>>;
+  }
+
+  /**
+   * Não valida se cada magia pertence à lista da classe nem respeita a cota por círculo
+   * individualmente — mesmo nível de confiança já usado na criação de personagem (o catálogo
+   * de magias por classe só existe no frontend). Só garante que o total não passa do permitido
+   * e que nenhuma magia repetida (já conhecida ou duplicada na própria lista) seja inserida.
+   */
+  private validateNewSpellIds(
+    submitted: number[] | undefined,
+    spellChoices: LevelUpSpellChoices | null,
+    knownSpellIds: number[],
+  ): number[] {
+    const ids = submitted ?? [];
+    if (ids.length === 0) return [];
+    if (!spellChoices) throw new Error('This level does not grant new spells');
+
+    const maxAllowed =
+      spellChoices.cantrips_gained +
+      spellChoices.spells_gained +
+      Object.values(spellChoices.spells_gained_by_circle).reduce((a, b) => a + b, 0);
+    if (ids.length > maxAllowed) {
+      throw new Error('Too many new spells for this level');
+    }
+
+    const knownSet = new Set(knownSpellIds);
+    const seen = new Set<number>();
+    for (const idSpell of ids) {
+      if (knownSet.has(idSpell)) throw new Error('Spell already known');
+      if (seen.has(idSpell)) throw new Error('Duplicate spell in selection');
+      seen.add(idSpell);
+    }
+    return ids;
   }
 
   async updateCurrentHitPoints(
@@ -534,6 +949,36 @@ export class CharacterSheetService {
     if (raw.character.user_id !== userId) throw new Error('Unauthorized');
     await this.repository.updateAvatarPreset(id, preset);
     return {success: true};
+  }
+
+  /** Troca a armadura/escudo equipados — CA é recalculada na hora (não fica congelada, ver `loadCharacter`). */
+  async updateEquipment(id: number, userId: string, input: EquipmentUpdateInput): Promise<{armor_class: number}> {
+    const raw = await this.repository.findCharacterById(id);
+    if (!raw) throw new Error('Character not found');
+    if (!(await this.userCanManageCharacter(raw.character.user_id, id, userId))) {
+      throw new Error('Unauthorized');
+    }
+
+    const {character, attributes} = raw;
+    const classArmourRule = CLASS_ARMOUR_RULES[character.id_class] ?? {types: [], shield: false};
+
+    let armour: Armour | null = null;
+    if (input.id_armour !== null) {
+      armour = await this.optionsRepository.findArmourById(input.id_armour);
+      if (!armour) throw new Error('Unknown armour');
+      if (!armour.armour_type || !classArmourRule.types.includes(armour.armour_type)) {
+        throw new Error('Character is not proficient with this armour type');
+      }
+    }
+    if (input.has_shield && !classArmourRule.shield) {
+      throw new Error('Character is not proficient with shields');
+    }
+
+    await this.repository.updateEquipment(id, input.id_armour, input.has_shield);
+
+    const stats = this.statsFromRaw(attributes);
+    const ac = calcArmorClass(armour, stats, input.has_shield, character.id_class);
+    return {armor_class: ac};
   }
 
   async deleteCharacter(id: number, userId: string): Promise<{success: boolean}> {

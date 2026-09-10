@@ -14,6 +14,11 @@ export interface AvatarPreset {
   beardColor: string | null;
 }
 
+export interface EquipmentUpdateInput {
+  id_armour: number | null;
+  has_shield: boolean;
+}
+
 export interface CharacterBackground {
   id_character_background: number;
   id_character: number;
@@ -28,6 +33,8 @@ export interface CharacterInput {
     subrace?: string;
     id_class: number;
     class: string;
+    /** Só pra classes que escolhem subclasse já no nível 1 (Bruxo, Clérigo, Feiticeiro). */
+    id_subclass?: string;
     id_background: number;
     background: string;
   };
@@ -108,7 +115,13 @@ export interface CharacterRawData {
     id_race: number;
     subrace: string | null;
     id_class: number;
+    id_subclass: string | null;
     id_armour: number | null;
+    armour_name: string | null;
+    armour_type: string | null;
+    armour_class_base: number | null;
+    max_dexterity_bonus: number | null;
+    has_shield: boolean;
     id_alignment: number | null;
     proficiency_bonus: number;
     armour_class: number;
@@ -155,6 +168,7 @@ export interface CharacterSheet {
     header: {
       name: string;
       class_and_level: string;
+      id_class: number;
       race: string;
       background: string;
       alignment: string;
@@ -185,6 +199,12 @@ export interface CharacterSheet {
     equipment: {
       currency: {cp: number; sp: number; ep: number; gp: number; pp: number};
       items: string[];
+      equipped_armour: {
+        id_armour: number;
+        name: string;
+        armour_type: string | null;
+      } | null;
+      has_shield: boolean;
     };
     spellcasting_info?: {
       spellcasting_ability: string;
