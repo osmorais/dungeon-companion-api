@@ -49,7 +49,6 @@ export interface LevelUpPreview {
   hp_bonus_per_level: number;
   proficiency_bonus: number;
   is_asi_level: boolean;
-  is_subclass_feature_level: boolean;
   new_features: LevelUpFeaturePreview[];
   resources: Record<string, string> | null;
   spell_slots_total: Record<string, number> | null;

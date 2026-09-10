@@ -729,7 +729,6 @@ export class CharacterSheetService {
       hp_bonus_per_level: subraceRule?.hpBonusPerLevel ?? 0,
       proficiency_bonus: getProfBonus(nextLevel),
       is_asi_level: levelData.isAsiLevel,
-      is_subclass_feature_level: levelData.isSubclassFeatureLevel,
       new_features: [
         ...levelData.features.map(f => ({name: f.name, description: f.description})),
         ...(subclassLevelData?.features.map(f => ({name: f.name, description: f.description})) ?? []),
