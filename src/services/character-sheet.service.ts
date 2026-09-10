@@ -659,7 +659,11 @@ export class CharacterSheetService {
     const isChooseLevel = chooseLevel !== null && nextLevel >= chooseLevel && !currentIdSubclass;
 
     const subclassOptions = isChooseLevel
-      ? (SUBCLASSES[classKey] ?? []).map(s => ({id_subclass: s.id_subclass, display_name: s.displayName}))
+      ? (SUBCLASSES[classKey] ?? []).map(s => ({
+          id_subclass: s.id_subclass,
+          display_name: s.displayName,
+          features: (s.featuresByLevel[nextLevel]?.features ?? []).map(f => ({name: f.name, description: f.description})),
+        }))
       : null;
 
     let chosenSubclassId = currentIdSubclass;
