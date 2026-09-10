@@ -23,7 +23,11 @@ export interface SessionEventPayloadMap {
   player_hp_updated: {id_player_session: string; current_hit_points: number};
   npc_hp_updated: {id_npc_session: string; current_hit_points: number};
   monster_hp_updated: {id_monster_session: string; hp_current: number};
-  monster_revealed: {id_monster_session: string; name: string};
+  monster_revealed: {
+    id_monster_session: string;
+    name: string;
+    image_url: string | null;
+  };
   monster_hidden: {id_monster_session: string};
   roll_added: {roll: RollLogEntry};
   combat_started: {combat: CombatEncounterDetail};

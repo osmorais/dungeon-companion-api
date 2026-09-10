@@ -144,6 +144,24 @@ export class CombatService {
       await this.repository.activateEncounter(encounter.id_combat_encounter);
     }
 
+    // Entrar na luta já revela o monstro pros jogadores — anuncia (nome + imagem) antes do
+    // combat_started, pra dar tempo do anúncio aparecer antes do banner de rolar iniciativa.
+    const newlyRevealed = await this.gameSessionRepository.revealMonsters(
+      idGameSession,
+      idMonsterSessions,
+    );
+    for (const monster of newlyRevealed) {
+      this.events.publish({
+        type: 'monster_revealed',
+        id_game_session: idGameSession,
+        id_monster_session: monster.id_monster_session,
+        name:
+          monster.custom_name ??
+          this.monsterSnapshotName(monster.data_snapshot),
+        image_url: monster.image_url,
+      });
+    }
+
     const combat = (await this.getActiveEncounterDetail(idGameSession))!;
     this.events.publish({
       type: 'combat_started',
@@ -151,6 +169,10 @@ export class CombatService {
       combat,
     });
     return combat;
+  }
+
+  private monsterSnapshotName(snapshot: unknown): string {
+    return (snapshot as {name?: string} | undefined)?.name ?? 'Monstro';
   }
 
   async submitInitiative(
