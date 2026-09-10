@@ -11,6 +11,8 @@ export interface Skill {
   attribute_name: string;
   description: string;
   is_trained: boolean;
+  /** Especialização/Aptidão/Bênção do Conhecimento: bônus de proficiência dobrado nessa perícia. */
+  is_expert: boolean;
   level_value: number;
   total_skill_value: number;
 }

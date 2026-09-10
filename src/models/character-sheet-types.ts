@@ -46,6 +46,12 @@ export interface CharacterInput {
     skills: Skill[];
     spells?: Spell[];
     feats?: string[];
+    /**
+     * Perícias escolhidas pra Especialização/Aptidão (Ladino/Bardo, bônus dobrado em perícias
+     * já treinadas) ou Bênção do Conhecimento (Clérigo, concede treino novo + bônus dobrado numa
+     * lista restrita) — só relevante se a classe/subclasse concede isso já no nível 1.
+     */
+    expertise_skill_ids?: number[];
   };
   equipment: {
     armour: Armour | null;
@@ -102,6 +108,7 @@ export interface Trait {
 export interface CharacterSkillInsert {
   id_skill: number;
   is_trained: boolean;
+  is_expert: boolean;
   trained_value: number;
   level_value: number;
   total_skill_value: number;
@@ -138,12 +145,13 @@ export interface CharacterRawData {
     spell_save_dc: number | null;
     spell_attack_bonus: number | null;
     spell_slots_expended: Record<string, number> | null;
+    resource_uses_expended: Record<string, number> | null;
     hit_dice_spent: number;
     user_id: string;
     avatar_preset: AvatarPreset | null;
   };
   attributes: Array<{attribute_name: string; score: number; modifier: number}>;
-  skills: Array<{id_skill: number; name: string; id_attribute: number; attribute_name: string; description: string; is_trained: boolean, level_value: number; total_skill_value: number}>;
+  skills: Array<{id_skill: number; name: string; id_attribute: number; attribute_name: string; description: string; is_trained: boolean; is_expert: boolean; level_value: number; total_skill_value: number}>;
   spells: Array<{
     id_spell: number;
     name: string;
@@ -218,5 +226,12 @@ export interface CharacterSheet {
     };
     spells: Spell[];
     avatar_preset?: AvatarPreset | null;
+    /** Recurso consumível rastreado (Fúria/Pontos de Chi/Canalizar Divindade) — `null` se a classe não tiver nenhum neste nível. */
+    resource_tracker: {
+      name: string;
+      max: number | 'unlimited';
+      used: number;
+      recharge_on: 'short_rest' | 'long_rest';
+    } | null;
   };
 }
