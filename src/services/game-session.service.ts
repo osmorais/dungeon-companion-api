@@ -248,6 +248,7 @@ export class GameSessionService {
       id_game_session: result.idGameSession!,
       id_monster_session: idMonsterSession,
       name: result.customName ?? this.monsterSnapshotName(result.dataSnapshot),
+      image_url: result.imageUrl ?? null,
     });
   }
 

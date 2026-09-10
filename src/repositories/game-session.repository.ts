@@ -498,6 +498,7 @@ export class GameSessionRepository {
     idGameSession?: string;
     customName?: string | null;
     dataSnapshot?: Record<string, unknown>;
+    imageUrl?: string | null;
   }> {
     const rows = await this.db.sql<
       {
@@ -505,17 +506,23 @@ export class GameSessionRepository {
         session_owner_id: string | null;
         custom_name: string | null;
         data_snapshot: Record<string, unknown>;
+        image_url: string | null;
       }[]
     >`
-      SELECT ms.id_game_session, gs.user_id AS session_owner_id, ms.custom_name, ms.data_snapshot
+      SELECT ms.id_game_session, gs.user_id AS session_owner_id, ms.custom_name, ms.data_snapshot, ms.image_url
       FROM monster_session ms
       JOIN game_session gs ON gs.id_game_session = ms.id_game_session
       WHERE ms.id_monster_session = ${idMonsterSession}
       LIMIT 1
     `;
     if (!rows.length) return {status: 'not_found'};
-    const {id_game_session, session_owner_id, custom_name, data_snapshot} =
-      rows[0];
+    const {
+      id_game_session,
+      session_owner_id,
+      custom_name,
+      data_snapshot,
+      image_url,
+    } = rows[0];
     if (session_owner_id !== userId) return {status: 'unauthorized'};
 
     await this.db
@@ -525,6 +532,7 @@ export class GameSessionRepository {
       idGameSession: id_game_session,
       customName: custom_name,
       dataSnapshot: data_snapshot,
+      imageUrl: image_url,
     };
   }
 
