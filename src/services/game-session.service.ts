@@ -319,6 +319,7 @@ export class GameSessionService {
       .map(m => ({
         id_monster_session: m.id_monster_session,
         name: m.custom_name ?? this.monsterSnapshotName(m.data_snapshot),
+        image_url: m.image_url,
       }));
 
     const combat = await this.combatService.getActiveEncounterDetail(id);
@@ -412,6 +413,7 @@ export class GameSessionService {
       id_game_session: result.idGameSession!,
       id_monster_session: idMonsterSession,
       name: result.customName ?? this.monsterSnapshotName(result.dataSnapshot),
+      image_url: result.imageUrl ?? null,
     });
   }
 
