@@ -9,9 +9,13 @@ import {
   requestBody,
   response,
   HttpErrors,
+  Request,
+  Response,
+  RestBindings,
 } from '@loopback/rest';
 import {authenticate} from '@loopback/authentication';
 import {SecurityBindings, UserProfile} from '@loopback/security';
+import multer from 'multer';
 import {GameSessionService} from '../services/game-session.service';
 import {
   AddMonsterToSessionInput,
@@ -26,6 +30,31 @@ import {
   RollLogEntry,
   RollLogInput,
 } from '../models/game-session-types';
+
+const IMAGE_UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
+
+/** Só os campos que o controller realmente usa do arquivo que o multer entrega. */
+interface MulterFile {
+  buffer: Buffer;
+  mimetype: string;
+  originalname: string;
+}
+
+const imageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {fileSize: IMAGE_UPLOAD_MAX_BYTES},
+  fileFilter: (
+    _req: unknown,
+    file: MulterFile,
+    cb: (error: Error | null, acceptFile?: boolean) => void,
+  ) => {
+    if (!file.mimetype.startsWith('image/')) {
+      cb(new Error('O arquivo precisa ser uma imagem'));
+      return;
+    }
+    cb(null, true);
+  },
+});
 
 @authenticate('jwt')
 export class GameSessionController {
@@ -194,6 +223,57 @@ export class GameSessionController {
     @inject(SecurityBindings.USER) currentUser: UserProfile,
   ): Promise<void> {
     return this.gameSessionService.defeatMonster(id, currentUser.id);
+  }
+
+  @post('/api/game-session/monster-session/{id}/image')
+  @response(200, {
+    description:
+      'Uploads a custom image for a monster already added to the session',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async uploadMonsterImage(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @inject(RestBindings.Http.REQUEST) request: Request,
+    @inject(RestBindings.Http.RESPONSE) httpResponse: Response,
+  ): Promise<MonsterSession> {
+    const file = await this.parseImageUpload(request, httpResponse);
+    return this.gameSessionService.setMonsterImage(
+      id,
+      currentUser.id,
+      file.buffer,
+      file.mimetype,
+      file.originalname,
+    );
+  }
+
+  /** multer não tem binding nativo no LoopBack — roda como middleware Express dentro do handler. */
+  private parseImageUpload(
+    request: Request,
+    httpResponse: Response,
+  ): Promise<MulterFile> {
+    return new Promise((resolve, reject) => {
+      imageUpload.single('image')(
+        request,
+        httpResponse,
+        (err: Error | null) => {
+          if (err) {
+            reject(new HttpErrors.BadRequest(err.message));
+            return;
+          }
+          const file = (request as unknown as {file?: MulterFile}).file;
+          if (!file) {
+            reject(
+              new HttpErrors.UnprocessableEntity(
+                'Arquivo de imagem é obrigatório',
+              ),
+            );
+            return;
+          }
+          resolve(file);
+        },
+      );
+    });
   }
 
   @post('/api/game-session/player')
