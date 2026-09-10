@@ -36,9 +36,18 @@ export interface WeaponRow {
   isRanged: boolean;
 }
 
+/** Texto explicativo genérico (nome + descrição) reaproveitado nas explicações de escolha do wizard de criação. */
+export interface TraitInfo {
+  name: string;
+  description: string;
+}
+
 export interface Subrace {
   key: string;
   name: string;
+  /** Bônus de atributo já formatado em português (ex: "Destreza +1") — vazio se não houver. */
+  bonuses_text: string;
+  traits: TraitInfo[];
 }
 
 export interface Race {
@@ -46,12 +55,21 @@ export interface Race {
   name: string;
   movement: string;
   subraces: Subrace[];
+  bonuses_text: string;
+  languages: string[];
+  traits: TraitInfo[];
 }
 
 export interface CharacterClass {
   id_class: number;
   name: string;
   starting_gold_po: number;
+  hit_die: number;
+  saving_throws_text: string;
+  armor_proficiencies: string[];
+  weapon_proficiencies: string[];
+  is_spellcaster: boolean;
+  traits: TraitInfo[];
 }
 
 export interface Background {
@@ -59,6 +77,9 @@ export interface Background {
   name: string;
   starting_gold_po: number;
   languages_number: number;
+  skills: string[];
+  tools: string[];
+  feature: TraitInfo;
 }
 
 export interface Alignment {
