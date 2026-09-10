@@ -524,3 +524,54 @@ ALTER TABLE monster_session ADD COLUMN IF NOT EXISTS is_revealed BOOLEAN NOT NUL
 ALTER TABLE combat_participant ADD COLUMN IF NOT EXISTS id_monster_session UUID
     REFERENCES monster_session(id_monster_session)
     ON DELETE CASCADE;
+
+-- ==========================================
+-- SUBIR DE NÍVEL (LEVEL UP) — Fase 1
+-- ==========================================
+
+-- Histórico de cada nível subido por um personagem: guarda a rolagem de HP (dado de vida +
+-- modificador de CON no nível), a escolha de ASI (Incremento no Valor de Habilidade) ou feat
+-- quando aplicável, e serve de trava (UNIQUE) pra nunca aplicar o mesmo nível duas vezes.
+CREATE TABLE IF NOT EXISTS character_level_history (
+    id_character_level_history SERIAL PRIMARY KEY,
+    id_character INT NOT NULL REFERENCES character(id_character) ON DELETE CASCADE,
+    level INT NOT NULL,
+    hit_die_roll INT NOT NULL,
+    con_modifier_at_level INT NOT NULL,
+    hp_gained INT NOT NULL,
+    -- 'asi' | 'feat' | NULL (nível sem escolha de ASI/feat)
+    asi_type VARCHAR(10),
+    -- ex: {"STR": 1, "CON": 1} quando asi_type = 'asi'
+    asi_stat_increases JSONB,
+    -- id do feat escolhido quando asi_type = 'feat'
+    feat_id VARCHAR(100),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT uq_character_level UNIQUE (id_character, level)
+);
+
+CREATE INDEX IF NOT EXISTS idx_character_level_history_character
+    ON character_level_history(id_character);
+
+-- ==========================================
+-- EQUIPAMENTO: CA VIVA (deixa de ser congelada na criação)
+-- ==========================================
+
+-- `id_armour` já existia (setado só na criação, nunca mais atualizado). `has_shield` nunca foi
+-- persistido em lugar nenhum — só usado transiente pro cálculo inicial de CA. Com essa coluna,
+-- o personagem pode trocar de armadura/escudo depois da criação (endpoint de equipamento) e a
+-- CA passa a ser recalculada a cada carregamento da ficha (loadCharacter), em vez de usar o
+-- valor congelado de `armour_class`.
+ALTER TABLE Character ADD COLUMN IF NOT EXISTS has_shield BOOLEAN NOT NULL DEFAULT false;
+
+-- ==========================================
+-- SUBCLASSE (Fase 2)
+-- ==========================================
+
+-- Slug (ex: 'campeao', 'cavaleiro-arcano') — não é FK pra tabela nenhuma, catálogo fica hardcoded
+-- em rules.ts (SUBCLASSES), mesmo padrão de classe/raça. NULL até o personagem escolher (nem
+-- todo personagem já chegou no nível de escolha).
+ALTER TABLE Character ADD COLUMN IF NOT EXISTS id_subclass VARCHAR(100);
+
+-- Registra em qual level-up a subclasse foi escolhida, junto do resto do histórico de nível.
+ALTER TABLE character_level_history ADD COLUMN IF NOT EXISTS id_subclass VARCHAR(100);

@@ -59,6 +59,16 @@ export class CharacterOptionsRepository {
     `;
   }
 
+  async findArmourById(id: number): Promise<Armour | null> {
+    const rows = await this.db.sql<Armour[]>`
+      SELECT id_armour, name, armour_class_base, is_sum_dexterity, armour_type,
+             max_dexterity_bonus, is_stealth_disadvantage, weight, price_value
+      FROM armour
+      WHERE id_armour = ${id}
+    `;
+    return rows[0] ?? null;
+  }
+
   async findSpellsByLevel(spellLevel: number): Promise<Spell[]> {
     return this.db.sql<Spell[]>`
       SELECT id_spell, name, description, casting_time, range_distance, duration,

@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {FinalStats, StatKeyEn, StatBlock, SkillBlock, WeaponAction, Trait} from '../../models/character-sheet-types';
 import {Armour, Skill, Spell, WeaponOption, WeaponRow} from '../../models/character-options-types';
-import {RACES, SUBRACES, CLASSES, BACKGROUNDS, WEAPONS, SPELL_SLOTS, RaceRule, ClassRule, BackgroundRule, WeaponRule} from './rules';
+import {RACES, SUBRACES, CLASSES, BACKGROUNDS, WEAPONS, SPELL_SLOTS, SUBCLASSES, RaceRule, ClassRule, BackgroundRule, WeaponRule, SubclassRule} from './rules';
 
 // ---------------------------------------------------------------------------
 // Normalization helpers
@@ -35,6 +35,11 @@ export function resolveClass(id_class: number): ClassRule {
   const rule = CLASSES[key]; 
   if (!rule) throw new Error(`ID da classe não encontrado: "${id_class}". Classes disponíveis: ${Object.keys(CLASSES).join(', ')}`);
   return rule;
+}
+
+export function resolveSubclass(id_class: number, id_subclass: string | null | undefined): SubclassRule | null {
+  if (!id_subclass) return null;
+  return (SUBCLASSES[id_class] ?? []).find(s => s.id_subclass === id_subclass) ?? null;
 }
 
 export function resolveBackground(id_background: number): BackgroundRule {
@@ -168,7 +173,7 @@ export function buildAttributeBlocks(
 // }
 
 export function calcArmorClass(
-  armor: Armour | null,
+  armor: Pick<Armour, 'armour_type' | 'armour_class_base' | 'max_dexterity_bonus'> | null,
   stats: FinalStats,
   hasShield: boolean,
   classKey: number,
@@ -202,6 +207,15 @@ export function calcMaxHP(hitDie: number, level: number, conMod: number, hpBonus
   if (level === 1) return Math.max(1, levelOneHP);
   const higherLevels = (level - 1) * (Math.floor(hitDie / 2) + 1 + conMod + hpBonusPerLevel);
   return Math.max(1, levelOneHP + higherLevels);
+}
+
+/**
+ * HP ganho ao subir UM nível com o dado rolado (em vez da média fixa de calcMaxHP) — usado só
+ * pelo fluxo de level-up. `conMod` é o modificador de Constituição do personagem no momento do
+ * level-up (não retroage a níveis anteriores).
+ */
+export function calcRolledLevelUpHp(hitDieRoll: number, conMod: number, hpBonusPerLevel = 0): number {
+  return Math.max(1, hitDieRoll + conMod + hpBonusPerLevel);
 }
 
 export function buildWeaponActions(
@@ -249,16 +263,46 @@ export function buildWeaponActions(
   });
 }
 
+/** Nível 1 já está coberto por `classRule.traits`; aqui só agregamos o que foi ganho a partir do 2. */
+function collectLeveledClassFeatures(classRule: ClassRule, level: number): Trait[] {
+  const result: Trait[] = [];
+  for (let lvl = 2; lvl <= level; lvl++) {
+    const levelData = classRule.featuresByLevel?.[lvl];
+    if (!levelData) continue;
+    for (const feature of levelData.features) {
+      result.push({name: feature.name, source: `Classe (Nível ${lvl})`, description: feature.description});
+    }
+  }
+  return result;
+}
+
+function collectLeveledSubclassFeatures(subclassRule: SubclassRule | null, level: number): Trait[] {
+  if (!subclassRule) return [];
+  const result: Trait[] = [];
+  for (let lvl = 1; lvl <= level; lvl++) {
+    const levelData = subclassRule.featuresByLevel[lvl];
+    if (!levelData) continue;
+    for (const feature of levelData.features) {
+      result.push({name: feature.name, source: `${subclassRule.displayName} (Nível ${lvl})`, description: feature.description});
+    }
+  }
+  return result;
+}
+
 export function collectTraits(
   raceRule: RaceRule,
   subraceRule: ReturnType<typeof resolveSubrace>,
   classRule: ClassRule,
   bgRule: BackgroundRule,
+  level: number,
+  subclassRule: SubclassRule | null = null,
 ): Trait[] {
   return [
     ...raceRule.traits,
     ...(subraceRule?.traits ?? []),
     ...classRule.traits,
+    ...collectLeveledSubclassFeatures(subclassRule, level),
+    ...collectLeveledClassFeatures(classRule, level),
     bgRule.feature,
   ];
 }
@@ -277,6 +321,12 @@ export type SpellcastingResult =
       max_prepared_spells?: number;
     };
 
+/** Conjuração concedida por uma subclasse (ex: Cavaleiro Arcano) em vez da classe base. */
+export interface SubclassCastingOverride {
+  ability: StatKeyEn;
+  slotsTable: Record<number, Record<string, number>>;
+}
+
 export function buildSpellcasting(
   classRule: ClassRule,
   classKey: number,
@@ -285,18 +335,20 @@ export function buildSpellcasting(
   stats: FinalStats,
   profBonus: number,
   expendedSlots: Record<string, number> = {},
+  subclassCasting?: SubclassCastingOverride,
 ): SpellcastingResult {
-  if (!classRule.isSpellcaster || !classRule.spellcastingAbility) {
+  if (!subclassCasting && (!classRule.isSpellcaster || !classRule.spellcastingAbility)) {
     return {is_spellcaster: false};
   }
 
-  const ability = classRule.spellcastingAbility;
+  const ability = subclassCasting?.ability ?? classRule.spellcastingAbility!;
   const abilityMod = getMod(stats[ability]);
   const spellSaveDC = 8 + profBonus + abilityMod;
   const spellAttackBonus = profBonus + abilityMod;
 
-  const classSlots = SPELL_SLOTS[classKey];
-  const levelSlots = classSlots?.[level] ?? (classRule.spellSlotsLevel1 > 0 ? {level_1: classRule.spellSlotsLevel1} : {});
+  const levelSlots = subclassCasting
+    ? (subclassCasting.slotsTable[level] ?? {})
+    : (SPELL_SLOTS[classKey]?.[level] ?? (classRule.spellSlotsLevel1 > 0 ? {level_1: classRule.spellSlotsLevel1} : {}));
   const slots = Object.fromEntries(
     Object.entries(levelSlots).filter(([, v]) => (v as number) > 0),
   );
@@ -322,8 +374,8 @@ export function buildSpellcasting(
       spells.length > 0
         ? {cantrips, ...leveledSpellsByCircle}
         : undefined,
-    prepares_spells: classRule.preparesSpells,
-    max_prepared_spells: classRule.preparesSpells ? Math.max(1, abilityMod + level) : undefined,
+    prepares_spells: subclassCasting ? false : classRule.preparesSpells,
+    max_prepared_spells: !subclassCasting && classRule.preparesSpells ? Math.max(1, abilityMod + level) : undefined,
   };
 }
 

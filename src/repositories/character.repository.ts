@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {inject, injectable, BindingScope} from '@loopback/core';
 import {PostgresDatasource} from '../datasources';
-import {AvatarPreset, CharacterInput, CharacterRawData, CharacterSheet, CharacterSkillInsert} from '../models/character-sheet-types';
+import {AvatarPreset, CharacterInput, CharacterRawData, CharacterSheet, CharacterSkillInsert, StatKeyEn} from '../models/character-sheet-types';
 
 const STAT_TO_PT: Record<string, string> = {
   STR: 'FOR', DEX: 'DES', CON: 'CON', INT: 'INT', WIS: 'SAB', CHA: 'CAR',
@@ -29,7 +29,7 @@ export class CharacterRepository {
     return this.db.sql.begin(async sql => {
       const [row] = await sql<{id_character: number}[]>`
         INSERT INTO character (
-          name, level, id_race, subrace, id_class, id_armour, id_alignment,
+          name, level, id_race, subrace, id_class, id_subclass, id_armour, has_shield, id_alignment,
           proficiency_bonus, armour_class, initiative_value,
           current_hit_points, max_hit_points, hit_dice, passive_perception,
           xp_points, total_po,
@@ -42,7 +42,9 @@ export class CharacterRepository {
           ${core_build.id_race},
           ${core_build.subrace ?? null},
           ${core_build.id_class},
+          ${core_build.id_subclass ?? null},
           ${equipment.armour?.id_armour ?? null},
+          ${equipment.has_shield},
           ${character_details?.id_alignment ?? null},
           ${cs.combat_stats.proficiency_bonus},
           ${cs.combat_stats.armor_class},
@@ -147,6 +149,12 @@ export class CharacterRepository {
     `;
   }
 
+  async updateEquipment(id: number, idArmour: number | null, hasShield: boolean): Promise<void> {
+    await this.db.sql`
+      UPDATE character SET id_armour = ${idArmour}, has_shield = ${hasShield} WHERE id_character = ${id}
+    `;
+  }
+
   async updateSpellSlotsExpended(id: number, expended: Record<string, number>): Promise<void> {
     await this.db.sql`
       UPDATE character
@@ -161,6 +169,112 @@ export class CharacterRepository {
       SET hit_dice_spent = ${hitDiceSpent}, current_hit_points = ${currentHitPoints}
       WHERE id_character = ${id}
     `;
+  }
+
+  /** Grau de desafio: 1 = a UNIQUE (id_character, level) em character_level_history já barra reaplicar o mesmo nível. */
+  async applyLevelUp(
+    idCharacter: number,
+    input: {
+      newLevel: number;
+      hitDieRoll: number;
+      conModifierAtLevel: number;
+      hpGained: number;
+      newMaxHitPoints: number;
+      newCurrentHitPoints: number;
+      newProficiencyBonus: number;
+      newHitDice: string;
+      newSpellSaveDc: number | null;
+      newSpellAttackBonus: number | null;
+      asiType: 'asi' | 'feat' | null;
+      asiStatIncreases: Partial<Record<StatKeyEn, number>> | null;
+      featId: string | null;
+      newSpellIds: number[];
+      /** Só setado quando esse é o nível de escolha de subclasse; nos demais fica `null` e o
+       *  COALESCE abaixo mantém a subclasse já escolhida antes intacta. */
+      idSubclass: string | null;
+    },
+  ): Promise<{status: 'ok' | 'already_applied'; updatedAttributes: Partial<Record<StatKeyEn, {score: number; modifier: number}>>}> {
+    const updatedAttributes: Partial<Record<StatKeyEn, {score: number; modifier: number}>> = {};
+
+    try {
+      await this.db.sql.begin(async sql => {
+        await sql`
+          UPDATE character SET
+            level = ${input.newLevel},
+            max_hit_points = ${input.newMaxHitPoints},
+            current_hit_points = ${input.newCurrentHitPoints},
+            proficiency_bonus = ${input.newProficiencyBonus},
+            hit_dice = ${input.newHitDice},
+            spell_save_dc = ${input.newSpellSaveDc},
+            spell_attack_bonus = ${input.newSpellAttackBonus},
+            id_subclass = COALESCE(id_subclass, ${input.idSubclass})
+          WHERE id_character = ${idCharacter}
+        `;
+
+        if (input.asiStatIncreases && Object.keys(input.asiStatIncreases).length) {
+          const attrRows = await sql<{id_attribute: number; name: string}[]>`
+            SELECT id_attribute, name FROM attribute_type
+          `;
+          const attrByName: Record<string, number> = Object.fromEntries(
+            attrRows.map(r => [r.name, r.id_attribute]),
+          );
+
+          for (const [statEn, amount] of Object.entries(input.asiStatIncreases)) {
+            if (!amount) continue;
+            const ptName = STAT_TO_PT[statEn];
+            const idAttribute = attrByName[ptName];
+            if (!idAttribute) continue;
+
+            const [current] = await sql<{bonus_value: number}[]>`
+              SELECT bonus_value FROM character_attribute
+              WHERE id_character = ${idCharacter} AND id_attribute = ${idAttribute}
+            `;
+            const newScore = (current?.bonus_value ?? 10) + amount;
+            const newModifier = Math.floor((newScore - 10) / 2);
+
+            await sql`
+              UPDATE character_attribute
+              SET bonus_value = ${newScore}, modifier_value = ${newModifier}
+              WHERE id_character = ${idCharacter} AND id_attribute = ${idAttribute}
+            `;
+            updatedAttributes[statEn as StatKeyEn] = {score: newScore, modifier: newModifier};
+          }
+        }
+
+        await sql`
+          INSERT INTO character_level_history (
+            id_character, level, hit_die_roll, con_modifier_at_level, hp_gained,
+            asi_type, asi_stat_increases, feat_id, id_subclass
+          ) VALUES (
+            ${idCharacter}, ${input.newLevel}, ${input.hitDieRoll}, ${input.conModifierAtLevel}, ${input.hpGained},
+            ${input.asiType}, ${input.asiStatIncreases ? sql.json(input.asiStatIncreases) : null}, ${input.featId}, ${input.idSubclass}
+          )
+        `;
+
+        for (const idSpell of input.newSpellIds) {
+          await sql`
+            INSERT INTO character_spell (id_character, id_spell, id_attribute)
+            VALUES (${idCharacter}, ${idSpell}, ${null})
+          `;
+        }
+      });
+      return {status: 'ok', updatedAttributes};
+    } catch (err) {
+      // unique_violation na constraint uq_character_level — esse nível já tinha sido aplicado.
+      if ((err as {code?: string})?.code === '23505') {
+        return {status: 'already_applied', updatedAttributes: {}};
+      }
+      throw err;
+    }
+  }
+
+  async hasLevelHistoryEntry(idCharacter: number, level: number): Promise<boolean> {
+    const rows = await this.db.sql<{id_character_level_history: number}[]>`
+      SELECT id_character_level_history FROM character_level_history
+      WHERE id_character = ${idCharacter} AND level = ${level}
+      LIMIT 1
+    `;
+    return rows.length > 0;
   }
 
   async countPreparedSpells(id: number): Promise<number> {
@@ -240,7 +354,9 @@ export class CharacterRepository {
   async findCharacterById(id: number): Promise<CharacterRawData | null> {
     const rows = await this.db.sql<CharacterRawData['character'][]>`
       SELECT
-        c.id_character, c.name, c.level, c.id_race, c.subrace, c.id_class, c.id_armour, c.id_alignment,
+        c.id_character, c.name, c.level, c.id_race, c.subrace, c.id_class, c.id_subclass, c.id_armour, c.id_alignment,
+        a.name AS armour_name, a.armour_type, a.armour_class_base, a.max_dexterity_bonus,
+        c.has_shield,
         c.proficiency_bonus, c.armour_class, c.initiative_value,
         c.current_hit_points, c.max_hit_points, c.hit_dice, c.passive_perception,
         c.xp_points, c.total_po,
@@ -251,6 +367,7 @@ export class CharacterRepository {
         cb.id_background
       FROM character c
       LEFT JOIN alignment          al ON al.id_alignment = c.id_alignment
+      LEFT JOIN armour             a  ON a.id_armour = c.id_armour
       LEFT JOIN character_background cb ON cb.id_character = c.id_character
       WHERE c.id_character = ${id}
       LIMIT 1
