@@ -25,6 +25,14 @@ export interface SessionEventPayloadMap {
     image_url: string | null;
   };
   player_hp_updated: {id_player_session: string; current_hit_points: number};
+  player_xp_granted: {
+    id_player_session: string;
+    character_name: string;
+    xp_amount: number;
+    xp_points: number;
+    /** Esse gasto específico fez o personagem cruzar o limiar de XP do próximo nível. */
+    can_level_up: boolean;
+  };
   npc_hp_updated: {id_npc_session: string; current_hit_points: number};
   monster_hp_updated: {id_monster_session: string; hp_current: number};
   monster_image_updated: {id_monster_session: string; image_url: string};

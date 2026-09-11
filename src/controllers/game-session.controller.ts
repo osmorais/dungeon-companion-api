@@ -24,6 +24,8 @@ import {
   GameSessionCreated,
   GameSessionDetail,
   GameSessionPagedList,
+  GrantXpInput,
+  GrantXpResult,
   MonsterSession,
   NpcSession,
   PlayerSession,
@@ -432,6 +434,35 @@ export class GameSessionController {
     body: RollLogInput,
   ): Promise<RollLogEntry> {
     return this.gameSessionService.addRoll(id, body, currentUser.id);
+  }
+
+  @post('/api/game-session/{id}/grant-xp')
+  @response(200, {
+    description: 'Grants XP to one or more players in the session (full amount each, not divided)',
+    content: {'application/json': {schema: {type: 'array', items: {type: 'object'}}}},
+  })
+  async grantXp(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      description: 'XP amount and the players receiving it',
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            required: ['xp_amount', 'id_player_sessions'],
+            properties: {
+              xp_amount: {type: 'integer'},
+              id_player_sessions: {type: 'array', items: {type: 'string'}},
+            },
+          },
+        },
+      },
+    })
+    body: GrantXpInput,
+  ): Promise<GrantXpResult[]> {
+    return this.gameSessionService.grantXp(id, body, currentUser.id);
   }
 
   @get('/api/game-session/{id}')

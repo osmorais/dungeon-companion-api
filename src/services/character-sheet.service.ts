@@ -63,6 +63,8 @@ import {
   TRACKABLE_RESOURCES,
   maxTrackableResourceUses,
   RestType,
+  XP_THRESHOLDS,
+  xpNeededForLevel,
 } from './character-sheet/rules';
 import {FEATS} from './character-sheet/feats';
 import {CLASS_ARMOUR_RULES} from './character-sheet/armour-rules';
@@ -205,6 +207,7 @@ export class CharacterSheetService {
           background: bgRule.displayName,
           alignment: character_details?.alignment ?? 'Neutro',
           experience_points: 0,
+          next_level_xp: xpNeededForLevel(level),
         },
         combat_stats: {
           proficiency_bonus: profBonus,
@@ -600,6 +603,7 @@ export class CharacterSheetService {
           background: bgRule.displayName,
           alignment: character.alignment_name ?? 'Neutro',
           experience_points: character.xp_points,
+          next_level_xp: xpNeededForLevel(character.level),
         },
         combat_stats: {
           proficiency_bonus: character.proficiency_bonus,
@@ -782,8 +786,13 @@ export class CharacterSheetService {
     }
     if (raw.character.level >= 20) throw new Error('Max level reached');
 
-    const classRule = resolveClass(raw.character.id_class);
     const nextLevel = raw.character.level + 1;
+    const xpNeeded = XP_THRESHOLDS[nextLevel];
+    if ((raw.character.xp_points ?? 0) < xpNeeded) {
+      throw new Error(`Insufficient XP for next level (needs ${xpNeeded})`);
+    }
+
+    const classRule = resolveClass(raw.character.id_class);
     const levelData = classRule.featuresByLevel?.[nextLevel];
     if (!levelData) throw new Error('Level data not found');
 
