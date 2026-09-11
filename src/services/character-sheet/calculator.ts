@@ -238,6 +238,7 @@ export function calcArmorClass(
   stats: FinalStats,
   hasShield: boolean,
   classKey: number,
+  fightingStyle?: string | null,
 ): number {
   // const armor = resolveArmor(armorName);
   const dexMod = getMod(stats.DEX);
@@ -259,6 +260,9 @@ export function calcArmorClass(
   } else {
     ac = armor.armour_class_base ?? 10;
   }
+
+  // Estilo de Combate "Defesa" (Guerreiro): +1 CA enquanto estiver usando armadura.
+  if (armor?.armour_type != null && fightingStyle === 'Defesa') ac += 1;
 
   return hasShield ? ac + 2 : ac;
 }
@@ -283,6 +287,7 @@ export function buildWeaponActions(
   weapons: WeaponRow[],
   stats: FinalStats,
   profBonus: number,
+  fightingStyle?: string | null,
 ): WeaponRow[] {
 
   const weaponsVerified : WeaponRow[] = weapons.map(w => {
@@ -305,6 +310,7 @@ export function buildWeaponActions(
   return weaponsVerified.flatMap(w => {
     const props = w.properties ? w.properties.split(', ') : [];
     const isFinesse = props.some(p => p.toLowerCase().startsWith('acuidade'));
+    const isTwoHanded = props.some(p => p.toLowerCase().startsWith('duas mãos'));
 
     const strMod = getMod(stats.STR);
     const dexMod = getMod(stats.DEX);
@@ -320,6 +326,17 @@ export function buildWeaponActions(
 
     w.attack_bonus = profBonus + abilityMod;
     w.damage_modifier = abilityMod;
+
+    // Estilo de Combate (Guerreiro): Arqueria (+2 ataque à distância) e Duelo (+2 dano com uma
+    // única arma corpo a corpo de uma mão só, sem outra arma empunhada — aproximação: só se
+    // esse for o único item na lista de armas).
+    if (fightingStyle === 'Arqueria' && w.isRanged) {
+      w.attack_bonus += 2;
+    }
+    if (fightingStyle === 'Duelo' && !w.isRanged && !isTwoHanded && weapons.length === 1) {
+      w.damage_modifier += 2;
+    }
+
     return w;
   });
 }
@@ -357,8 +374,9 @@ export function collectTraits(
   bgRule: BackgroundRule,
   level: number,
   subclassRule: SubclassRule | null = null,
+  fightingStyle?: string | null,
 ): Trait[] {
-  return [
+  const traits = [
     ...raceRule.traits,
     ...(subraceRule?.traits ?? []),
     ...classRule.traits,
@@ -366,6 +384,16 @@ export function collectTraits(
     ...collectLeveledClassFeatures(classRule, level),
     bgRule.feature,
   ];
+
+  // Deixa claro qual dos 6 estilos foi escolhido, em vez de só listar as opções genéricas.
+  if (fightingStyle) {
+    return traits.map(t =>
+      t.name === 'Estilo de Combate'
+        ? {...t, description: `Escolhido: ${fightingStyle}. ${t.description}`}
+        : t,
+    );
+  }
+  return traits;
 }
 
 export type SpellcastingResult =

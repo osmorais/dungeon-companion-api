@@ -51,6 +51,7 @@ export class CharacterOptionsService {
         bonuses_text: formatBonuses(rule?.bonuses ?? {}),
         languages: rule?.languages ?? [],
         traits: (rule?.traits ?? []).map(t => ({name: t.name, description: t.description})),
+        tool_proficiency_options: rule?.toolProficiencyChoice?.options,
       };
     });
 
@@ -64,6 +65,7 @@ export class CharacterOptionsService {
         weapon_proficiencies: rule?.weaponProficiencies ?? [],
         is_spellcaster: rule?.isSpellcaster ?? false,
         traits: (rule?.traits ?? []).map(t => ({name: t.name, description: t.description})),
+        fighting_style_options: rule?.fightingStyleChoice?.options,
       };
     });
 
