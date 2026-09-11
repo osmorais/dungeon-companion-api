@@ -52,6 +52,10 @@ export interface CharacterInput {
      * lista restrita) — só relevante se a classe/subclasse concede isso já no nível 1.
      */
     expertise_skill_ids?: number[];
+    /** Só relevante se `raceRule.toolProficiencyChoice` existir (hoje só o Anão). */
+    tool_proficiency?: string;
+    /** Só relevante se `classRule.fightingStyleChoice` existir (hoje só o Guerreiro). */
+    fighting_style?: string;
   };
   equipment: {
     armour: Armour | null;
@@ -146,6 +150,8 @@ export interface CharacterRawData {
     spell_attack_bonus: number | null;
     spell_slots_expended: Record<string, number> | null;
     resource_uses_expended: Record<string, number> | null;
+    chosen_tool_proficiency: string | null;
+    chosen_fighting_style: string | null;
     hit_dice_spent: number;
     user_id: string;
     avatar_preset: AvatarPreset | null;

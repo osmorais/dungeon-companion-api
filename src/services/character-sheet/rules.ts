@@ -1,6 +1,11 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {StatKeyEn, Trait} from '../../models/character-sheet-types';
 
+/** Escolha de 1 ferramenta entre uma lista fixa (ex: Anão — ferreiro/cervejeiro/pedreiro). */
+export interface ToolProficiencyChoice {
+  options: string[];
+}
+
 export interface RaceRule {
   id_race: number;
   displayName: string;
@@ -11,6 +16,7 @@ export interface RaceRule {
   skillProficiencies?: string[];
   languages: string[];
   subraces?: string[];
+  toolProficiencyChoice?: ToolProficiencyChoice;
 }
 
 export interface SubraceRule {
@@ -78,6 +84,8 @@ export interface ClassRule {
    * listas devem ser mantidas em sincronia manualmente pra uma classe já preenchida.
    */
   featuresByLevel?: Record<number, ClassLevelData>;
+  /** Escolha de Estilo de Combate no nível 1 (hoje só o Guerreiro tem essa feature modelada). */
+  fightingStyleChoice?: {options: string[]};
   startingEquipment: string[];
   startingGold: number;
 }
@@ -210,6 +218,7 @@ export const RACES: Record<number, RaceRule> = {
         entre: ferramentas de ferreiro, suprimentos de cervejeiro \
         ou ferramentas de pedreiro. '},
     ],
+    toolProficiencyChoice: {options: ['Ferramentas de Ferreiro', 'Suprimentos de Cervejeiro', 'Ferramentas de Pedreiro']},
   },
   2: {
     id_race: 2,
@@ -1305,6 +1314,7 @@ export const CLASSES: Record<number, ClassRule> = {
       {name: 'Estilo de Combate', source: 'Classe', description: 'Você adota um estilo particular de combate como sua especialidade. Escolha uma das opções: Arqueria, Defesa, Duelo, Grande Arma, Proteção ou Combate com Duas Armas.'},
       {name: 'Retomar Fôlego', source: 'Classe', description: 'Você tem uma reserva de resistência que pode usar para se proteger. Em seu turno, você pode usar uma ação bônus para recuperar pontos de vida iguais a 1d10 + seu nível de guerreiro.'},
     ],
+    fightingStyleChoice: {options: ['Arqueria', 'Defesa', 'Duelo', 'Grande Arma', 'Proteção', 'Combate com Duas Armas']},
     featuresByLevel: {
       1: {
         features: [

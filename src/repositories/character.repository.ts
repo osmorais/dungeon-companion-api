@@ -35,6 +35,7 @@ export class CharacterRepository {
           xp_points, total_po,
           spellcasting_ability, spell_save_dc, spell_attack_bonus,
           avatar_preset,
+          chosen_tool_proficiency, chosen_fighting_style,
           user_id
         ) VALUES (
           ${character_details?.name ?? 'Aventureiro'},
@@ -59,6 +60,8 @@ export class CharacterRepository {
           ${cs.spellcasting_info?.spell_save_dc ?? null},
           ${cs.spellcasting_info?.spell_attack_bonus ?? null},
           ${input.avatar_preset ? sql.json(input.avatar_preset as any) : null},
+          ${choices.tool_proficiency ?? null},
+          ${choices.fighting_style ?? null},
           ${userId}
         )
         RETURNING id_character
@@ -380,6 +383,7 @@ export class CharacterRepository {
         c.xp_points, c.total_po,
         c.spellcasting_ability, c.spell_save_dc, c.spell_attack_bonus, c.spell_slots_expended,
         c.resource_uses_expended,
+        c.chosen_tool_proficiency, c.chosen_fighting_style,
         c.hit_dice_spent, c.user_id,
         c.avatar_preset,
         al.name   AS alignment_name,

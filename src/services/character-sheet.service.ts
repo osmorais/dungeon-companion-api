@@ -120,6 +120,22 @@ export class CharacterSheetService {
     }
     const subclassRule = resolveSubclass(classKey, core_build.id_subclass ?? null);
 
+    if (raceRule.toolProficiencyChoice) {
+      if (!choices.tool_proficiency || !raceRule.toolProficiencyChoice.options.includes(choices.tool_proficiency)) {
+        throw new Error('Tool proficiency choice required for this race');
+      }
+    } else if (choices.tool_proficiency) {
+      throw new Error('Tool proficiency choice not allowed for this race');
+    }
+
+    if (classRule.fightingStyleChoice) {
+      if (!choices.fighting_style || !classRule.fightingStyleChoice.options.includes(choices.fighting_style)) {
+        throw new Error('Fighting style choice required for this class');
+      }
+    } else if (choices.fighting_style) {
+      throw new Error('Fighting style choice not allowed for this class');
+    }
+
     const stats = applyLevelBasedAttributeBonuses(
       applyRacialBonuses(
         attributes.base_values,
@@ -143,6 +159,7 @@ export class CharacterSheetService {
       stats,
       equipment.has_shield,
       classKey,
+      choices.fighting_style,
     );
     const maxHP = calcMaxHP(
       classRule.hitDie,
@@ -154,8 +171,9 @@ export class CharacterSheetService {
       equipment.weapons,
       stats,
       profBonus,
+      choices.fighting_style,
     );
-    const traits = collectTraits(raceRule, subraceRule, classRule, bgRule, level, subclassRule);
+    const traits = collectTraits(raceRule, subraceRule, classRule, bgRule, level, subclassRule, choices.fighting_style);
     const spells = choices.spells ?? [];
     const languages = buildLanguages(raceRule, bgRule);
 
@@ -246,6 +264,7 @@ export class CharacterSheetService {
             ...new Set([
               ...bgRule.tools,
               ...(subraceRule?.toolProficiencies ?? []),
+              ...(choices.tool_proficiency ? [choices.tool_proficiency] : []),
             ]),
           ],
           languages,
@@ -550,7 +569,7 @@ export class CharacterSheetService {
       damage_modifier: 0,
       isRanged: false,
     }));
-    const weaponResult = buildWeaponActions(weaponsForCalc, stats, profBonus);
+    const weaponResult = buildWeaponActions(weaponsForCalc, stats, profBonus, character.chosen_fighting_style);
 
     const spellList: Spell[] = spells.map(s => ({
       id_spell: s.id_spell,
@@ -567,7 +586,7 @@ export class CharacterSheetService {
       is_prepared: s.is_prepared,
     }));
 
-    const traits = collectTraits(raceRule, subraceRule, classRule, bgRule, character.level, subclassRule);
+    const traits = collectTraits(raceRule, subraceRule, classRule, bgRule, character.level, subclassRule, character.chosen_fighting_style);
     const languages = buildLanguages(raceRule, bgRule);
 
     // CA deixou de ser congelada em `character.armour_class` — recalculada a cada carregamento
@@ -575,7 +594,7 @@ export class CharacterSheetService {
     const equippedArmourRule = character.id_armour
       ? {armour_type: character.armour_type, armour_class_base: character.armour_class_base, max_dexterity_bonus: character.max_dexterity_bonus}
       : null;
-    const ac = calcArmorClass(equippedArmourRule, stats, character.has_shield, character.id_class);
+    const ac = calcArmorClass(equippedArmourRule, stats, character.has_shield, character.id_class, character.chosen_fighting_style);
 
     const spellcastingResult = buildSpellcasting(
       classRule,
@@ -646,6 +665,7 @@ export class CharacterSheetService {
             ...new Set([
               ...bgRule.tools,
               ...(subraceRule?.toolProficiencies ?? []),
+              ...(character.chosen_tool_proficiency ? [character.chosen_tool_proficiency] : []),
             ]),
           ],
           languages,
@@ -1114,7 +1134,7 @@ export class CharacterSheetService {
     await this.repository.updateEquipment(id, input.id_armour, input.has_shield);
 
     const stats = applyLevelBasedAttributeBonuses(this.statsFromRaw(attributes), character.id_class, character.level);
-    const ac = calcArmorClass(armour, stats, input.has_shield, character.id_class);
+    const ac = calcArmorClass(armour, stats, input.has_shield, character.id_class, character.chosen_fighting_style);
     return {armor_class: ac};
   }
 

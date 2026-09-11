@@ -591,3 +591,16 @@ ALTER TABLE character_skill ADD COLUMN IF NOT EXISTS is_expert BOOLEAN NOT NULL 
 -- coluna nova a cada recurso futuro). Zera no descanso apropriado (curto ou longo, ver
 -- `TRACKABLE_RESOURCES` em rules.ts) e no descanso longo sempre (superset do curto).
 ALTER TABLE character ADD COLUMN IF NOT EXISTS resource_uses_expended JSONB NOT NULL DEFAULT '{}';
+
+-- ==========================================
+-- BÔNUS/ESCOLHAS DE RAÇA E CLASSE PENDENTES (auditoria 2026-09-11)
+-- ==========================================
+
+-- Escolha de ferramenta de artesão do Anão (ferreiro/cervejeiro/pedreiro) — texto livre, sem
+-- FK, mesmo padrão de id_subclass (catálogo hardcoded em rules.ts, não em tabela própria).
+ALTER TABLE character ADD COLUMN IF NOT EXISTS chosen_tool_proficiency VARCHAR(100);
+
+-- Estilo de Combate do Guerreiro (Arqueria/Defesa/Duelo/Grande Arma/Proteção/Combate com Duas
+-- Armas) — Defesa/Arqueria/Duelo têm efeito mecânico real (CA/ataque/dano); os outros três
+-- ficam só de exibição (exigiriam rerolagem de dado ou reação, fora do escopo atual).
+ALTER TABLE character ADD COLUMN IF NOT EXISTS chosen_fighting_style VARCHAR(50);
