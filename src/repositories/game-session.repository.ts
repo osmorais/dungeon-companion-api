@@ -9,6 +9,7 @@ import {
   GameSessionCreated,
   GameSessionDetail,
   GameSessionSummary,
+  GrantXpResult,
   MonsterSession,
   MonsterSessionInput,
   NpcSession,
@@ -131,6 +132,7 @@ export class GameSessionRepository {
         character_level: number | null;
         max_hit_points: number | null;
         current_hit_points: number | null;
+        xp_points: number | null;
         avatar_preset: unknown | null;
       }[]
     >`
@@ -146,6 +148,7 @@ export class GameSessionRepository {
         c.level         AS character_level,
         c.max_hit_points,
         c.current_hit_points,
+        c.xp_points,
         c.avatar_preset
       FROM player_session ps
       LEFT JOIN character c  ON c.id_character = ps.id_character
@@ -169,6 +172,7 @@ export class GameSessionRepository {
               level: row.character_level ?? 0,
               max_hit_points: row.max_hit_points ?? 0,
               current_hit_points: row.current_hit_points ?? 0,
+              experience_points: row.xp_points ?? 0,
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               avatar_preset: (row.avatar_preset as any) ?? null,
             }
@@ -186,6 +190,7 @@ export class GameSessionRepository {
         character_level: number | null;
         max_hit_points: number | null;
         current_hit_points: number | null;
+        xp_points: number | null;
         avatar_preset: unknown | null;
       }[]
     >`
@@ -199,6 +204,7 @@ export class GameSessionRepository {
         c.level         AS character_level,
         c.max_hit_points,
         c.current_hit_points,
+        c.xp_points,
         c.avatar_preset
       FROM npc_session ns
       LEFT JOIN character c  ON c.id_character = ns.id_character
@@ -220,6 +226,7 @@ export class GameSessionRepository {
               level: row.character_level ?? 0,
               max_hit_points: row.max_hit_points ?? 0,
               current_hit_points: row.current_hit_points ?? 0,
+              experience_points: row.xp_points ?? 0,
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               avatar_preset: (row.avatar_preset as any) ?? null,
             }
@@ -339,6 +346,39 @@ export class GameSessionRepository {
     return rows[0].found;
   }
 
+  /** Só o mestre da sessão concede XP; cada `id_player_session` listado recebe o valor cheio (não dividido). */
+  async grantXp(
+    idGameSession: string,
+    xpAmount: number,
+    idPlayerSessions: string[],
+    userId: string,
+  ): Promise<{status: 'unauthorized' | 'ok'; granted: GrantXpResult[]}> {
+    const isOwner = await this.isSessionOwner(idGameSession, userId);
+    if (!isOwner) return {status: 'unauthorized', granted: []};
+
+    const rows = await this.db.sql<{id_player_session: string; id_character: number}[]>`
+      SELECT id_player_session, id_character FROM player_session
+      WHERE id_game_session = ${idGameSession} AND id_player_session = ANY(${idPlayerSessions})
+    `;
+
+    const granted: GrantXpResult[] = [];
+    for (const row of rows) {
+      const [updated] = await this.db.sql<{xp_points: number; level: number; name: string}[]>`
+        UPDATE character SET xp_points = xp_points + ${xpAmount}
+        WHERE id_character = ${row.id_character}
+        RETURNING xp_points, level, name
+      `;
+      granted.push({
+        id_player_session: row.id_player_session,
+        id_character: row.id_character,
+        character_name: updated.name,
+        xp_points: updated.xp_points,
+        level: updated.level,
+      });
+    }
+    return {status: 'ok', granted};
+  }
+
   /** O mestre de qualquer sessão onde esse personagem participa (como jogador ou NPC) pode gerenciá-lo. */
   async isDmOfCharacter(idCharacter: number, userId: string): Promise<boolean> {
     const rows = await this.db.sql<{found: boolean}[]>`
@@ -414,6 +454,7 @@ export class GameSessionRepository {
         character_level: number | null;
         max_hit_points: number | null;
         current_hit_points: number | null;
+        xp_points: number | null;
         avatar_preset: unknown | null;
       }[]
     >`
@@ -429,6 +470,7 @@ export class GameSessionRepository {
         c.level         AS character_level,
         c.max_hit_points,
         c.current_hit_points,
+        c.xp_points,
         c.avatar_preset
       FROM player_session ps
       LEFT JOIN character c  ON c.id_character = ps.id_character
@@ -454,6 +496,7 @@ export class GameSessionRepository {
               level: row.character_level ?? 0,
               max_hit_points: row.max_hit_points ?? 0,
               current_hit_points: row.current_hit_points ?? 0,
+              experience_points: row.xp_points ?? 0,
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               avatar_preset: (row.avatar_preset as any) ?? null,
             }

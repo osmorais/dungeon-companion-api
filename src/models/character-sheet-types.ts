@@ -181,6 +181,8 @@ export interface CharacterSheet {
       background: string;
       alignment: string;
       experience_points: number;
+      /** XP mínimo pro próximo nível (tabela do PHB); `null` se já estiver no nível 20. */
+      next_level_xp: number | null;
     };
     combat_stats: {
       proficiency_bonus: number;

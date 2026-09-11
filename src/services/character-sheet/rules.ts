@@ -148,6 +148,18 @@ export function maxTrackableResourceUses(classRule: ClassRule, level: number): n
   return Number.isNaN(parsed) ? null : parsed;
 }
 
+/** XP total mínimo pra estar *no* nível (tabela oficial do PHB, igual pra todas as classes). */
+export const XP_THRESHOLDS: Record<number, number> = {
+  1: 0, 2: 300, 3: 900, 4: 2700, 5: 6500, 6: 14000, 7: 23000, 8: 34000, 9: 48000, 10: 64000,
+  11: 85000, 12: 100000, 13: 120000, 14: 140000, 15: 165000, 16: 195000, 17: 225000, 18: 265000,
+  19: 305000, 20: 355000,
+};
+
+/** `null` já está no nível máximo (20) — não existe "próximo nível" pra exigir XP. */
+export function xpNeededForLevel(level: number): number | null {
+  return XP_THRESHOLDS[level + 1] ?? null;
+}
+
 export interface BackgroundRule {
   id_background: number;
   displayName: string;

@@ -6,6 +6,7 @@ import {CombatService} from './combat.service';
 import {SessionEventsService} from './session-events.service';
 import {MonsterCatalogService} from './monster-catalog.service';
 import {SupabaseStorageService} from './supabase-storage.service';
+import {xpNeededForLevel} from './character-sheet/rules';
 import {
   AddMonsterToSessionInput,
   AddPlayerInput,
@@ -14,6 +15,8 @@ import {
   GameSessionCreated,
   GameSessionDetail,
   GameSessionPagedList,
+  GrantXpInput,
+  GrantXpResult,
   MonsterSession,
   NpcSession,
   RevealedMonster,
@@ -300,6 +303,51 @@ export class GameSessionService {
       id_player_session: idPlayerSession,
       current_hit_points: currentHitPoints,
     });
+  }
+
+  /** Só o mestre concede XP; cada jogador selecionado recebe o valor cheio informado (não dividido). */
+  async grantXp(
+    idGameSession: string,
+    input: GrantXpInput,
+    userId: string,
+  ): Promise<GrantXpResult[]> {
+    if (!Number.isInteger(input.xp_amount) || input.xp_amount <= 0) {
+      throw new HttpErrors.UnprocessableEntity('xp_amount deve ser um número inteiro positivo');
+    }
+    if (!input.id_player_sessions?.length) {
+      throw new HttpErrors.UnprocessableEntity('Selecione ao menos um jogador');
+    }
+
+    const result = await this.repository.grantXp(
+      idGameSession,
+      input.xp_amount,
+      input.id_player_sessions,
+      userId,
+    );
+    if (result.status === 'unauthorized') {
+      throw new HttpErrors.Forbidden('Apenas o mestre pode conceder XP');
+    }
+
+    for (const grant of result.granted) {
+      const xpNeeded = xpNeededForLevel(grant.level);
+      // Só notifica quando esse gasto específico foi o que cruzou a linha — não fica repetindo
+      // a cada concessão seguinte enquanto o personagem já estava elegível e não subiu de nível.
+      const justBecameEligible =
+        xpNeeded !== null &&
+        grant.xp_points >= xpNeeded &&
+        grant.xp_points - input.xp_amount < xpNeeded;
+
+      this.events.publish({
+        type: 'player_xp_granted',
+        id_game_session: idGameSession,
+        id_player_session: grant.id_player_session,
+        character_name: grant.character_name,
+        xp_amount: input.xp_amount,
+        xp_points: grant.xp_points,
+        can_level_up: justBecameEligible,
+      });
+    }
+    return result.granted;
   }
 
   async deleteSession(id: string): Promise<void> {

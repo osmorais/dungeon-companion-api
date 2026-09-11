@@ -44,6 +44,20 @@ export interface AddPlayerInput {
   user_id?: string;
 }
 
+export interface GrantXpInput {
+  xp_amount: number;
+  /** Cada jogador listado recebe o valor cheio de `xp_amount` (não é dividido entre eles). */
+  id_player_sessions: string[];
+}
+
+export interface GrantXpResult {
+  id_player_session: string;
+  id_character: number;
+  character_name: string;
+  xp_points: number;
+  level: number;
+}
+
 export interface CreateGameSessionInput {
   session_name: string;
   session_code: string;
@@ -67,6 +81,7 @@ export interface PlayerCharacterSummary {
   level: number;
   max_hit_points: number;
   current_hit_points: number;
+  experience_points: number;
   avatar_preset: AvatarPreset | null;
 }
 
