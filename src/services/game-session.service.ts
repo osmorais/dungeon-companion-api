@@ -330,12 +330,10 @@ export class GameSessionService {
 
     for (const grant of result.granted) {
       const xpNeeded = xpNeededForLevel(grant.level);
-      // Só notifica quando esse gasto específico foi o que cruzou a linha — não fica repetindo
-      // a cada concessão seguinte enquanto o personagem já estava elegível e não subiu de nível.
-      const justBecameEligible =
-        xpNeeded !== null &&
-        grant.xp_points >= xpNeeded &&
-        grant.xp_points - input.xp_amount < xpNeeded;
+      // Sempre que o total já é suficiente pro próximo nível — não só quando essa concessão
+      // específica cruzou a linha. Um personagem que já estava elegível (de uma concessão
+      // anterior) e ainda não subiu de nível continua merecendo o aviso a cada XP novo.
+      const canLevelUp = xpNeeded !== null && grant.xp_points >= xpNeeded;
 
       this.events.publish({
         type: 'player_xp_granted',
@@ -344,7 +342,7 @@ export class GameSessionService {
         character_name: grant.character_name,
         xp_amount: input.xp_amount,
         xp_points: grant.xp_points,
-        can_level_up: justBecameEligible,
+        can_level_up: canLevelUp,
       });
     }
     return result.granted;
