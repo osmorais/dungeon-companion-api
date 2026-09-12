@@ -311,6 +311,16 @@ export class CharacterRepository {
     `;
   }
 
+  /** Versão em lote de `findChosenFeats` pra vários personagens de uma vez (ex: cálculo de
+   *  modificador de iniciativa de todo mundo num combate, ver `CombatService`). */
+  async findChosenFeatsForCharacters(idCharacters: number[]): Promise<{id_character: number; feat_id: string}[]> {
+    if (!idCharacters.length) return [];
+    return this.db.sql<{id_character: number; feat_id: string}[]>`
+      SELECT id_character, feat_id FROM character_level_history
+      WHERE id_character = ANY(${idCharacters}) AND feat_id IS NOT NULL
+    `;
+  }
+
   async countPreparedSpells(id: number): Promise<number> {
     const rows = await this.db.sql<{count: string}[]>`
       SELECT COUNT(*) AS count

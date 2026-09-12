@@ -2,11 +2,14 @@
 import {injectable, BindingScope, service} from '@loopback/core';
 import {HttpErrors} from '@loopback/rest';
 import {CombatRepository} from '../repositories/combat.repository';
+import {CharacterRepository} from '../repositories/character.repository';
 import {GameSessionRepository} from '../repositories/game-session.repository';
 import {SessionEventsService} from './session-events.service';
+import {FEATS} from './character-sheet/feats';
 import {
   CombatEncounter,
   CombatEncounterDetail,
+  CombatParticipant,
   CombatParticipantDetail,
   StartEncounterParticipantInput,
   SubmitInitiativeInput,
@@ -17,11 +20,72 @@ export class CombatService {
   constructor(
     @service(CombatRepository)
     private repository: CombatRepository,
+    @service(CharacterRepository)
+    private characterRepository: CharacterRepository,
     @service(GameSessionRepository)
     private gameSessionRepository: GameSessionRepository,
     @service(SessionEventsService)
     private events: SessionEventsService,
   ) {}
+
+  /** Soma de bônus fixos de talento na iniciativa (hoje só o Alerta, +5) por personagem. */
+  private async getInitiativeFeatBonuses(
+    idCharacters: number[],
+  ): Promise<Record<number, number>> {
+    const uniqueIds = [...new Set(idCharacters)];
+    if (!uniqueIds.length) return {};
+    const rows =
+      await this.characterRepository.findChosenFeatsForCharacters(uniqueIds);
+    const result: Record<number, number> = {};
+    for (const row of rows) {
+      const bonus = FEATS[row.feat_id]?.initiativeBonus ?? 0;
+      if (bonus)
+        result[row.id_character] = (result[row.id_character] ?? 0) + bonus;
+    }
+    return result;
+  }
+
+  /**
+   * `findParticipants` já traz o modificador de Destreza atual (não mais congelado), mas não
+   * sabe somar bônus de talento (catálogo só existe aqui, na service) — soma isso e reordena
+   * pelo mesmo critério do SQL (`initiative_total` DESC, depois `dex_modifier` DESC, depois id).
+   */
+  private async findParticipantsWithLiveInitiativeModifier(
+    idCombatEncounter: string,
+  ): Promise<CombatParticipant[]> {
+    const rows = await this.repository.findParticipants(idCombatEncounter);
+    const idCharacters = rows
+      .map(r => r.id_character)
+      .filter((id): id is number => id !== null);
+    const featBonuses = await this.getInitiativeFeatBonuses(idCharacters);
+
+    const corrected: CombatParticipant[] = rows.map(r => ({
+      id_combat_participant: r.id_combat_participant,
+      id_combat_encounter: r.id_combat_encounter,
+      participant_type: r.participant_type,
+      id_player_session: r.id_player_session,
+      id_npc_session: r.id_npc_session,
+      id_monster_session: r.id_monster_session,
+      initiative_roll: r.initiative_roll,
+      initiative_total: r.initiative_total,
+      dex_modifier:
+        r.dex_modifier +
+        (r.id_character != null ? (featBonuses[r.id_character] ?? 0) : 0),
+    }));
+
+    corrected.sort((a, b) => {
+      if (a.initiative_total === null && b.initiative_total === null) return 0;
+      if (a.initiative_total === null) return 1;
+      if (b.initiative_total === null) return -1;
+      if (a.initiative_total !== b.initiative_total)
+        return b.initiative_total - a.initiative_total;
+      if (a.dex_modifier !== b.dex_modifier)
+        return b.dex_modifier - a.dex_modifier;
+      return a.id_combat_participant < b.id_combat_participant ? -1 : 1;
+    });
+
+    return corrected;
+  }
 
   async getActiveEncounterDetail(
     idGameSession: string,
@@ -35,7 +99,7 @@ export class CombatService {
   private async buildDetail(
     encounter: CombatEncounter,
   ): Promise<CombatEncounterDetail> {
-    const participants = await this.repository.findParticipants(
+    const participants = await this.findParticipantsWithLiveInitiativeModifier(
       encounter.id_combat_encounter,
     );
     const currentIndex =
@@ -92,7 +156,7 @@ export class CombatService {
       idGameSession,
       idPlayerSessions,
     );
-    const npcInfos = await this.repository.getValidNpcDexModifiers(
+    const npcInfos = await this.repository.getValidNpcCombatInfo(
       idGameSession,
       idNpcSessions,
     );
@@ -118,13 +182,18 @@ export class CombatService {
       validPlayerIds,
     );
 
+    const npcFeatBonuses = await this.getInitiativeFeatBonuses(
+      npcInfos.map(n => n.id_character),
+    );
     for (const npc of npcInfos) {
       const roll = this.rollD20();
+      const modifier =
+        npc.dex_modifier + (npcFeatBonuses[npc.id_character] ?? 0);
       await this.repository.addNpcParticipant(
         encounter.id_combat_encounter,
         npc.id_npc_session,
         roll,
-        roll + npc.dex_modifier,
+        roll + modifier,
       );
     }
 
@@ -239,7 +308,7 @@ export class CombatService {
     }
 
     const participants =
-      await this.repository.findParticipants(idCombatEncounter);
+      await this.findParticipantsWithLiveInitiativeModifier(idCombatEncounter);
     if (!participants.length)
       throw new HttpErrors.Conflict('Combate sem participantes');
 
