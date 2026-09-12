@@ -69,16 +69,27 @@ export class CombatRepository {
     return rows.map(r => r.id_player_session);
   }
 
-  /** Retorna, para cada NPC válido da sessão, seu modificador de Destreza (iniciativa). */
-  async getValidNpcDexModifiers(
+  /**
+   * Retorna, para cada NPC válido da sessão, seu modificador de Destreza atual (não o
+   * `initiative_value` congelado desde a criação — esse não acompanha ASI nem talentos como
+   * Alerta). O bônus de talentos (ex: Alerta) é somado depois, na service, que já tem o
+   * catálogo de feats — aqui só a parte que dá pra resolver em SQL.
+   */
+  async getValidNpcCombatInfo(
     idGameSession: string,
     idNpcSessions: string[],
-  ): Promise<{id_npc_session: string; dex_modifier: number}[]> {
+  ): Promise<
+    {id_npc_session: string; id_character: number; dex_modifier: number}[]
+  > {
     if (!idNpcSessions.length) return [];
-    return this.db.sql<{id_npc_session: string; dex_modifier: number}[]>`
-      SELECT ns.id_npc_session, c.initiative_value AS dex_modifier
+    return this.db.sql<
+      {id_npc_session: string; id_character: number; dex_modifier: number}[]
+    >`
+      SELECT ns.id_npc_session, c.id_character, ca.modifier_value AS dex_modifier
       FROM npc_session ns
       JOIN character c ON c.id_character = ns.id_character
+      JOIN character_attribute ca ON ca.id_character = c.id_character
+      JOIN attribute_type at ON at.id_attribute = ca.id_attribute AND at.name = 'DES'
       WHERE ns.id_game_session = ${idGameSession} AND ns.id_npc_session = ANY(${idNpcSessions})
     `;
   }
@@ -133,10 +144,16 @@ export class CombatRepository {
     `;
   }
 
+  /**
+   * `dex_modifier` aqui é só o modificador de Destreza atual (mesmo motivo do método acima —
+   * não usa mais o `initiative_value` congelado). `id_character` vai junto pra a service somar
+   * o bônus de talentos (Alerta) e reordenar antes de devolver ao front — não faz parte do
+   * `CombatParticipant` público.
+   */
   async findParticipants(
     idCombatEncounter: string,
-  ): Promise<CombatParticipant[]> {
-    return this.db.sql<CombatParticipant[]>`
+  ): Promise<(CombatParticipant & {id_character: number | null})[]> {
+    return this.db.sql<(CombatParticipant & {id_character: number | null})[]>`
       SELECT
         cp.id_combat_participant,
         cp.id_combat_encounter,
@@ -146,12 +163,19 @@ export class CombatRepository {
         cp.id_monster_session,
         cp.initiative_roll,
         cp.initiative_total,
-        COALESCE(pchar.initiative_value, nchar.initiative_value, 0) AS dex_modifier
+        COALESCE(pchar.id_character, nchar.id_character) AS id_character,
+        COALESCE(pdex.modifier_value, ndex.modifier_value, 0) AS dex_modifier
       FROM combat_participant cp
       LEFT JOIN player_session ps ON ps.id_player_session = cp.id_player_session
       LEFT JOIN character pchar ON pchar.id_character = ps.id_character
+      LEFT JOIN character_attribute pdex
+        ON pdex.id_character = pchar.id_character
+        AND pdex.id_attribute = (SELECT id_attribute FROM attribute_type WHERE name = 'DES')
       LEFT JOIN npc_session ns ON ns.id_npc_session = cp.id_npc_session
       LEFT JOIN character nchar ON nchar.id_character = ns.id_character
+      LEFT JOIN character_attribute ndex
+        ON ndex.id_character = nchar.id_character
+        AND ndex.id_attribute = (SELECT id_attribute FROM attribute_type WHERE name = 'DES')
       WHERE cp.id_combat_encounter = ${idCombatEncounter}
       ORDER BY cp.initiative_total DESC NULLS LAST, dex_modifier DESC, cp.id_combat_participant ASC
     `;
