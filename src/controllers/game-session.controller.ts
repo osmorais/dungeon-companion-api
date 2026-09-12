@@ -438,23 +438,24 @@ export class GameSessionController {
 
   @post('/api/game-session/{id}/grant-xp')
   @response(200, {
-    description: 'Grants XP to one or more players in the session (full amount each, not divided)',
+    description: 'Grants XP to one or more players/NPCs in the session (full amount each, not divided)',
     content: {'application/json': {schema: {type: 'array', items: {type: 'object'}}}},
   })
   async grantXp(
     @param.path.string('id') id: string,
     @inject(SecurityBindings.USER) currentUser: UserProfile,
     @requestBody({
-      description: 'XP amount and the players receiving it',
+      description: 'XP amount and the players/NPCs receiving it',
       required: true,
       content: {
         'application/json': {
           schema: {
             type: 'object',
-            required: ['xp_amount', 'id_player_sessions'],
+            required: ['xp_amount'],
             properties: {
               xp_amount: {type: 'integer'},
               id_player_sessions: {type: 'array', items: {type: 'string'}},
+              id_npc_sessions: {type: 'array', items: {type: 'string'}},
             },
           },
         },

@@ -314,14 +314,17 @@ export class GameSessionService {
     if (!Number.isInteger(input.xp_amount) || input.xp_amount <= 0) {
       throw new HttpErrors.UnprocessableEntity('xp_amount deve ser um número inteiro positivo');
     }
-    if (!input.id_player_sessions?.length) {
-      throw new HttpErrors.UnprocessableEntity('Selecione ao menos um jogador');
+    const idPlayerSessions = input.id_player_sessions ?? [];
+    const idNpcSessions = input.id_npc_sessions ?? [];
+    if (!idPlayerSessions.length && !idNpcSessions.length) {
+      throw new HttpErrors.UnprocessableEntity('Selecione ao menos um jogador ou NPC');
     }
 
     const result = await this.repository.grantXp(
       idGameSession,
       input.xp_amount,
-      input.id_player_sessions,
+      idPlayerSessions,
+      idNpcSessions,
       userId,
     );
     if (result.status === 'unauthorized') {
@@ -335,15 +338,27 @@ export class GameSessionService {
       // anterior) e ainda não subiu de nível continua merecendo o aviso a cada XP novo.
       const canLevelUp = xpNeeded !== null && grant.xp_points >= xpNeeded;
 
-      this.events.publish({
-        type: 'player_xp_granted',
-        id_game_session: idGameSession,
-        id_player_session: grant.id_player_session,
-        character_name: grant.character_name,
-        xp_amount: input.xp_amount,
-        xp_points: grant.xp_points,
-        can_level_up: canLevelUp,
-      });
+      if (grant.participant_type === 'player') {
+        this.events.publish({
+          type: 'player_xp_granted',
+          id_game_session: idGameSession,
+          id_player_session: grant.id_player_session!,
+          character_name: grant.character_name,
+          xp_amount: input.xp_amount,
+          xp_points: grant.xp_points,
+          can_level_up: canLevelUp,
+        });
+      } else {
+        this.events.publish({
+          type: 'npc_xp_granted',
+          id_game_session: idGameSession,
+          id_npc_session: grant.id_npc_session!,
+          character_name: grant.character_name,
+          xp_amount: input.xp_amount,
+          xp_points: grant.xp_points,
+          can_level_up: canLevelUp,
+        });
+      }
     }
     return result.granted;
   }
