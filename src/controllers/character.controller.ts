@@ -243,20 +243,20 @@ export class CharacterController {
 
   @patch('/api/character-sheet/{id}/resource-uses')
   @response(200, {
-    description: 'Marca ou desfaz um uso do recurso consumível da classe (Fúria/Pontos de Chi/Canalizar Divindade)',
+    description: 'Marca ou desfaz um uso de um recurso consumível da classe (Fúria/Pontos de Chi/Canalizar Divindade/...)',
     content: {'application/json': {schema: {type: 'object'}}},
   })
   async updateResourceUses(
     @param.path.number('id') id: number,
     @inject(SecurityBindings.USER) currentUser: UserProfile,
     @requestBody({
-      description: 'Delta (1 pra gastar, -1 pra desfazer)',
+      description: 'Chave do recurso (ex: "Fúrias", "Pontos de Chi") e delta (1 pra gastar, -1 pra desfazer)',
       required: true,
-      content: {'application/json': {schema: {type: 'object', required: ['delta'], properties: {delta: {type: 'integer'}}}}},
+      content: {'application/json': {schema: {type: 'object', required: ['resource_key', 'delta'], properties: {resource_key: {type: 'string'}, delta: {type: 'integer'}}}}},
     })
-    body: {delta: number},
+    body: {resource_key: string; delta: number},
   ): Promise<object> {
-    return this.characterSheetService.expendResourceUse(id, body.delta, currentUser.id);
+    return this.characterSheetService.expendResourceUse(id, body.resource_key, body.delta, currentUser.id);
   }
 
   @post('/api/character-sheet/{id}/short-rest/hit-die')

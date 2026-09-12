@@ -130,43 +130,103 @@ export type RestType = 'short_rest' | 'long_rest';
 
 /**
  * Recurso consumível com contador de uso rastreado na ficha (Fúria/Pontos de Chi/Canalizar
- * Divindade) — `key` bate com a mesma chave usada em `resources` de `featuresByLevel`, de onde
- * vem o máximo disponível em cada nível (sem precisar duplicar uma segunda tabela). Cada classe
- * só tem um recurso rastreável hoje.
+ * Divindade/...) — `key` bate com a mesma chave usada em `resources` de `featuresByLevel`, de
+ * onde vem o máximo disponível em cada nível (sem precisar duplicar uma segunda tabela). Uma
+ * classe pode ter mais de um recurso rastreável ao mesmo tempo (ex: Guerreiro com Retomar
+ * Fôlego + Surto de Ação + Indomável) — por isso a lista, em vez de um só por classe.
  */
 export interface TrackableResource {
   key: string;
   rechargeOn: RestType;
 }
 
-export const TRACKABLE_RESOURCES: Record<number, TrackableResource> = {
-  1: {key: 'Fúrias', rechargeOn: 'long_rest'}, // Bárbaro
-  4: {key: 'Canalizar Divindade', rechargeOn: 'short_rest'}, // Clérigo
-  10: {key: 'Pontos de Chi', rechargeOn: 'short_rest'}, // Monge
+export const TRACKABLE_RESOURCES: Record<number, TrackableResource[]> = {
+  1: [{key: 'Fúrias', rechargeOn: 'long_rest'}], // Bárbaro
+  3: [{key: 'Mestre Místico', rechargeOn: 'long_rest'}], // Bruxo (nv20)
+  // Feiticeiro — Restauração Mística (nv20) devolveria só 4 pontos num descanso curto, não
+  // recarrega tudo; o motor só modela recarga total, então isso fica de fora (simplificação
+  // aceita, só afeta personagem de nível 20 tomando um descanso curto).
+  6: [{key: 'Pontos de Feitiçaria', rechargeOn: 'long_rest'}],
+  // Bardo — RAW só recarrega em descanso curto a partir do nível 5 (Fonte de Inspiração); como
+  // o motor de recursos não modela recarga condicionada a nível, simplifica pra sempre recarregar
+  // em descanso curto (levemente generoso nos níveis 1-4, decisão aceita no escopo "Média").
+  2: [{key: 'Inspiração Bárdica', rechargeOn: 'short_rest'}],
+  4: [{key: 'Canalizar Divindade', rechargeOn: 'short_rest'}], // Clérigo
+  5: [
+    {key: 'Forma Selvagem', rechargeOn: 'short_rest'},
+    // Recuperação Natural só existe no Círculo da Terra — a chave só aparece no `resources`
+    // dessa subclasse (mesmo esquema da Integridade Corporal do Monge).
+    {key: 'Recuperação Natural', rechargeOn: 'long_rest'},
+  ],
+  7: [
+    // Guerreiro — os três recarregam em descanso curto ou longo, exceto Indomável (só longo).
+    {key: 'Retomar Fôlego', rechargeOn: 'short_rest'},
+    {key: 'Surto de Ação', rechargeOn: 'short_rest'},
+    {key: 'Indomável', rechargeOn: 'long_rest'},
+  ],
+  // Mago — RAW é 1×/dia (reseta em descanso longo); a recuperação em si (qual espaço volta)
+  // continua manual, o jogador ajusta pelo próprio controle de espaços de magia já existente.
+  9: [{key: 'Recuperação Arcana', rechargeOn: 'long_rest'}],
+  10: [
+    {key: 'Pontos de Chi', rechargeOn: 'short_rest'}, // Monge
+    // Integridade Corporal só existe nas subclasses que a concedem (Mão Aberta) — a chave só
+    // aparece no `resources` delas, então não vaza pros monges de outra tradição (ver
+    // `buildResourceTrackers`, que mescla resources de classe + subclasse antes de resolver).
+    {key: 'Integridade Corporal', rechargeOn: 'long_rest'},
+  ],
+  11: [
+    // Paladino — os três só recarregam em descanso longo.
+    {key: 'Sentido Divino', rechargeOn: 'long_rest'},
+    {key: 'Curar pelo Toque', rechargeOn: 'long_rest'},
+    {key: 'Toque Purificador', rechargeOn: 'long_rest'},
+  ],
 };
 
-/** `null` = a classe não tem recurso rastreável (ou ainda não ganhou nesse nível); `'unlimited'` = usos ilimitados (ex: Fúria do Bárbaro no nível 20). */
-export function maxTrackableResourceUses(classRule: ClassRule, level: number): number | 'unlimited' | null {
-  const resource = TRACKABLE_RESOURCES[classRule.id_class];
-  if (!resource) return null;
-  const raw = classRule.featuresByLevel?.[level]?.resources?.[resource.key];
+/**
+ * `null` = nem classe nem subclasse têm esse recurso nesse nível; `'unlimited'` = usos
+ * ilimitados (ex: Fúria do Bárbaro no nível 20). O valor em `resources` normalmente é um número
+ * fixo por nível (tabela), mas pode ser uma fórmula `mod:CHA` ou `mod:CHA+1` (Inspiração de
+ * Bardo = mod. Carisma; Sentido Divino do Paladino = 1 + mod. Carisma) — nesse caso `stats`
+ * (pontuação bruta do atributo, não o modificador já calculado) precisa ser informado.
+ * `resources` já vem mesclado (classe + subclasse, ver `buildResourceTrackers`) — isso é o que
+ * permite um recurso existir só numa subclasse específica (ex: Integridade Corporal, só na Mão
+ * Aberta) sem vazar pras outras subclasses da mesma classe.
+ */
+export function maxTrackableResourceUses(
+  resources: Record<string, string> | undefined,
+  resourceKey: string,
+  stats?: Partial<Record<StatKeyEn, number>>,
+): number | 'unlimited' | null {
+  const raw = resources?.[resourceKey];
   if (!raw) return null;
   if (raw.toLowerCase() === 'ilimitadas') return 'unlimited';
+  const modMatch = /^mod:(STR|DEX|CON|INT|WIS|CHA)(?:\+(\d+))?$/.exec(raw);
+  if (modMatch) {
+    const score = stats?.[modMatch[1] as StatKeyEn] ?? 10;
+    const modifier = Math.floor((score - 10) / 2);
+    const bonus = modMatch[2] ? parseInt(modMatch[2], 10) : 0;
+    return Math.max(1, modifier + bonus);
+  }
   const parsed = parseInt(raw, 10);
   return Number.isNaN(parsed) ? null : parsed;
 }
 
 /**
- * Característica ativável gastando o recurso consumível da classe (hoje só as de Pontos de Chi
- * do Monge — Rajada de Golpes/Defesa Paciente/Passo do Vento/Ataque Atordoante/Corpo Vazio).
- * Não inclui as reativas (Defletir Projéteis, rerolagem de Alma de Diamante), que só fazem
- * sentido em resposta a um gatilho específico e continuam só como texto informativo.
+ * Característica ativável gastando um recurso consumível da classe (hoje só as de Pontos de
+ * Chi do Monge — Rajada de Golpes/Defesa Paciente/Passo do Vento/Ataque Atordoante/Corpo Vazio).
+ * `resourceKey` diz qual dos `TRACKABLE_RESOURCES` daquela classe ela consome (útil quando a
+ * classe tem mais de um recurso rastreável). Não inclui as reativas (Defletir Projéteis,
+ * rerolagem de Alma de Diamante), que só fazem sentido em resposta a um gatilho específico e
+ * continuam só como texto informativo.
  */
 export interface ChiAbility {
   name: string;
   description: string;
   chiCost: number;
   levelLearned: number;
+  resourceKey: string;
+  /** Se definido, só existe pra essa subclasse (ex: Palma Vibrante = só Mão Aberta); ausente = disponível pra qualquer subclasse da classe. */
+  subclassId?: string;
 }
 
 export const MONK_CHI_ABILITIES: ChiAbility[] = [
@@ -175,42 +235,81 @@ export const MONK_CHI_ABILITIES: ChiAbility[] = [
     description: 'Imediatamente após você realizar a ação de Ataque no seu turno, você pode gastar 1 ponto de chi para realizar dois golpes desarmados com uma ação bônus.',
     chiCost: 1,
     levelLearned: 2,
+    resourceKey: 'Pontos de Chi',
   },
   {
     name: 'Defesa Paciente',
     description: 'Você pode gastar 1 ponto de chi para realizar a ação de Esquivar, com uma ação bônus, no seu turno.',
     chiCost: 1,
     levelLearned: 2,
+    resourceKey: 'Pontos de Chi',
   },
   {
     name: 'Passo do Vento',
     description: 'Você pode gastar 1 ponto de chi para realizar a Ação de Desengajar ou Disparada, com uma ação bônus, no seu turno, e sua distância de salto é dobrada nesse turno.',
     chiCost: 1,
     levelLearned: 2,
+    resourceKey: 'Pontos de Chi',
   },
   {
     name: 'Ataque Atordoante',
     description: 'Você pode gastar 1 ponto de chi para tentar atordoar um alvo que atingir com um ataque corpo a corpo. O alvo deve fazer um teste de resistência de Constituição ou ficará atordoado até o final do seu próximo turno.',
     chiCost: 1,
     levelLearned: 5,
+    resourceKey: 'Pontos de Chi',
   },
   {
     name: 'Corpo Vazio (Invisibilidade)',
     description: 'Você pode gastar 4 pontos de chi para se tornar invisível por 1 minuto.',
     chiCost: 4,
     levelLearned: 18,
+    resourceKey: 'Pontos de Chi',
   },
   {
     name: 'Corpo Vazio (Projeção Astral)',
     description: 'Você pode gastar 8 pontos de chi para viajar astralmente (efeito similar ao da magia Projeção Astral, sem exigir componentes materiais).',
     chiCost: 8,
     levelLearned: 18,
+    resourceKey: 'Pontos de Chi',
+  },
+  {
+    name: 'Artes Sombrias',
+    description: 'Você pode gastar 2 pontos de chi para conjurar trevas, visão no escuro, passos sem rastro ou silêncio, sem componentes materiais.',
+    chiCost: 2,
+    levelLearned: 3,
+    resourceKey: 'Pontos de Chi',
+    subclassId: 'sombra',
+  },
+  {
+    name: 'Técnica de Mão Oculta',
+    description: 'Quando acertar uma criatura com um ataque garantido pela ação de Rajada de Golpes, pode gastar 1 ponto de chi para impor o efeito da magia escuridão num espaço adjacente a ela ou que ela ocupe.',
+    chiCost: 1,
+    levelLearned: 11,
+    resourceKey: 'Pontos de Chi',
+    subclassId: 'sombra',
+  },
+  {
+    name: 'Palma Vibrante',
+    description: 'Quando acertar uma criatura com um ataque corpo-a-corpo desarmado, pode gastar 3 pontos de chi para iniciar vibrações letais que duram dias iguais ao seu nível de monge. Depois, pode usar uma ação para forçar um teste de resistência de Constituição (CD de golpes de chi): se falhar, a criatura cai a 0 PV; se for bem-sucedida, sofre 10d10 de dano de concussão.',
+    chiCost: 3,
+    levelLearned: 17,
+    resourceKey: 'Pontos de Chi',
+    subclassId: 'mao-aberta',
   },
 ];
 
-export function getKnownChiAbilities(classKey: number, level: number): ChiAbility[] {
+export function getKnownChiAbilities(classKey: number, level: number, idSubclass?: string | null): ChiAbility[] {
   if (classKey !== CLASSES[10].id_class) return [];
-  return MONK_CHI_ABILITIES.filter(a => level >= a.levelLearned);
+  return MONK_CHI_ABILITIES.filter(a => level >= a.levelLearned && (!a.subclassId || a.subclassId === idSubclass));
+}
+
+/**
+ * Segredos Mágicos (Bardo, nível 10/14/18): as 2 magias aprendidas nesses níveis podem vir de
+ * QUALQUER lista de classe conjuradora, não só a do bardo — o resto do fluxo de escolha de
+ * magia já funciona por contagem (`Magias Conhecidas` em `resources`), só falta abrir o pool.
+ */
+export function hasArcaneSecretsChoice(classKey: number, level: number): boolean {
+  return classKey === CLASSES[2].id_class && [10, 14, 18].includes(level);
 }
 
 /** XP total mínimo pra estar *no* nível (tabela oficial do PHB, igual pra todas as classes). */
@@ -583,7 +682,7 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '2', 'Magias Conhecidas': '4'},
+        resources: {'Truques Conhecidos': '2', 'Magias Conhecidas': '4', 'Inspiração Bárdica': 'mod:CHA'},
       },
       2: {
         features: [
@@ -592,7 +691,7 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '2', 'Magias Conhecidas': '5'},
+        resources: {'Truques Conhecidos': '2', 'Magias Conhecidas': '5', 'Inspiração Bárdica': 'mod:CHA'},
       },
       3: {
         features: [
@@ -601,13 +700,13 @@ export const CLASSES: Record<number, ClassRule> = {
         expertise: {count: 2},
         isAsiLevel: false,
         isSubclassFeatureLevel: true,
-        resources: {'Truques Conhecidos': '2', 'Magias Conhecidas': '6'},
+        resources: {'Truques Conhecidos': '2', 'Magias Conhecidas': '6', 'Inspiração Bárdica': 'mod:CHA'},
       },
       4: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '3', 'Magias Conhecidas': '7'},
+        resources: {'Truques Conhecidos': '3', 'Magias Conhecidas': '7', 'Inspiração Bárdica': 'mod:CHA'},
       },
       5: {
         features: [
@@ -616,7 +715,7 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '3', 'Magias Conhecidas': '8'},
+        resources: {'Truques Conhecidos': '3', 'Magias Conhecidas': '8', 'Inspiração Bárdica': 'mod:CHA'},
       },
       6: {
         features: [
@@ -624,19 +723,19 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: true,
-        resources: {'Truques Conhecidos': '3', 'Magias Conhecidas': '9'},
+        resources: {'Truques Conhecidos': '3', 'Magias Conhecidas': '9', 'Inspiração Bárdica': 'mod:CHA'},
       },
       7: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '3', 'Magias Conhecidas': '10'},
+        resources: {'Truques Conhecidos': '3', 'Magias Conhecidas': '10', 'Inspiração Bárdica': 'mod:CHA'},
       },
       8: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '3', 'Magias Conhecidas': '11'},
+        resources: {'Truques Conhecidos': '3', 'Magias Conhecidas': '11', 'Inspiração Bárdica': 'mod:CHA'},
       },
       9: {
         features: [
@@ -644,7 +743,7 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '3', 'Magias Conhecidas': '12'},
+        resources: {'Truques Conhecidos': '3', 'Magias Conhecidas': '12', 'Inspiração Bárdica': 'mod:CHA'},
       },
       10: {
         features: [
@@ -655,19 +754,19 @@ export const CLASSES: Record<number, ClassRule> = {
         expertise: {count: 2},
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '4', 'Magias Conhecidas': '14'},
+        resources: {'Truques Conhecidos': '4', 'Magias Conhecidas': '14', 'Inspiração Bárdica': 'mod:CHA'},
       },
       11: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '4', 'Magias Conhecidas': '15'},
+        resources: {'Truques Conhecidos': '4', 'Magias Conhecidas': '15', 'Inspiração Bárdica': 'mod:CHA'},
       },
       12: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '4', 'Magias Conhecidas': '15'},
+        resources: {'Truques Conhecidos': '4', 'Magias Conhecidas': '15', 'Inspiração Bárdica': 'mod:CHA'},
       },
       13: {
         features: [
@@ -675,7 +774,7 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '4', 'Magias Conhecidas': '16'},
+        resources: {'Truques Conhecidos': '4', 'Magias Conhecidas': '16', 'Inspiração Bárdica': 'mod:CHA'},
       },
       14: {
         features: [
@@ -683,7 +782,7 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: true,
-        resources: {'Truques Conhecidos': '4', 'Magias Conhecidas': '18'},
+        resources: {'Truques Conhecidos': '4', 'Magias Conhecidas': '18', 'Inspiração Bárdica': 'mod:CHA'},
       },
       15: {
         features: [
@@ -691,13 +790,13 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '4', 'Magias Conhecidas': '19'},
+        resources: {'Truques Conhecidos': '4', 'Magias Conhecidas': '19', 'Inspiração Bárdica': 'mod:CHA'},
       },
       16: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '4', 'Magias Conhecidas': '19'},
+        resources: {'Truques Conhecidos': '4', 'Magias Conhecidas': '19', 'Inspiração Bárdica': 'mod:CHA'},
       },
       17: {
         features: [
@@ -705,7 +804,7 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '4', 'Magias Conhecidas': '20'},
+        resources: {'Truques Conhecidos': '4', 'Magias Conhecidas': '20', 'Inspiração Bárdica': 'mod:CHA'},
       },
       18: {
         features: [
@@ -713,13 +812,13 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '4', 'Magias Conhecidas': '22'},
+        resources: {'Truques Conhecidos': '4', 'Magias Conhecidas': '22', 'Inspiração Bárdica': 'mod:CHA'},
       },
       19: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '4', 'Magias Conhecidas': '22'},
+        resources: {'Truques Conhecidos': '4', 'Magias Conhecidas': '22', 'Inspiração Bárdica': 'mod:CHA'},
       },
       20: {
         features: [
@@ -727,7 +826,7 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '4', 'Magias Conhecidas': '22'},
+        resources: {'Truques Conhecidos': '4', 'Magias Conhecidas': '22', 'Inspiração Bárdica': 'mod:CHA'},
       },
     },
     startingEquipment: ['Rapieira', 'Instrumento Musical', 'Couro Batido', 'Pacote do Diplomata'],
@@ -883,7 +982,7 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '4', 'Magias Conhecidas': '15', 'Invocações Conhecidas': '8'},
+        resources: {'Truques Conhecidos': '4', 'Magias Conhecidas': '15', 'Invocações Conhecidas': '8', 'Mestre Místico': '1'},
       },
     },
     startingEquipment: ['Besta Leve com 20 virotes', 'Bastão', 'Couro Batido', 'Foco Arcano', 'Pacote do Estudioso'],
@@ -1082,13 +1181,13 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: true,
-        resources: {'Truques Conhecidos': '2'},
+        resources: {'Truques Conhecidos': '2', 'Forma Selvagem': '2'},
       },
       3: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '2'},
+        resources: {'Truques Conhecidos': '2', 'Forma Selvagem': '2'},
       },
       4: {
         features: [
@@ -1096,25 +1195,25 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '3'},
+        resources: {'Truques Conhecidos': '3', 'Forma Selvagem': '2'},
       },
       5: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '3'},
+        resources: {'Truques Conhecidos': '3', 'Forma Selvagem': '2'},
       },
       6: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: true,
-        resources: {'Truques Conhecidos': '3'},
+        resources: {'Truques Conhecidos': '3', 'Forma Selvagem': '2'},
       },
       7: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '3'},
+        resources: {'Truques Conhecidos': '3', 'Forma Selvagem': '2'},
       },
       8: {
         features: [
@@ -1122,61 +1221,61 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '3'},
+        resources: {'Truques Conhecidos': '3', 'Forma Selvagem': '2'},
       },
       9: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '3'},
+        resources: {'Truques Conhecidos': '3', 'Forma Selvagem': '2'},
       },
       10: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: true,
-        resources: {'Truques Conhecidos': '4'},
+        resources: {'Truques Conhecidos': '4', 'Forma Selvagem': '2'},
       },
       11: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '4'},
+        resources: {'Truques Conhecidos': '4', 'Forma Selvagem': '2'},
       },
       12: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '4'},
+        resources: {'Truques Conhecidos': '4', 'Forma Selvagem': '2'},
       },
       13: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '4'},
+        resources: {'Truques Conhecidos': '4', 'Forma Selvagem': '2'},
       },
       14: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: true,
-        resources: {'Truques Conhecidos': '4'},
+        resources: {'Truques Conhecidos': '4', 'Forma Selvagem': '2'},
       },
       15: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '4'},
+        resources: {'Truques Conhecidos': '4', 'Forma Selvagem': '2'},
       },
       16: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '4'},
+        resources: {'Truques Conhecidos': '4', 'Forma Selvagem': '2'},
       },
       17: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '4'},
+        resources: {'Truques Conhecidos': '4', 'Forma Selvagem': '2'},
       },
       18: {
         features: [
@@ -1185,13 +1284,13 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '4'},
+        resources: {'Truques Conhecidos': '4', 'Forma Selvagem': '2'},
       },
       19: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '4'},
+        resources: {'Truques Conhecidos': '4', 'Forma Selvagem': '2'},
       },
       20: {
         features: [
@@ -1199,7 +1298,7 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '4'},
+        resources: {'Truques Conhecidos': '4', 'Forma Selvagem': 'Ilimitadas'},
       },
     },
     startingEquipment: ['Escudo de Madeira', 'Cimitarra', 'Couro Batido', 'Pacote do Explorador'],
@@ -1380,6 +1479,7 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
+        resources: {'Retomar Fôlego': '1'},
       },
       2: {
         features: [
@@ -1387,16 +1487,19 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
+        resources: {'Retomar Fôlego': '1', 'Surto de Ação': '1'},
       },
       3: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: true,
+        resources: {'Retomar Fôlego': '1', 'Surto de Ação': '1'},
       },
       4: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
+        resources: {'Retomar Fôlego': '1', 'Surto de Ação': '1'},
       },
       5: {
         features: [
@@ -1404,21 +1507,25 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
+        resources: {'Retomar Fôlego': '1', 'Surto de Ação': '1'},
       },
       6: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
+        resources: {'Retomar Fôlego': '1', 'Surto de Ação': '1'},
       },
       7: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: true,
+        resources: {'Retomar Fôlego': '1', 'Surto de Ação': '1'},
       },
       8: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
+        resources: {'Retomar Fôlego': '1', 'Surto de Ação': '1'},
       },
       9: {
         features: [
@@ -1426,11 +1533,13 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
+        resources: {'Retomar Fôlego': '1', 'Surto de Ação': '1', 'Indomável': '1'},
       },
       10: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: true,
+        resources: {'Retomar Fôlego': '1', 'Surto de Ação': '1', 'Indomável': '1'},
       },
       11: {
         features: [
@@ -1438,11 +1547,13 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
+        resources: {'Retomar Fôlego': '1', 'Surto de Ação': '1', 'Indomável': '1'},
       },
       12: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
+        resources: {'Retomar Fôlego': '1', 'Surto de Ação': '1', 'Indomável': '1'},
       },
       13: {
         features: [
@@ -1450,21 +1561,25 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
+        resources: {'Retomar Fôlego': '1', 'Surto de Ação': '1', 'Indomável': '2'},
       },
       14: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
+        resources: {'Retomar Fôlego': '1', 'Surto de Ação': '1', 'Indomável': '2'},
       },
       15: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: true,
+        resources: {'Retomar Fôlego': '1', 'Surto de Ação': '1', 'Indomável': '2'},
       },
       16: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
+        resources: {'Retomar Fôlego': '1', 'Surto de Ação': '1', 'Indomável': '2'},
       },
       17: {
         features: [
@@ -1473,16 +1588,19 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
+        resources: {'Retomar Fôlego': '1', 'Surto de Ação': '2', 'Indomável': '3'},
       },
       18: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: true,
+        resources: {'Retomar Fôlego': '1', 'Surto de Ação': '2', 'Indomável': '3'},
       },
       19: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
+        resources: {'Retomar Fôlego': '1', 'Surto de Ação': '2', 'Indomável': '3'},
       },
       20: {
         features: [
@@ -1490,6 +1608,7 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
+        resources: {'Retomar Fôlego': '1', 'Surto de Ação': '2', 'Indomável': '3'},
       },
     },
     startingEquipment: ['Cota de Malha', 'Escudo', 'Espada Longa', 'Besta Leve com 20 virotes', 'Pacote do Aventureiro'],
@@ -1682,103 +1801,103 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '3'},
+        resources: {'Truques Conhecidos': '3', 'Recuperação Arcana': '1'},
       },
       2: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: true,
-        resources: {'Truques Conhecidos': '3'},
+        resources: {'Truques Conhecidos': '3', 'Recuperação Arcana': '1'},
       },
       3: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '3'},
+        resources: {'Truques Conhecidos': '3', 'Recuperação Arcana': '1'},
       },
       4: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '4'},
+        resources: {'Truques Conhecidos': '4', 'Recuperação Arcana': '1'},
       },
       5: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '4'},
+        resources: {'Truques Conhecidos': '4', 'Recuperação Arcana': '1'},
       },
       6: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: true,
-        resources: {'Truques Conhecidos': '4'},
+        resources: {'Truques Conhecidos': '4', 'Recuperação Arcana': '1'},
       },
       7: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '4'},
+        resources: {'Truques Conhecidos': '4', 'Recuperação Arcana': '1'},
       },
       8: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '4'},
+        resources: {'Truques Conhecidos': '4', 'Recuperação Arcana': '1'},
       },
       9: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '4'},
+        resources: {'Truques Conhecidos': '4', 'Recuperação Arcana': '1'},
       },
       10: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: true,
-        resources: {'Truques Conhecidos': '5'},
+        resources: {'Truques Conhecidos': '5', 'Recuperação Arcana': '1'},
       },
       11: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '5'},
+        resources: {'Truques Conhecidos': '5', 'Recuperação Arcana': '1'},
       },
       12: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '5'},
+        resources: {'Truques Conhecidos': '5', 'Recuperação Arcana': '1'},
       },
       13: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '5'},
+        resources: {'Truques Conhecidos': '5', 'Recuperação Arcana': '1'},
       },
       14: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: true,
-        resources: {'Truques Conhecidos': '5'},
+        resources: {'Truques Conhecidos': '5', 'Recuperação Arcana': '1'},
       },
       15: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '5'},
+        resources: {'Truques Conhecidos': '5', 'Recuperação Arcana': '1'},
       },
       16: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '5'},
+        resources: {'Truques Conhecidos': '5', 'Recuperação Arcana': '1'},
       },
       17: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '5'},
+        resources: {'Truques Conhecidos': '5', 'Recuperação Arcana': '1'},
       },
       18: {
         features: [
@@ -1786,13 +1905,13 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '5'},
+        resources: {'Truques Conhecidos': '5', 'Recuperação Arcana': '1'},
       },
       19: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '5'},
+        resources: {'Truques Conhecidos': '5', 'Recuperação Arcana': '1'},
       },
       20: {
         features: [
@@ -1800,7 +1919,7 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Truques Conhecidos': '5'},
+        resources: {'Truques Conhecidos': '5', 'Recuperação Arcana': '1'},
       },
     },
     startingEquipment: ['Bastão', 'Grimório', 'Foco Arcano (Varinha)', 'Pacote de Estudioso', 'Tinteiro e Pena'],
@@ -2005,6 +2124,7 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '5'},
       },
       2: {
         features: [
@@ -2014,6 +2134,7 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '10'},
       },
       3: {
         features: [
@@ -2021,11 +2142,13 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: true,
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '15'},
       },
       4: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '20'},
       },
       5: {
         features: [
@@ -2033,6 +2156,7 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '25'},
       },
       6: {
         features: [
@@ -2040,21 +2164,25 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '30'},
       },
       7: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: true,
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '35'},
       },
       8: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '40'},
       },
       9: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '45'},
       },
       10: {
         features: [
@@ -2062,6 +2190,7 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '50'},
       },
       11: {
         features: [
@@ -2069,16 +2198,19 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '55'},
       },
       12: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '60'},
       },
       13: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '65'},
       },
       14: {
         features: [
@@ -2086,21 +2218,25 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '70', 'Toque Purificador': 'mod:CHA'},
       },
       15: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: true,
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '75', 'Toque Purificador': 'mod:CHA'},
       },
       16: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '80', 'Toque Purificador': 'mod:CHA'},
       },
       17: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '85', 'Toque Purificador': 'mod:CHA'},
       },
       18: {
         features: [
@@ -2108,16 +2244,19 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '90', 'Toque Purificador': 'mod:CHA'},
       },
       19: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '95', 'Toque Purificador': 'mod:CHA'},
       },
       20: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: true,
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '100', 'Toque Purificador': 'mod:CHA'},
       },
     },
     startingEquipment: ['Espada Longa', 'Escudo', 'Cota de Malha', 'Símbolo Sagrado', 'Pacote do Padre'],
@@ -2514,17 +2653,32 @@ export const SUBCLASSES: Record<number, SubclassRule[]> = {
           features: [
             {name: 'Integridade Corporal', description: 'Com uma ação, você recupera pontos de vida iguais a três vezes seu nível de monge. Deve terminar um descanso longo antes de poder usar essa característica de novo.'},
           ],
+          resources: {'Integridade Corporal': '1'},
         },
+        7: {features: [], resources: {'Integridade Corporal': '1'}},
+        8: {features: [], resources: {'Integridade Corporal': '1'}},
+        9: {features: [], resources: {'Integridade Corporal': '1'}},
+        10: {features: [], resources: {'Integridade Corporal': '1'}},
         11: {
           features: [
             {name: 'Tranquilidade', description: 'No final de um descanso longo, você ganha o efeito da magia santuário (CD 8 + modificador de Sabedoria + bônus de proficiência), que dura até o início do seu próximo descanso longo ou até você atacar/conjurar uma magia direcionada a uma criatura hostil.'},
           ],
+          resources: {'Integridade Corporal': '1'},
         },
+        12: {features: [], resources: {'Integridade Corporal': '1'}},
+        13: {features: [], resources: {'Integridade Corporal': '1'}},
+        14: {features: [], resources: {'Integridade Corporal': '1'}},
+        15: {features: [], resources: {'Integridade Corporal': '1'}},
+        16: {features: [], resources: {'Integridade Corporal': '1'}},
         17: {
           features: [
             {name: 'Palma Vibrante', description: 'Quando acertar uma criatura com um ataque corpo-a-corpo desarmado, pode gastar 3 pontos de chi para iniciar vibrações letais que duram dias iguais ao seu nível de monge. Depois, pode usar uma ação para forçar um teste de resistência de Constituição (CD de golpes de chi): se falhar, a criatura cai a 0 PV; se for bem-sucedida, sofre 10d10 de dano de concussão.'},
           ],
+          resources: {'Integridade Corporal': '1'},
         },
+        18: {features: [], resources: {'Integridade Corporal': '1'}},
+        19: {features: [], resources: {'Integridade Corporal': '1'}},
+        20: {features: [], resources: {'Integridade Corporal': '1'}},
       },
     },
     {
@@ -2996,27 +3150,46 @@ export const SUBCLASSES: Record<number, SubclassRule[]> = {
             {name: 'Truque Adicional', description: 'Você aprende um truque de druida adicional à sua escolha.'},
             {name: 'Recuperação Natural', description: 'Durante um descanso curto, você pode recuperar espaços de magia gastos com total combinado igual ou menor à metade do seu nível de druida (arredondado pra cima), nenhum de 6º círculo ou superior. Só pode usar isso de novo depois de um descanso longo.'},
           ],
+          resources: {'Recuperação Natural': '1'},
         },
         3: {
           features: [
             {name: 'Magias de Círculo', description: 'Escolha um terreno (Ártico, Costa, Deserto, Floresta, Montanha, Pântano, Planície ou Subterrâneo) — você ganha acesso a magias extras, sempre preparadas, nos níveis 3º, 5º, 7º e 9º, de acordo com o terreno escolhido. Não modelado individualmente por terreno nesta versão — só o texto informativo.'},
           ],
+          resources: {'Recuperação Natural': '1'},
         },
+        4: {features: [], resources: {'Recuperação Natural': '1'}},
+        5: {features: [], resources: {'Recuperação Natural': '1'}},
         6: {
           features: [
             {name: 'Passo de Terreno', description: 'Mover-se através de terreno difícil não custa movimento extra. Você também pode passar por plantas não-mágicas sem ser desacelerado por elas e sem sofrer dano se tiverem espinhos ou perigos similares.'},
           ],
+          resources: {'Recuperação Natural': '1'},
         },
+        7: {features: [], resources: {'Recuperação Natural': '1'}},
+        8: {features: [], resources: {'Recuperação Natural': '1'}},
+        9: {features: [], resources: {'Recuperação Natural': '1'}},
         10: {
           features: [
             {name: 'Proteção Natural', description: 'Você não pode ser envenenado ou amedrontado por elementais ou fadas, e é imune a venenos e doenças.'},
           ],
+          resources: {'Recuperação Natural': '1'},
         },
+        11: {features: [], resources: {'Recuperação Natural': '1'}},
+        12: {features: [], resources: {'Recuperação Natural': '1'}},
+        13: {features: [], resources: {'Recuperação Natural': '1'}},
         14: {
           features: [
             {name: 'Santuário Natural', description: 'Quando uma criatura do mundo natural (fadas, plantas e afins) atacar você, ela deve fazer um teste de resistência de Sabedoria (CD de druida) ou hesitará em te atacar, escolhendo outro alvo ou desistindo do ataque.'},
           ],
+          resources: {'Recuperação Natural': '1'},
         },
+        15: {features: [], resources: {'Recuperação Natural': '1'}},
+        16: {features: [], resources: {'Recuperação Natural': '1'}},
+        17: {features: [], resources: {'Recuperação Natural': '1'}},
+        18: {features: [], resources: {'Recuperação Natural': '1'}},
+        19: {features: [], resources: {'Recuperação Natural': '1'}},
+        20: {features: [], resources: {'Recuperação Natural': '1'}},
       },
     },
     {
