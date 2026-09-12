@@ -78,6 +78,8 @@ export interface CharacterClass {
   fighting_style_options?: string[];
   /** Nível em que a classe ganha a escolha de Estilo de Combate — ver `fighting_style_options`. */
   fighting_style_level?: number;
+  /** Riqueza inicial alternativa (tabela "Riqueza Inicial por Classe" do PHB) — pra rolar na criação em vez de pegar o equipamento fixo. */
+  starting_gold_dice: {count: number; sides: number; multiplier: number};
 }
 
 export interface Background {

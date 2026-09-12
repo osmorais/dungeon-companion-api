@@ -87,7 +87,8 @@ export interface ClassRule {
   /** Escolha de Estilo de Combate — `level` é o nível em que a classe realmente ganha essa escolha (1 pro Guerreiro, 2 pro Paladino/Ranger). */
   fightingStyleChoice?: {level: number; options: string[]};
   startingEquipment: string[];
-  startingGold: number;
+  /** Riqueza inicial alternativa (tabela "Riqueza Inicial por Classe" do PHB) — rolado pelo jogador na criação, em vez de pegar o equipamento fixo. Ex: Guerreiro = 5d4×10 PO. */
+  startingGoldDice: {count: number; sides: number; multiplier: number};
 }
 
 export interface SubclassLevelData {
@@ -657,7 +658,7 @@ export const CLASSES: Record<number, ClassRule> = {
       },
     },
     startingEquipment: ['Machado Grande', 'Dois Machados de Mão', 'Pacote de Aventureiro', 'Quatro Azagaias'],
-    startingGold: 0,
+    startingGoldDice: {count: 2, sides: 4, multiplier: 10},
   },
   2: {
     id_class: 2,
@@ -830,7 +831,7 @@ export const CLASSES: Record<number, ClassRule> = {
       },
     },
     startingEquipment: ['Rapieira', 'Instrumento Musical', 'Couro Batido', 'Pacote do Diplomata'],
-    startingGold: 5 * 4,
+    startingGoldDice: {count: 5, sides: 4, multiplier: 10},
   },
   3: {
     id_class: 3,
@@ -986,7 +987,7 @@ export const CLASSES: Record<number, ClassRule> = {
       },
     },
     startingEquipment: ['Besta Leve com 20 virotes', 'Bastão', 'Couro Batido', 'Foco Arcano', 'Pacote do Estudioso'],
-    startingGold: 4 * 4,
+    startingGoldDice: {count: 4, sides: 4, multiplier: 10},
   },
   4: {
     id_class: 4,
@@ -1148,7 +1149,7 @@ export const CLASSES: Record<number, ClassRule> = {
       },
     },
     startingEquipment: ['Maça', 'Escudo', 'Cota de Malha', 'Pacote do Padre'],
-    startingGold: 5 * 4,
+    startingGoldDice: {count: 5, sides: 4, multiplier: 10},
   },
   5: {
     id_class: 5,
@@ -1302,7 +1303,7 @@ export const CLASSES: Record<number, ClassRule> = {
       },
     },
     startingEquipment: ['Escudo de Madeira', 'Cimitarra', 'Couro Batido', 'Pacote do Explorador'],
-    startingGold: 2 * 4,
+    startingGoldDice: {count: 2, sides: 4, multiplier: 10},
   },
   6: {
     id_class: 6,
@@ -1454,7 +1455,7 @@ export const CLASSES: Record<number, ClassRule> = {
       },
     },
     startingEquipment: ['Besta Leve com 20 virotes', 'Bastão', 'Foco Arcano', 'Pacote do Aventureiro'],
-    startingGold: 3 * 4,
+    startingGoldDice: {count: 3, sides: 4, multiplier: 10},
   },
   7: {
     id_class: 7,
@@ -1612,7 +1613,7 @@ export const CLASSES: Record<number, ClassRule> = {
       },
     },
     startingEquipment: ['Cota de Malha', 'Escudo', 'Espada Longa', 'Besta Leve com 20 virotes', 'Pacote do Aventureiro'],
-    startingGold: 5 * 4,
+    startingGoldDice: {count: 5, sides: 4, multiplier: 10},
   },
   8: {
     id_class: 8,
@@ -1776,7 +1777,7 @@ export const CLASSES: Record<number, ClassRule> = {
       },
     },
     startingEquipment: ['Rapieira', 'Arco Curto com 20 flechas', 'Couro Batido', 'Duas Adagas', 'Ferramentas de Ladrão', 'Pacote do Aventureiro'],
-    startingGold: 4 * 4,
+    startingGoldDice: {count: 4, sides: 4, multiplier: 10},
   },
   9: {
     id_class: 9,
@@ -1923,7 +1924,7 @@ export const CLASSES: Record<number, ClassRule> = {
       },
     },
     startingEquipment: ['Bastão', 'Grimório', 'Foco Arcano (Varinha)', 'Pacote de Estudioso', 'Tinteiro e Pena'],
-    startingGold: 4 * 4,
+    startingGoldDice: {count: 4, sides: 4, multiplier: 10},
   },
   10: {
     id_class: 10,
@@ -2097,7 +2098,7 @@ export const CLASSES: Record<number, ClassRule> = {
       },
     },
     startingEquipment: ['Espada Curta', 'Dez Dardos', 'Pacote do Aventureiro'],
-    startingGold: 5 * 4,
+    startingGoldDice: {count: 5, sides: 4, multiplier: 1},
   },
   11: {
     id_class: 11,
@@ -2260,7 +2261,7 @@ export const CLASSES: Record<number, ClassRule> = {
       },
     },
     startingEquipment: ['Espada Longa', 'Escudo', 'Cota de Malha', 'Símbolo Sagrado', 'Pacote do Padre'],
-    startingGold: 5 * 4,
+    startingGoldDice: {count: 5, sides: 4, multiplier: 10},
   },
   12: {
     id_class: 12,
@@ -2422,7 +2423,7 @@ export const CLASSES: Record<number, ClassRule> = {
       },
     },
     startingEquipment: ['Cota de Escamas', 'Duas Espadas Curtas', 'Pacote do Explorador', 'Arco Longo com 20 flechas'],
-    startingGold: 5 * 4,
+    startingGoldDice: {count: 5, sides: 4, multiplier: 10},
   },
 };
 

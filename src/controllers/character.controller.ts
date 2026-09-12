@@ -223,6 +223,34 @@ export class CharacterController {
     }
   }
 
+  @patch('/api/character-sheet/{id}/currency')
+  @response(200, {
+    description: 'Updates the total gold (PO) for a character',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async updateCurrency(
+    @param.path.number('id') id: number,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      description: 'New total gold (PO) value',
+      required: true,
+      content: {'application/json': {schema: {type: 'object', required: ['total_po'], properties: {total_po: {type: 'integer'}}}}},
+    })
+    body: {total_po: number},
+  ): Promise<object> {
+    if (typeof body.total_po !== 'number' || !Number.isInteger(body.total_po) || body.total_po < 0) {
+      throw new HttpErrors.UnprocessableEntity('total_po deve ser um número inteiro não-negativo');
+    }
+    try {
+      return await this.characterSheetService.updateCurrency(id, body.total_po, currentUser.id);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (message === 'Character not found') throw new HttpErrors.NotFound(`Character with id ${id} not found`);
+      if (message === 'Unauthorized') throw new HttpErrors.Forbidden();
+      throw e;
+    }
+  }
+
   @patch('/api/character-sheet/{id}/spell-slots')
   @response(200, {
     description: 'Expends or restores one spell slot of the given level',

@@ -232,7 +232,11 @@ export class CharacterSheetService {
       .map(w => w.name);
     const allItems = [...new Set([...equippedWeapons, ...startingItems])];
 
-    const totalGold = bgRule.startingGold;
+    const rolledGold = equipment.starting_gold ?? 0;
+    if (!Number.isInteger(rolledGold) || rolledGold < 0) {
+      throw new Error('starting_gold deve ser um número inteiro não-negativo');
+    }
+    const totalGold = rolledGold + bgRule.startingGold;
 
     return {
       character_sheet: {
@@ -1211,6 +1215,18 @@ export class CharacterSheetService {
     if (!raw) throw new Error('Character not found');
     if (raw.character.user_id !== userId) throw new Error('Unauthorized');
     await this.repository.updateCurrentHitPoints(id, currentHitPoints);
+    return {success: true};
+  }
+
+  async updateCurrency(
+    id: number,
+    totalPo: number,
+    userId: string,
+  ): Promise<{success: boolean}> {
+    const raw = await this.repository.findCharacterById(id);
+    if (!raw) throw new Error('Character not found');
+    if (!(await this.userCanManageCharacter(raw.character.user_id, id, userId))) throw new Error('Unauthorized');
+    await this.repository.updateCurrency(id, totalPo);
     return {success: true};
   }
 
