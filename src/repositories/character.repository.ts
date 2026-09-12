@@ -158,6 +158,12 @@ export class CharacterRepository {
     `;
   }
 
+  async updateCurrency(id: number, totalPo: number): Promise<void> {
+    await this.db.sql`
+      UPDATE character SET total_po = ${totalPo} WHERE id_character = ${id}
+    `;
+  }
+
   async updateSpellSlotsExpended(id: number, expended: Record<string, number>): Promise<void> {
     await this.db.sql`
       UPDATE character

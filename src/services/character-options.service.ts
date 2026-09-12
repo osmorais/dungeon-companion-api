@@ -67,6 +67,7 @@ export class CharacterOptionsService {
         traits: (rule?.traits ?? []).map(t => ({name: t.name, description: t.description})),
         fighting_style_options: rule?.fightingStyleChoice?.options,
         fighting_style_level: rule?.fightingStyleChoice?.level,
+        starting_gold_dice: rule?.startingGoldDice ?? {count: 0, sides: 1, multiplier: 0},
       };
     });
 

@@ -61,6 +61,8 @@ export interface CharacterInput {
     armour: Armour | null;
     weapons: WeaponRow[];
     has_shield: boolean;
+    /** Riqueza inicial rolada pelo jogador (dado da classe, já multiplicado) em PO — somado ao dinheiro fixo do antecedente. `undefined`/0 se não rolou nada. */
+    starting_gold?: number;
   };
   character_details?: {
     name?: string;
