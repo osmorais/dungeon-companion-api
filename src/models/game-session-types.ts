@@ -46,12 +46,17 @@ export interface AddPlayerInput {
 
 export interface GrantXpInput {
   xp_amount: number;
-  /** Cada jogador listado recebe o valor cheio de `xp_amount` (não é dividido entre eles). */
-  id_player_sessions: string[];
+  /** Cada jogador/NPC listado recebe o valor cheio de `xp_amount` (não é dividido entre eles). */
+  id_player_sessions?: string[];
+  id_npc_sessions?: string[];
 }
 
 export interface GrantXpResult {
-  id_player_session: string;
+  participant_type: 'player' | 'npc';
+  /** Setado quando participant_type === 'player'. */
+  id_player_session?: string;
+  /** Setado quando participant_type === 'npc'. */
+  id_npc_session?: string;
   id_character: number;
   character_name: string;
   xp_points: number;

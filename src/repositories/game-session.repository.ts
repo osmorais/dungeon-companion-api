@@ -351,31 +351,58 @@ export class GameSessionRepository {
     idGameSession: string,
     xpAmount: number,
     idPlayerSessions: string[],
+    idNpcSessions: string[],
     userId: string,
   ): Promise<{status: 'unauthorized' | 'ok'; granted: GrantXpResult[]}> {
     const isOwner = await this.isSessionOwner(idGameSession, userId);
     if (!isOwner) return {status: 'unauthorized', granted: []};
 
-    const rows = await this.db.sql<{id_player_session: string; id_character: number}[]>`
-      SELECT id_player_session, id_character FROM player_session
-      WHERE id_game_session = ${idGameSession} AND id_player_session = ANY(${idPlayerSessions})
-    `;
-
     const granted: GrantXpResult[] = [];
-    for (const row of rows) {
-      const [updated] = await this.db.sql<{xp_points: number; level: number; name: string}[]>`
-        UPDATE character SET xp_points = xp_points + ${xpAmount}
-        WHERE id_character = ${row.id_character}
-        RETURNING xp_points, level, name
+
+    if (idPlayerSessions.length) {
+      const rows = await this.db.sql<{id_player_session: string; id_character: number}[]>`
+        SELECT id_player_session, id_character FROM player_session
+        WHERE id_game_session = ${idGameSession} AND id_player_session = ANY(${idPlayerSessions})
       `;
-      granted.push({
-        id_player_session: row.id_player_session,
-        id_character: row.id_character,
-        character_name: updated.name,
-        xp_points: updated.xp_points,
-        level: updated.level,
-      });
+      for (const row of rows) {
+        const [updated] = await this.db.sql<{xp_points: number; level: number; name: string}[]>`
+          UPDATE character SET xp_points = xp_points + ${xpAmount}
+          WHERE id_character = ${row.id_character}
+          RETURNING xp_points, level, name
+        `;
+        granted.push({
+          participant_type: 'player',
+          id_player_session: row.id_player_session,
+          id_character: row.id_character,
+          character_name: updated.name,
+          xp_points: updated.xp_points,
+          level: updated.level,
+        });
+      }
     }
+
+    if (idNpcSessions.length) {
+      const rows = await this.db.sql<{id_npc_session: string; id_character: number}[]>`
+        SELECT id_npc_session, id_character FROM npc_session
+        WHERE id_game_session = ${idGameSession} AND id_npc_session = ANY(${idNpcSessions})
+      `;
+      for (const row of rows) {
+        const [updated] = await this.db.sql<{xp_points: number; level: number; name: string}[]>`
+          UPDATE character SET xp_points = xp_points + ${xpAmount}
+          WHERE id_character = ${row.id_character}
+          RETURNING xp_points, level, name
+        `;
+        granted.push({
+          participant_type: 'npc',
+          id_npc_session: row.id_npc_session,
+          id_character: row.id_character,
+          character_name: updated.name,
+          xp_points: updated.xp_points,
+          level: updated.level,
+        });
+      }
+    }
+
     return {status: 'ok', granted};
   }
 
