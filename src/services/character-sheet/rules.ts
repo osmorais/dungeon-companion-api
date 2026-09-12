@@ -84,8 +84,8 @@ export interface ClassRule {
    * listas devem ser mantidas em sincronia manualmente pra uma classe já preenchida.
    */
   featuresByLevel?: Record<number, ClassLevelData>;
-  /** Escolha de Estilo de Combate no nível 1 (hoje só o Guerreiro tem essa feature modelada). */
-  fightingStyleChoice?: {options: string[]};
+  /** Escolha de Estilo de Combate — `level` é o nível em que a classe realmente ganha essa escolha (1 pro Guerreiro, 2 pro Paladino/Ranger). */
+  fightingStyleChoice?: {level: number; options: string[]};
   startingEquipment: string[];
   startingGold: number;
 }
@@ -1371,7 +1371,7 @@ export const CLASSES: Record<number, ClassRule> = {
       {name: 'Estilo de Combate', source: 'Classe', description: 'Você adota um estilo particular de combate como sua especialidade. Escolha uma das opções: Arqueria, Defesa, Duelo, Grande Arma, Proteção ou Combate com Duas Armas.'},
       {name: 'Retomar Fôlego', source: 'Classe', description: 'Você tem uma reserva de resistência que pode usar para se proteger. Em seu turno, você pode usar uma ação bônus para recuperar pontos de vida iguais a 1d10 + seu nível de guerreiro.'},
     ],
-    fightingStyleChoice: {options: ['Arqueria', 'Defesa', 'Duelo', 'Grande Arma', 'Proteção', 'Combate com Duas Armas']},
+    fightingStyleChoice: {level: 1, options: ['Arqueria', 'Defesa', 'Duelo', 'Grande Arma', 'Proteção', 'Combate com Duas Armas']},
     featuresByLevel: {
       1: {
         features: [
@@ -1995,6 +1995,8 @@ export const CLASSES: Record<number, ClassRule> = {
       {name: 'Sentido Divino', source: 'Classe', description: 'A presença do forte mal registra nos seus sentidos como uma odor nauseante e o poder poderoso do bem soa como música celestial nos seus ouvidos.'},
       {name: 'Curar pelo Toque', source: 'Classe', description: 'A partir do 1º nível, você tem um reservatório de poder curativo que repõe quando você toma um descanso longo.'},
     ],
+    // Só 4 das 6 opções (sem Arqueria nem Combate com Duas Armas) — confirmado contra o livro.
+    fightingStyleChoice: {level: 2, options: ['Defesa', 'Duelo', 'Grande Arma', 'Proteção']},
     featuresByLevel: {
       1: {
         features: [
@@ -2136,6 +2138,8 @@ export const CLASSES: Record<number, ClassRule> = {
       {name: 'Inimigo Favorito', source: 'Classe', description: 'Você tem experiência significativa estudando, rastreando, caçando e até conversando com um determinado tipo de inimigo.'},
       {name: 'Explorador Natural', source: 'Classe', description: 'Você é particularmente familiarizado com um tipo de ambiente natural e é adepto em viajar e sobreviver nesses ambientes.'},
     ],
+    // Só 4 das 6 opções (sem Grande Arma nem Proteção) — confirmado contra o livro.
+    fightingStyleChoice: {level: 2, options: ['Arqueria', 'Defesa', 'Duelo', 'Combate com Duas Armas']},
     featuresByLevel: {
       1: {
         features: [

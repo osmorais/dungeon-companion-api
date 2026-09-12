@@ -12,6 +12,12 @@ export interface FeatRule {
   displayName: string;
   description: string;
   abilityIncrease?: {stat: StatKeyEn; amount: number};
+  /**
+   * PV extra por nível (hoje só o Duro): ao ganhar o talento, aplica-se um bônus retroativo de
+   * `hpBonusPerLevel * nível_atual` de uma vez; em cada level-up seguinte, soma-se
+   * `hpBonusPerLevel` a mais no ganho normal do dado de vida. Ver `confirmLevelUp`.
+   */
+  hpBonusPerLevel?: number;
 }
 
 export const FEATS: Record<string, FeatRule> = {
@@ -27,6 +33,7 @@ export const FEATS: Record<string, FeatRule> = {
     displayName: 'Duro',
     description:
       'Seu máximo de pontos de vida aumenta em 2 pra cada nível que você tiver, com esse aumento retroagindo aos níveis anteriores também. Sempre que você ganhar um nível depois, seu máximo de pontos de vida aumenta 2 pontos a mais do que aumentaria normalmente.',
+    hpBonusPerLevel: 2,
   },
   observador: {
     id_feat: 'observador',

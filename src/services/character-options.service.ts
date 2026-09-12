@@ -66,6 +66,7 @@ export class CharacterOptionsService {
         is_spellcaster: rule?.isSpellcaster ?? false,
         traits: (rule?.traits ?? []).map(t => ({name: t.name, description: t.description})),
         fighting_style_options: rule?.fightingStyleChoice?.options,
+        fighting_style_level: rule?.fightingStyleChoice?.level,
       };
     });
 

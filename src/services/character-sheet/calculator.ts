@@ -159,22 +159,41 @@ export function grantsAllSavingThrowProficiency(classKey: number, level: number)
   return classKey === CLASSES[10].id_class && level >= 14;
 }
 
+/**
+ * Aura de Proteção (Paladino, nível 6): bônus no próprio teste de resistência igual ao
+ * modificador de Carisma (mínimo +1) — só a parte "a si mesmo" é automatizada aqui; o alcance de
+ * 3m/9m pra aliados próximos continua narrativo, já que exige rastrear posição em combate.
+ */
+export function calcAuraOfProtectionBonus(classKey: number, level: number, chaModifier: number): number {
+  if (classKey !== CLASSES[11].id_class || level < 6) return 0;
+  return Math.max(1, chaModifier);
+}
+
+/** Mente Escorregadia (Ladino, nível 15): proficiência extra em salvaguardas de Sabedoria. */
+export function grantsExtraSavingThrowProficiency(classKey: number, level: number): StatKeyEn | null {
+  if (classKey === CLASSES[8].id_class && level >= 15) return 'WIS';
+  return null;
+}
+
 export function buildAttributeBlocks(
   stats: FinalStats,
   classRule: ClassRule,
   profBonus: number,
   allSavesProficient = false,
+  auraOfProtectionBonus = 0,
+  extraSaveProficiency: StatKeyEn | null = null,
 ): Record<StatKeyEn, StatBlock> {
   const keys: StatKeyEn[] = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
   const result = {} as Record<StatKeyEn, StatBlock>;
   for (const key of keys) {
     const score = stats[key];
     const modifier = getMod(score);
-    const hasSaveProf = allSavesProficient || classRule.savingThrows.includes(key);
+    const hasSaveProf = allSavesProficient || classRule.savingThrows.includes(key) || extraSaveProficiency === key;
+    const baseSave = hasSaveProf ? modifier + profBonus : modifier;
     result[key] = {
       score,
       modifier,
-      save: hasSaveProf ? modifier + profBonus : modifier,
+      save: baseSave + auraOfProtectionBonus,
       save_proficiency: hasSaveProf,
     };
   }
@@ -239,6 +258,7 @@ export function calcArmorClass(
   hasShield: boolean,
   classKey: number,
   fightingStyle?: string | null,
+  idSubclass?: string | null,
 ): number {
   // const armor = resolveArmor(armorName);
   const dexMod = getMod(stats.DEX);
@@ -249,6 +269,8 @@ export function calcArmorClass(
       ac = 10 + dexMod + getMod(stats.CON);
     } else if (classKey === CLASSES[10].id_class) { // Monge
       ac = 10 + dexMod + getMod(stats.WIS);
+    } else if (classKey === CLASSES[6].id_class && idSubclass === 'linhagem-draconica') { // Feiticeiro, Resiliência Dracônica
+      ac = 13 + dexMod;
     } else {
       ac = 10 + dexMod;
     }
@@ -265,6 +287,11 @@ export function calcArmorClass(
   if (armor?.armour_type != null && fightingStyle === 'Defesa') ac += 1;
 
   return hasShield ? ac + 2 : ac;
+}
+
+/** Resiliência Dracônica (Feiticeiro, Linhagem Dracônica): +1 PV máximo por nível, desde o nível 1. */
+export function calcDraconicResilienceHpBonus(idSubclass: string | null | undefined): number {
+  return idSubclass === 'linhagem-draconica' ? 1 : 0;
 }
 
 export function calcMaxHP(hitDie: number, level: number, conMod: number, hpBonusPerLevel = 0): number {
@@ -375,6 +402,8 @@ export function collectTraits(
   level: number,
   subclassRule: SubclassRule | null = null,
   fightingStyle?: string | null,
+  profBonus?: number,
+  stats?: FinalStats,
 ): Trait[] {
   const traits = [
     ...raceRule.traits,
@@ -385,15 +414,35 @@ export function collectTraits(
     bgRule.feature,
   ];
 
-  // Deixa claro qual dos 6 estilos foi escolhido, em vez de só listar as opções genéricas.
-  if (fightingStyle) {
-    return traits.map(t =>
-      t.name === 'Estilo de Combate'
-        ? {...t, description: `Escolhido: ${fightingStyle}. ${t.description}`}
-        : t,
-    );
-  }
-  return traits;
+  // CD de conjuração da própria classe (paladino/mago) — usada só pra preencher os textos de
+  // "CD de magia"/"CD de suas magias de paladino" abaixo, não é o mesmo cálculo completo de
+  // `buildSpellcasting` (que também lida com subclasse conjuradora).
+  const spellSaveDc =
+    profBonus != null && stats != null && classRule.spellcastingAbility
+      ? 8 + profBonus + getMod(stats[classRule.spellcastingAbility])
+      : null;
+
+  return traits.map(t => {
+    if (fightingStyle && t.name === 'Estilo de Combate') {
+      return {...t, description: `Escolhido: ${fightingStyle}. ${t.description}`};
+    }
+    // CDs fixas informativas: preenche o valor calculado no lugar da fórmula genérica do texto.
+    if (t.name === 'Presença Intimidante' && profBonus != null && stats != null) {
+      const dc = 8 + profBonus + getMod(stats.CHA);
+      return {...t, description: t.description.replace('CD 8 + bônus de proficiência + modificador de Carisma', `CD ${dc}`)};
+    }
+    if (t.name === 'Tranquilidade' && profBonus != null && stats != null) {
+      const dc = 8 + profBonus + getMod(stats.WIS);
+      return {...t, description: t.description.replace('CD 8 + modificador de Sabedoria + bônus de proficiência', `CD ${dc}`)};
+    }
+    if (t.name === 'Canalizar Divindade: Abjurar Inimigo' && spellSaveDc != null) {
+      return {...t, description: t.description.replace('CD de suas magias de paladino', `CD ${spellSaveDc}`)};
+    }
+    if (t.name === 'Encantamento Hipnotizante' && spellSaveDc != null) {
+      return {...t, description: t.description.replace('CD de magia', `CD ${spellSaveDc}`)};
+    }
+    return t;
+  });
 }
 
 export type SpellcastingResult =

@@ -243,5 +243,7 @@ export interface CharacterSheet {
     } | null;
     /** Características ativáveis gastando o recurso consumível da classe (hoje só as de Pontos de Chi do Monge) — vazio se não houver nenhuma neste nível. */
     chi_abilities: {name: string; description: string; chi_cost: number}[];
+    /** Recursos de classe/subclasse que escalam por nível (ex: "Ataque Furtivo": "2d6") — informativo, `null` se não houver nenhum neste nível. */
+    class_resources: Record<string, string> | null;
   };
 }

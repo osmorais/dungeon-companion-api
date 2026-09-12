@@ -74,8 +74,10 @@ export interface CharacterClass {
   weapon_proficiencies: string[];
   is_spellcaster: boolean;
   traits: TraitInfo[];
-  /** Opções de Estilo de Combate no nível 1 (hoje só o Guerreiro) — vazio/ausente se a classe não tiver essa escolha. */
+  /** Opções de Estilo de Combate (Guerreiro nível 1, Paladino/Ranger nível 2) — vazio/ausente se a classe não tiver essa escolha. */
   fighting_style_options?: string[];
+  /** Nível em que a classe ganha a escolha de Estilo de Combate — ver `fighting_style_options`. */
+  fighting_style_level?: number;
 }
 
 export interface Background {
