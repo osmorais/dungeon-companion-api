@@ -70,6 +70,9 @@ export interface LevelUpPreview {
   /** Só populado no nível em que a classe ganha Estilo de Combate (Paladino/Ranger nv2) e o
    *  personagem ainda não escolheu um (Guerreiro já escolhe na criação, nunca chega aqui). */
   fighting_style_options: string[] | null;
+  /** Segredos Mágicos do Bardo (nv10/14/18): as magias de `spell_choices` podem vir de qualquer
+   *  lista de classe conjuradora, não só a do personagem. */
+  spell_pool_any_class: boolean;
 }
 
 /** Resultado da rolagem do dado de vida — feita pelo jogador, sob demanda, sem gravar nada. */
@@ -91,6 +94,9 @@ export interface LevelUpConfirmInput {
   expertise_skill_ids?: number[];
   /** Obrigatório só no nível em que a classe ganha Estilo de Combate (ver `fighting_style_options` no preview). */
   fighting_style?: string;
+  /** Payload livre de uma escolha nova feita neste nível (ex: atributo do talento Resiliente,
+   *  perícias do Afiar Habilidades, magias de Segredos Mágicos) — ver `findChoiceData`. */
+  choice_data?: Record<string, unknown>;
 }
 
 export interface LevelUpResult {

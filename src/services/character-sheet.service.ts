@@ -69,6 +69,7 @@ import {
   XP_THRESHOLDS,
   xpNeededForLevel,
   getKnownChiAbilities,
+  hasArcaneSecretsChoice,
 } from './character-sheet/rules';
 import {FEATS} from './character-sheet/feats';
 import {CLASS_ARMOUR_RULES} from './character-sheet/armour-rules';
@@ -300,8 +301,8 @@ export class CharacterSheetService {
         spellcasting_info: spellcastingInfo,
         spells,
         avatar_preset: input.avatar_preset ?? null,
-        resource_tracker: this.buildResourceTracker(classRule, level, 0),
-        chi_abilities: getKnownChiAbilities(classKey, level).map(a => ({name: a.name, description: a.description, chi_cost: a.chiCost})),
+        resource_trackers: this.buildResourceTrackers(classRule, subclassRule, level, {}, stats),
+        chi_abilities: getKnownChiAbilities(classKey, level, core_build.id_subclass).map(a => ({name: a.name, description: a.description, chi_cost: a.chiCost, resource_key: a.resourceKey})),
         class_resources: this.buildClassResources(classRule, subclassRule, level),
       },
     };
@@ -387,25 +388,42 @@ export class CharacterSheetService {
     const classResources = classRule.featuresByLevel?.[level]?.resources ?? {};
     const subclassResources = subclassRule?.featuresByLevel[level]?.resources ?? {};
     const merged = {...classResources, ...subclassResources};
-    return Object.keys(merged).length > 0 ? merged : null;
+    // Recursos já rastreados em `resource_trackers` (com contagem "ao vivo" e formato próprio,
+    // ex: fórmula "mod:CHA") não entram aqui de novo — isso é só o resto (dados que escalam por
+    // nível, tipo Ataque Furtivo ou o dado de Inspiração de Bardo).
+    const trackedKeys = new Set((TRACKABLE_RESOURCES[classRule.id_class] ?? []).map(r => r.key));
+    const filtered = Object.fromEntries(Object.entries(merged).filter(([key]) => !trackedKeys.has(key)));
+    return Object.keys(filtered).length > 0 ? filtered : null;
   }
 
-  /** Recurso consumível rastreado na ficha (Fúria/Pontos de Chi/Canalizar Divindade) — `usedCount` vem de `resource_uses_expended[key]`, 0 pra personagem recém-criado. */
-  private buildResourceTracker(
+  /** Recursos consumíveis rastreados na ficha (Fúria/Pontos de Chi/Canalizar Divindade/...) —
+   *  uma classe pode ter mais de um ao mesmo tempo (ex: Guerreiro). `resourceUsesExpended` vem
+   *  direto de `character.resource_uses_expended` (ou `{}` pra personagem recém-criado). */
+  private buildResourceTrackers(
     classRule: ClassRule,
+    subclassRule: SubclassRule | null,
     level: number,
-    usedCount: number,
-  ): CharacterSheet['character_sheet']['resource_tracker'] {
-    const resource = TRACKABLE_RESOURCES[classRule.id_class];
-    if (!resource) return null;
-    const max = maxTrackableResourceUses(classRule, level);
-    if (max === null) return null;
-    return {
-      name: resource.key,
-      max,
-      used: max === 'unlimited' ? 0 : Math.min(usedCount, max),
-      recharge_on: resource.rechargeOn,
+    resourceUsesExpended: Record<string, number>,
+    stats?: Partial<Record<StatKeyEn, number>>,
+  ): CharacterSheet['character_sheet']['resource_trackers'] {
+    const resources = TRACKABLE_RESOURCES[classRule.id_class] ?? [];
+    const mergedResourceData = {
+      ...classRule.featuresByLevel?.[level]?.resources,
+      ...subclassRule?.featuresByLevel[level]?.resources,
     };
+    const trackers: CharacterSheet['character_sheet']['resource_trackers'] = [];
+    for (const resource of resources) {
+      const max = maxTrackableResourceUses(mergedResourceData, resource.key, stats);
+      if (max === null) continue;
+      const usedCount = resourceUsesExpended[resource.key] ?? 0;
+      trackers.push({
+        name: resource.key,
+        max,
+        used: max === 'unlimited' ? 0 : Math.min(usedCount, max),
+        recharge_on: resource.rechargeOn,
+      });
+    }
+    return trackers;
   }
 
   private computeSkills(
@@ -739,12 +757,14 @@ export class CharacterSheetService {
         spells: spellList,
         avatar_preset: character.avatar_preset ?? null,
         id_character: character.id_character,
-        resource_tracker: this.buildResourceTracker(
+        resource_trackers: this.buildResourceTrackers(
           classRule,
+          subclassRule,
           character.level,
-          character.resource_uses_expended?.[TRACKABLE_RESOURCES[character.id_class]?.key ?? ''] ?? 0,
+          character.resource_uses_expended ?? {},
+          stats,
         ),
-        chi_abilities: getKnownChiAbilities(character.id_class, character.level).map(a => ({name: a.name, description: a.description, chi_cost: a.chiCost})),
+        chi_abilities: getKnownChiAbilities(character.id_class, character.level, character.id_subclass).map(a => ({name: a.name, description: a.description, chi_cost: a.chiCost, resource_key: a.resourceKey})),
         class_resources: this.buildClassResources(classRule, subclassRule, character.level),
       },
     };
@@ -949,6 +969,7 @@ export class CharacterSheetService {
         : null,
       expertise_choice: levelData.expertise ? {count: levelData.expertise.count} : null,
       fighting_style_options: fightingStyleOptions,
+      spell_pool_any_class: hasArcaneSecretsChoice(character.id_class, nextLevel),
     };
   }
 
@@ -1082,6 +1103,7 @@ export class CharacterSheetService {
       newHitDice,
       idSubclass: subclassOptions ? chosenSubclassId : null,
       fightingStyle: fightingStyleRequired ? input.fighting_style! : null,
+      choiceData: input.choice_data ?? null,
       newSpellSaveDc,
       newSpellAttackBonus,
       asiType,
@@ -1319,9 +1341,10 @@ export class CharacterSheetService {
   /** Marca ou desfaz um uso do recurso consumível da classe (Fúria/Pontos de Chi/Canalizar Divindade). */
   async expendResourceUse(
     id: number,
+    resourceKey: string,
     delta: number,
     userId: string,
-  ): Promise<{resource_tracker: CharacterSheet['character_sheet']['resource_tracker']}> {
+  ): Promise<{resource_trackers: CharacterSheet['character_sheet']['resource_trackers']}> {
     const raw = await this.repository.findCharacterById(id);
     if (!raw)
       throw new HttpErrors.NotFound(`Character with id ${id} not found`);
@@ -1333,21 +1356,27 @@ export class CharacterSheetService {
       throw new HttpErrors.UnprocessableEntity('delta deve ser um número inteiro diferente de zero');
 
     const classRule = resolveClass(raw.character.id_class);
-    const resource = TRACKABLE_RESOURCES[raw.character.id_class];
-    const max = resource ? maxTrackableResourceUses(classRule, raw.character.level) : null;
-    if (!resource || max === null) {
-      throw new HttpErrors.UnprocessableEntity('Este personagem não possui recurso consumível rastreável');
+    const subclassRule = resolveSubclass(raw.character.id_class, raw.character.id_subclass);
+    const stats = this.statsFromRaw(raw.attributes);
+    const mergedResourceData = {
+      ...classRule.featuresByLevel?.[raw.character.level]?.resources,
+      ...subclassRule?.featuresByLevel[raw.character.level]?.resources,
+    };
+    const hasResource = (TRACKABLE_RESOURCES[raw.character.id_class] ?? []).some(r => r.key === resourceKey);
+    const max = hasResource ? maxTrackableResourceUses(mergedResourceData, resourceKey, stats) : null;
+    if (!hasResource || max === null) {
+      throw new HttpErrors.UnprocessableEntity('Este personagem não possui esse recurso consumível rastreável');
     }
 
-    const current = raw.character.resource_uses_expended?.[resource.key] ?? 0;
+    const current = raw.character.resource_uses_expended?.[resourceKey] ?? 0;
     const next = max === 'unlimited' ? Math.max(0, current + delta) : Math.min(max, Math.max(0, current + delta));
     const expended = {
       ...(raw.character.resource_uses_expended ?? {}),
-      [resource.key]: next,
+      [resourceKey]: next,
     };
 
     await this.repository.updateResourceUsesExpended(id, expended);
-    return {resource_tracker: this.buildResourceTracker(classRule, raw.character.level, next)};
+    return {resource_trackers: this.buildResourceTrackers(classRule, subclassRule, raw.character.level, expended, stats)};
   }
 
   async rollHitDie(
@@ -1361,7 +1390,7 @@ export class CharacterSheetService {
     hit_dice_spent: number;
     hit_dice_total: number;
     die_size: number;
-    resource_tracker: CharacterSheet['character_sheet']['resource_tracker'];
+    resource_trackers: CharacterSheet['character_sheet']['resource_trackers'];
   }> {
     const raw = await this.repository.findCharacterById(id);
     if (!raw)
@@ -1370,6 +1399,7 @@ export class CharacterSheetService {
       throw new HttpErrors.Forbidden();
 
     const classRule = resolveClass(raw.character.id_class);
+    const subclassRule = resolveSubclass(raw.character.id_class, raw.character.id_subclass);
     const hitDiceTotal = raw.character.level;
     const spent = raw.character.hit_dice_spent ?? 0;
     if (spent >= hitDiceTotal) {
@@ -1394,10 +1424,7 @@ export class CharacterSheetService {
     const nextSpent = spent + 1;
 
     await this.repository.updateHitDiceAndHp(id, nextSpent, nextHp);
-    await this.rechargeResourceOnRest(id, raw.character, 'short_rest');
-    const resourceAfterShortRest = TRACKABLE_RESOURCES[raw.character.id_class]?.rechargeOn === 'short_rest'
-      ? this.buildResourceTracker(classRule, raw.character.level, 0)
-      : this.buildResourceTracker(classRule, raw.character.level, raw.character.resource_uses_expended?.[TRACKABLE_RESOURCES[raw.character.id_class]?.key ?? ''] ?? 0);
+    const expendedAfterShortRest = await this.rechargeResourceOnRest(id, raw.character, 'short_rest');
 
     return {
       roll,
@@ -1407,25 +1434,29 @@ export class CharacterSheetService {
       hit_dice_spent: nextSpent,
       hit_dice_total: hitDiceTotal,
       die_size: classRule.hitDie,
-      resource_tracker: resourceAfterShortRest,
+      resource_trackers: this.buildResourceTrackers(classRule, subclassRule, raw.character.level, expendedAfterShortRest, stats),
     };
   }
 
   /**
-   * Zera o recurso consumível da classe (Fúria/Pontos de Chi/Canalizar Divindade) se o tipo de
-   * descanso recarregar ele — descanso longo sempre recarrega (é um superconjunto do curto).
+   * Zera cada recurso consumível da classe que o tipo de descanso recarrega — descanso longo
+   * sempre recarrega todos (é um superconjunto do curto). Retorna o mapa já atualizado pra quem
+   * chamou poder montar os `resource_trackers` na hora, sem precisar reler do banco.
    */
   private async rechargeResourceOnRest(
     id: number,
     character: {id_class: number; resource_uses_expended: Record<string, number> | null},
     restType: RestType,
-  ): Promise<void> {
-    const resource = TRACKABLE_RESOURCES[character.id_class];
-    if (!resource) return;
-    if (restType === 'short_rest' && resource.rechargeOn !== 'short_rest') return;
+  ): Promise<Record<string, number>> {
+    const resources = TRACKABLE_RESOURCES[character.id_class] ?? [];
     const expended = {...(character.resource_uses_expended ?? {})};
-    delete expended[resource.key];
+    if (!resources.length) return expended;
+    for (const resource of resources) {
+      if (restType === 'short_rest' && resource.rechargeOn !== 'short_rest') continue;
+      delete expended[resource.key];
+    }
     await this.repository.updateResourceUsesExpended(id, expended);
+    return expended;
   }
 
   async longRest(
@@ -1435,7 +1466,7 @@ export class CharacterSheetService {
     slots_expended: Record<string, number>;
     current_hit_points: number;
     hit_dice_spent: number;
-    resource_tracker: CharacterSheet['character_sheet']['resource_tracker'];
+    resource_trackers: CharacterSheet['character_sheet']['resource_trackers'];
   }> {
     const raw = await this.repository.findCharacterById(id);
     if (!raw)
@@ -1461,14 +1492,16 @@ export class CharacterSheetService {
       raw.character.max_hit_points,
     );
     await this.repository.updateSpellSlotsExpended(id, {});
-    await this.rechargeResourceOnRest(id, raw.character, 'long_rest');
+    const expendedAfterLongRest = await this.rechargeResourceOnRest(id, raw.character, 'long_rest');
     const classRule = resolveClass(raw.character.id_class);
+    const subclassRule = resolveSubclass(raw.character.id_class, raw.character.id_subclass);
+    const stats = this.statsFromRaw(raw.attributes);
 
     return {
       slots_expended: {},
       current_hit_points: raw.character.max_hit_points,
       hit_dice_spent: nextSpent,
-      resource_tracker: this.buildResourceTracker(classRule, raw.character.level, 0),
+      resource_trackers: this.buildResourceTrackers(classRule, subclassRule, raw.character.level, expendedAfterLongRest, stats),
     };
   }
 

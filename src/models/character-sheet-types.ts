@@ -234,15 +234,15 @@ export interface CharacterSheet {
     };
     spells: Spell[];
     avatar_preset?: AvatarPreset | null;
-    /** Recurso consumível rastreado (Fúria/Pontos de Chi/Canalizar Divindade) — `null` se a classe não tiver nenhum neste nível. */
-    resource_tracker: {
+    /** Recursos consumíveis rastreados (Fúria/Pontos de Chi/Canalizar Divindade/Surto de Ação/...) — vazio se a classe não tiver nenhum neste nível. Uma classe pode ter mais de um ao mesmo tempo. */
+    resource_trackers: {
       name: string;
       max: number | 'unlimited';
       used: number;
       recharge_on: 'short_rest' | 'long_rest';
-    } | null;
-    /** Características ativáveis gastando o recurso consumível da classe (hoje só as de Pontos de Chi do Monge) — vazio se não houver nenhuma neste nível. */
-    chi_abilities: {name: string; description: string; chi_cost: number}[];
+    }[];
+    /** Características ativáveis gastando um dos `resource_trackers` (hoje só as de Pontos de Chi do Monge) — vazio se não houver nenhuma neste nível. */
+    chi_abilities: {name: string; description: string; chi_cost: number; resource_key: string}[];
     /** Recursos de classe/subclasse que escalam por nível (ex: "Ataque Furtivo": "2d6") — informativo, `null` se não houver nenhum neste nível. */
     class_resources: Record<string, string> | null;
   };

@@ -208,6 +208,10 @@ export class CharacterRepository {
       /** Só setado quando esse é o nível de escolha de Estilo de Combate (Paladino/Ranger nv2);
        *  nos demais fica `null` e o COALESCE abaixo mantém o estilo já escolhido antes intacto. */
       fightingStyle: string | null;
+      /** Payload livre de uma escolha nova feita neste nível (ex: atributo do talento Resiliente,
+       *  perícias do Afiar Habilidades, magias de Segredos Mágicos) — genérico pra não precisar
+       *  de 1 coluna dedicada por escolha. `null` se esse nível não tiver escolha nenhuma. */
+      choiceData: Record<string, unknown> | null;
     },
   ): Promise<{status: 'ok' | 'already_applied'; updatedAttributes: Partial<Record<StatKeyEn, {score: number; modifier: number}>>}> {
     const updatedAttributes: Partial<Record<StatKeyEn, {score: number; modifier: number}>> = {};
@@ -261,10 +265,11 @@ export class CharacterRepository {
         await sql`
           INSERT INTO character_level_history (
             id_character, level, hit_die_roll, con_modifier_at_level, hp_gained,
-            asi_type, asi_stat_increases, feat_id, id_subclass
+            asi_type, asi_stat_increases, feat_id, id_subclass, choice_data
           ) VALUES (
             ${idCharacter}, ${input.newLevel}, ${input.hitDieRoll}, ${input.conModifierAtLevel}, ${input.hpGained},
-            ${input.asiType}, ${input.asiStatIncreases ? sql.json(input.asiStatIncreases) : null}, ${input.featId}, ${input.idSubclass}
+            ${input.asiType}, ${input.asiStatIncreases ? sql.json(input.asiStatIncreases) : null}, ${input.featId}, ${input.idSubclass},
+            ${input.choiceData ? sql.json(JSON.parse(JSON.stringify(input.choiceData))) : null}
           )
         `;
 
@@ -318,6 +323,16 @@ export class CharacterRepository {
     return this.db.sql<{id_character: number; feat_id: string}[]>`
       SELECT id_character, feat_id FROM character_level_history
       WHERE id_character = ANY(${idCharacters}) AND feat_id IS NOT NULL
+    `;
+  }
+
+  /** Payloads livres de escolhas feitas via level-up (ex: atributo do Resiliente, perícias do
+   *  Afiar Habilidades, magias de Segredos Mágicos) — ver `choiceData` em `applyLevelUp`. */
+  async findChoiceData(idCharacter: number): Promise<{level: number; choice_data: Record<string, unknown>}[]> {
+    return this.db.sql<{level: number; choice_data: Record<string, unknown>}[]>`
+      SELECT level, choice_data FROM character_level_history
+      WHERE id_character = ${idCharacter} AND choice_data IS NOT NULL
+      ORDER BY level ASC
     `;
   }
 
