@@ -103,6 +103,12 @@ export class CharacterSheetService {
       input;
     const level = core_build.level;
 
+    // Temporariamente travado em nível 1 — criação em nível mais alto ainda não foi testada
+    // a fundo (ex: escolhas de subclasse/estilo de combate que só aparecem depois do nível 1).
+    if (level !== 1) {
+      throw new Error('Character creation is currently limited to level 1');
+    }
+
     const raceRule = resolveRace(core_build.id_race);
     const subraceRule = resolveSubrace(core_build.subrace);
     const classRule = resolveClass(core_build.id_class);
