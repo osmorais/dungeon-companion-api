@@ -625,6 +625,8 @@ export class CharacterSheetService {
 
     const traits = collectTraits(raceRule, subraceRule, classRule, bgRule, character.level, subclassRule, character.chosen_fighting_style, profBonus, stats);
     const chosenFeats = await this.repository.findChosenFeats(character.id_character);
+    let featInitiativeBonus = 0;
+    let featPassivePerceptionBonus = 0;
     for (const chosen of chosenFeats) {
       const feat = FEATS[chosen.feat_id];
       traits.push({
@@ -632,6 +634,8 @@ export class CharacterSheetService {
         source: `Talento (Nível ${chosen.level})`,
         description: feat?.description ?? '',
       });
+      featInitiativeBonus += feat?.initiativeBonus ?? 0;
+      featPassivePerceptionBonus += feat?.passivePerceptionBonus ?? 0;
     }
     const languages = buildLanguages(raceRule, bgRule);
 
@@ -673,7 +677,7 @@ export class CharacterSheetService {
         combat_stats: {
           proficiency_bonus: character.proficiency_bonus,
           armor_class: ac,
-          initiative: character.initiative_value,
+          initiative: getMod(stats.DEX) + featInitiativeBonus,
           speed: formatSpeedWithBonus(
             subraceRule?.speedOverride ?? raceRule.speed,
             calcSpeedBonusMeters(character.id_class, character.level, classRule.featuresByLevel, character.armour_type, character.has_shield),
@@ -687,7 +691,14 @@ export class CharacterSheetService {
           hit_dice_total: character.level,
           hit_dice_spent: character.hit_dice_spent,
           hit_die_size: classRule.hitDie,
-          passive_perception: Number(character.passive_perception),
+          // Percepção passiva recalculada "ao vivo" (mesmo padrão da CA/perícias) — antes ficava
+          // congelada no valor gravado na criação, sem acompanhar ASI de SAB nem o talento
+          // Observador escolhido depois.
+          passive_perception:
+            10 +
+            getMod(stats.WIS) +
+            (skills.find(s => normalizeSkill(s.name) === 'perception')?.is_trained ? profBonus : 0) +
+            featPassivePerceptionBonus,
         },
         attributes_and_saves: attributesAndSaves,
         skills: skillsResult,

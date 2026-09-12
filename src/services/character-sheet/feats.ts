@@ -18,6 +18,10 @@ export interface FeatRule {
    * `hpBonusPerLevel` a mais no ganho normal do dado de vida. Ver `confirmLevelUp`.
    */
   hpBonusPerLevel?: number;
+  /** Bônus fixo de iniciativa (hoje só o Alerta). */
+  initiativeBonus?: number;
+  /** Bônus fixo de percepção passiva (hoje só o Observador). */
+  passivePerceptionBonus?: number;
 }
 
 export const FEATS: Record<string, FeatRule> = {
@@ -41,6 +45,7 @@ export const FEATS: Record<string, FeatRule> = {
     description:
       'Você ganha +1 em Inteligência ou Sabedoria. Além disso: sua percepção passiva e sua investigação passiva aumentam em 5; e você consegue ler lábios se conseguir ver a boca de uma criatura falando um idioma que você entende.',
     abilityIncrease: {stat: 'WIS', amount: 1},
+    passivePerceptionBonus: 5,
   },
   resiliente: {
     id_feat: 'resiliente',
@@ -54,6 +59,7 @@ export const FEATS: Record<string, FeatRule> = {
     displayName: 'Alerta',
     description:
       'Você ganha +5 na iniciativa, não pode ficar surpreso enquanto estiver consciente, e outras criaturas não ganham vantagem em jogadas de ataque contra você por estarem escondidas de você.',
+    initiativeBonus: 5,
   },
   'afiar-habilidades': {
     id_feat: 'afiar-habilidades',
