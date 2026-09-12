@@ -241,5 +241,7 @@ export interface CharacterSheet {
       used: number;
       recharge_on: 'short_rest' | 'long_rest';
     } | null;
+    /** Características ativáveis gastando o recurso consumível da classe (hoje só as de Pontos de Chi do Monge) — vazio se não houver nenhuma neste nível. */
+    chi_abilities: {name: string; description: string; chi_cost: number}[];
   };
 }
