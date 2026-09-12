@@ -156,6 +156,63 @@ export function maxTrackableResourceUses(classRule: ClassRule, level: number): n
   return Number.isNaN(parsed) ? null : parsed;
 }
 
+/**
+ * Característica ativável gastando o recurso consumível da classe (hoje só as de Pontos de Chi
+ * do Monge — Rajada de Golpes/Defesa Paciente/Passo do Vento/Ataque Atordoante/Corpo Vazio).
+ * Não inclui as reativas (Defletir Projéteis, rerolagem de Alma de Diamante), que só fazem
+ * sentido em resposta a um gatilho específico e continuam só como texto informativo.
+ */
+export interface ChiAbility {
+  name: string;
+  description: string;
+  chiCost: number;
+  levelLearned: number;
+}
+
+export const MONK_CHI_ABILITIES: ChiAbility[] = [
+  {
+    name: 'Rajada de Golpes',
+    description: 'Imediatamente após você realizar a ação de Ataque no seu turno, você pode gastar 1 ponto de chi para realizar dois golpes desarmados com uma ação bônus.',
+    chiCost: 1,
+    levelLearned: 2,
+  },
+  {
+    name: 'Defesa Paciente',
+    description: 'Você pode gastar 1 ponto de chi para realizar a ação de Esquivar, com uma ação bônus, no seu turno.',
+    chiCost: 1,
+    levelLearned: 2,
+  },
+  {
+    name: 'Passo do Vento',
+    description: 'Você pode gastar 1 ponto de chi para realizar a Ação de Desengajar ou Disparada, com uma ação bônus, no seu turno, e sua distância de salto é dobrada nesse turno.',
+    chiCost: 1,
+    levelLearned: 2,
+  },
+  {
+    name: 'Ataque Atordoante',
+    description: 'Você pode gastar 1 ponto de chi para tentar atordoar um alvo que atingir com um ataque corpo a corpo. O alvo deve fazer um teste de resistência de Constituição ou ficará atordoado até o final do seu próximo turno.',
+    chiCost: 1,
+    levelLearned: 5,
+  },
+  {
+    name: 'Corpo Vazio (Invisibilidade)',
+    description: 'Você pode gastar 4 pontos de chi para se tornar invisível por 1 minuto.',
+    chiCost: 4,
+    levelLearned: 18,
+  },
+  {
+    name: 'Corpo Vazio (Projeção Astral)',
+    description: 'Você pode gastar 8 pontos de chi para viajar astralmente (efeito similar ao da magia Projeção Astral, sem exigir componentes materiais).',
+    chiCost: 8,
+    levelLearned: 18,
+  },
+];
+
+export function getKnownChiAbilities(classKey: number, level: number): ChiAbility[] {
+  if (classKey !== CLASSES[10].id_class) return [];
+  return MONK_CHI_ABILITIES.filter(a => level >= a.levelLearned);
+}
+
 /** XP total mínimo pra estar *no* nível (tabela oficial do PHB, igual pra todas as classes). */
 export const XP_THRESHOLDS: Record<number, number> = {
   1: 0, 2: 300, 3: 900, 4: 2700, 5: 6500, 6: 14000, 7: 23000, 8: 34000, 9: 48000, 10: 64000,
@@ -1775,7 +1832,10 @@ export const CLASSES: Record<number, ClassRule> = {
       },
       2: {
         features: [
-          {name: 'Chi', description: 'Você aprendeu a aproveitar a energia mística do chi dentro de si. Você tem uma reserva de pontos de chi, disponível novamente após um descanso curto ou longo, que pode gastar para alimentar vários recursos de monge.'},
+          {name: 'Chi', description: 'Você aprendeu a aproveitar a energia mística do chi dentro de si. Você tem uma reserva de pontos de chi, disponível novamente após um descanso curto ou longo, que pode gastar para alimentar vários recursos de monge. Você começa conhecendo três características de chi: Rajada de Golpes, Defesa Paciente e Passo do Vento. A CD de resistência de Chi é 8 + bônus de proficiência + modificador de Sabedoria.'},
+          {name: 'Rajada de Golpes', description: 'Imediatamente após você realizar a ação de Ataque no seu turno, você pode gastar 1 ponto de chi para realizar dois golpes desarmados com uma ação bônus.'},
+          {name: 'Defesa Paciente', description: 'Você pode gastar 1 ponto de chi para realizar a ação de Esquivar, com uma ação bônus, no seu turno.'},
+          {name: 'Passo do Vento', description: 'Você pode gastar 1 ponto de chi para realizar a Ação de Desengajar ou Disparada, com uma ação bônus, no seu turno, e sua distância de salto é dobrada nesse turno.'},
           {name: 'Movimento sem Armadura', description: 'Sua velocidade aumenta enquanto você não estiver usando armadura nem empunhando um escudo.'},
         ],
         isAsiLevel: false,

@@ -65,6 +65,7 @@ import {
   RestType,
   XP_THRESHOLDS,
   xpNeededForLevel,
+  getKnownChiAbilities,
 } from './character-sheet/rules';
 import {FEATS} from './character-sheet/feats';
 import {CLASS_ARMOUR_RULES} from './character-sheet/armour-rules';
@@ -281,6 +282,7 @@ export class CharacterSheetService {
         spells,
         avatar_preset: input.avatar_preset ?? null,
         resource_tracker: this.buildResourceTracker(classRule, level, 0),
+        chi_abilities: getKnownChiAbilities(classKey, level).map(a => ({name: a.name, description: a.description, chi_cost: a.chiCost})),
       },
     };
   }
@@ -687,6 +689,7 @@ export class CharacterSheetService {
           character.level,
           character.resource_uses_expended?.[TRACKABLE_RESOURCES[character.id_class]?.key ?? ''] ?? 0,
         ),
+        chi_abilities: getKnownChiAbilities(character.id_class, character.level).map(a => ({name: a.name, description: a.description, chi_cost: a.chiCost})),
       },
     };
   }
@@ -1231,8 +1234,10 @@ export class CharacterSheetService {
       throw new HttpErrors.NotFound(`Character with id ${id} not found`);
     if (!(await this.userCanManageCharacter(raw.character.user_id, id, userId)))
       throw new HttpErrors.Forbidden();
-    if (delta !== 1 && delta !== -1)
-      throw new HttpErrors.UnprocessableEntity('delta deve ser 1 ou -1');
+    // Positivo = gastar (uso avulso ou o custo de uma característica de chi, ex: Corpo Vazio =
+    // 4/8), negativo = desfazer. O clamping abaixo garante que nunca passe do máximo/mínimo.
+    if (!Number.isInteger(delta) || delta === 0)
+      throw new HttpErrors.UnprocessableEntity('delta deve ser um número inteiro diferente de zero');
 
     const classRule = resolveClass(raw.character.id_class);
     const resource = TRACKABLE_RESOURCES[raw.character.id_class];
