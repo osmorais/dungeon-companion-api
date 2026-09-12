@@ -205,6 +205,9 @@ export class CharacterRepository {
       /** Só setado quando esse é o nível de escolha de subclasse; nos demais fica `null` e o
        *  COALESCE abaixo mantém a subclasse já escolhida antes intacta. */
       idSubclass: string | null;
+      /** Só setado quando esse é o nível de escolha de Estilo de Combate (Paladino/Ranger nv2);
+       *  nos demais fica `null` e o COALESCE abaixo mantém o estilo já escolhido antes intacto. */
+      fightingStyle: string | null;
     },
   ): Promise<{status: 'ok' | 'already_applied'; updatedAttributes: Partial<Record<StatKeyEn, {score: number; modifier: number}>>}> {
     const updatedAttributes: Partial<Record<StatKeyEn, {score: number; modifier: number}>> = {};
@@ -220,7 +223,8 @@ export class CharacterRepository {
             hit_dice = ${input.newHitDice},
             spell_save_dc = ${input.newSpellSaveDc},
             spell_attack_bonus = ${input.newSpellAttackBonus},
-            id_subclass = COALESCE(id_subclass, ${input.idSubclass})
+            id_subclass = COALESCE(id_subclass, ${input.idSubclass}),
+            chosen_fighting_style = COALESCE(chosen_fighting_style, ${input.fightingStyle})
           WHERE id_character = ${idCharacter}
         `;
 

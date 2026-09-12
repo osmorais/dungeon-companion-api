@@ -887,6 +887,12 @@ export class CharacterSheetService {
     const subclassLevelData = subclassRule?.featuresByLevel[nextLevel];
     const isSubclassCaster = !classRule.isSpellcaster && !!subclassRule?.spellcasting;
     const mergedResources = {...levelData.resources, ...subclassLevelData?.resources};
+    const fightingStyleOptions =
+      classRule.fightingStyleChoice &&
+      nextLevel === classRule.fightingStyleChoice.level &&
+      !character.chosen_fighting_style
+        ? classRule.fightingStyleChoice.options
+        : null;
 
     return {
       id_class: character.id_class,
@@ -925,6 +931,7 @@ export class CharacterSheetService {
         ? {spell_list_class_id: subclassRule.spellcasting.spellListClassId, allowed_schools: subclassRule.spellcasting.allowedSchools}
         : null,
       expertise_choice: levelData.expertise ? {count: levelData.expertise.count} : null,
+      fighting_style_options: fightingStyleOptions,
     };
   }
 
@@ -957,6 +964,19 @@ export class CharacterSheetService {
     if (!subclassOptions && input.id_subclass) {
       throw new Error('Subclass choice not allowed for this level');
     }
+
+    const fightingStyleRequired =
+      !!classRule.fightingStyleChoice &&
+      nextLevel === classRule.fightingStyleChoice.level &&
+      !character.chosen_fighting_style;
+    if (fightingStyleRequired) {
+      if (!input.fighting_style || !classRule.fightingStyleChoice!.options.includes(input.fighting_style)) {
+        throw new Error('Fighting style choice required for this level');
+      }
+    } else if (input.fighting_style) {
+      throw new Error('Fighting style choice not allowed for this level');
+    }
+
     const subclassLevelData = subclassRule?.featuresByLevel[nextLevel];
     const isSubclassCaster = !classRule.isSpellcaster && !!subclassRule?.spellcasting;
 
@@ -1044,6 +1064,7 @@ export class CharacterSheetService {
       newProficiencyBonus,
       newHitDice,
       idSubclass: subclassOptions ? chosenSubclassId : null,
+      fightingStyle: fightingStyleRequired ? input.fighting_style! : null,
       newSpellSaveDc,
       newSpellAttackBonus,
       asiType,
