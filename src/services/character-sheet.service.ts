@@ -35,12 +35,15 @@ import {
   applyRacialBonuses,
   applyLevelBasedAttributeBonuses,
   grantsAllSavingThrowProficiency,
+  calcAuraOfProtectionBonus,
+  grantsExtraSavingThrowProficiency,
   calcSpeedBonusMeters,
   formatSpeedWithBonus,
   buildAttributeBlocks,
   calcArmorClass,
   calcMaxHP,
   calcRolledLevelUpHp,
+  calcDraconicResilienceHpBonus,
   buildWeaponActions,
   collectTraits,
   buildSpellcasting,
@@ -129,12 +132,13 @@ export class CharacterSheetService {
       throw new Error('Tool proficiency choice not allowed for this race');
     }
 
-    if (classRule.fightingStyleChoice) {
-      if (!choices.fighting_style || !classRule.fightingStyleChoice.options.includes(choices.fighting_style)) {
+    const fightingStyleAvailable = classRule.fightingStyleChoice && level >= classRule.fightingStyleChoice.level;
+    if (fightingStyleAvailable) {
+      if (!choices.fighting_style || !classRule.fightingStyleChoice!.options.includes(choices.fighting_style)) {
         throw new Error('Fighting style choice required for this class');
       }
     } else if (choices.fighting_style) {
-      throw new Error('Fighting style choice not allowed for this class');
+      throw new Error('Fighting style choice not allowed for this class yet');
     }
 
     const stats = applyLevelBasedAttributeBonuses(
@@ -153,7 +157,15 @@ export class CharacterSheetService {
       raceRule,
     );
 
-    const attributeBlocks = buildAttributeBlocks(stats, classRule, profBonus, grantsAllSavingThrowProficiency(classKey, level));
+    const auraOfProtectionBonus = calcAuraOfProtectionBonus(classKey, level, getMod(stats.CHA));
+    const attributeBlocks = buildAttributeBlocks(
+      stats,
+      classRule,
+      profBonus,
+      grantsAllSavingThrowProficiency(classKey, level),
+      auraOfProtectionBonus,
+      grantsExtraSavingThrowProficiency(classKey, level),
+    );
     // const skillBlocks = buildSkillBlocks(stats, profBonus, proficientSkills);
     const ac = calcArmorClass(
       equipment.armour,
@@ -161,12 +173,13 @@ export class CharacterSheetService {
       equipment.has_shield,
       classKey,
       choices.fighting_style,
+      subclassRule?.id_subclass,
     );
     const maxHP = calcMaxHP(
       classRule.hitDie,
       level,
       getMod(stats.CON),
-      subraceRule?.hpBonusPerLevel ?? 0,
+      (subraceRule?.hpBonusPerLevel ?? 0) + calcDraconicResilienceHpBonus(subclassRule?.id_subclass),
     );
     const weaponActions = buildWeaponActions(
       equipment.weapons,
@@ -174,7 +187,7 @@ export class CharacterSheetService {
       profBonus,
       choices.fighting_style,
     );
-    const traits = collectTraits(raceRule, subraceRule, classRule, bgRule, level, subclassRule, choices.fighting_style);
+    const traits = collectTraits(raceRule, subraceRule, classRule, bgRule, level, subclassRule, choices.fighting_style, profBonus, stats);
     const spells = choices.spells ?? [];
     const languages = buildLanguages(raceRule, bgRule);
 
@@ -283,6 +296,7 @@ export class CharacterSheetService {
         avatar_preset: input.avatar_preset ?? null,
         resource_tracker: this.buildResourceTracker(classRule, level, 0),
         chi_abilities: getKnownChiAbilities(classKey, level).map(a => ({name: a.name, description: a.description, chi_cost: a.chiCost})),
+        class_resources: this.buildClassResources(classRule, subclassRule, level),
       },
     };
   }
@@ -356,6 +370,18 @@ export class CharacterSheetService {
       ),
       userId,
     );
+  }
+
+  /** Recursos de classe/subclasse que escalam por nível (ex: "Ataque Furtivo": "2d6") — antes só existia no preview de level-up, agora também fica na ficha persistida. */
+  private buildClassResources(
+    classRule: ClassRule,
+    subclassRule: SubclassRule | null,
+    level: number,
+  ): Record<string, string> | null {
+    const classResources = classRule.featuresByLevel?.[level]?.resources ?? {};
+    const subclassResources = subclassRule?.featuresByLevel[level]?.resources ?? {};
+    const merged = {...classResources, ...subclassResources};
+    return Object.keys(merged).length > 0 ? merged : null;
   }
 
   /** Recurso consumível rastreado na ficha (Fúria/Pontos de Chi/Canalizar Divindade) — `usedCount` vem de `resource_uses_expended[key]`, 0 pra personagem recém-criado. */
@@ -515,6 +541,9 @@ export class CharacterSheetService {
 
     const profBonus = character.proficiency_bonus;
     const allSavesProficient = grantsAllSavingThrowProficiency(character.id_class, character.level);
+    const chaModifier = stats.CHA === rawStats.CHA ? modifierByKey.CHA ?? getMod(stats.CHA) : getMod(stats.CHA);
+    const auraOfProtectionBonus = calcAuraOfProtectionBonus(character.id_class, character.level, chaModifier);
+    const extraSaveProficiency = grantsExtraSavingThrowProficiency(character.id_class, character.level);
 
     const attributesAndSaves = (() => {
       const keys: StatKeyEn[] = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
@@ -533,11 +562,11 @@ export class CharacterSheetService {
         // (Campeão Primitivo) — nesse caso o modificador precisa ser recalculado a partir do
         // score já ajustado, não do valor congelado no banco.
         const modifier = stats[key] === rawStats[key] ? modifierByKey[key] ?? getMod(score) : getMod(score);
-        const hasSaveProf = allSavesProficient || classRule.savingThrows.includes(key);
+        const hasSaveProf = allSavesProficient || classRule.savingThrows.includes(key) || extraSaveProficiency === key;
         result[key] = {
           score,
           modifier,
-          save: hasSaveProf ? modifier + profBonus : modifier,
+          save: (hasSaveProf ? modifier + profBonus : modifier) + auraOfProtectionBonus,
           save_proficiency: hasSaveProf,
         };
       }
@@ -588,7 +617,7 @@ export class CharacterSheetService {
       is_prepared: s.is_prepared,
     }));
 
-    const traits = collectTraits(raceRule, subraceRule, classRule, bgRule, character.level, subclassRule, character.chosen_fighting_style);
+    const traits = collectTraits(raceRule, subraceRule, classRule, bgRule, character.level, subclassRule, character.chosen_fighting_style, profBonus, stats);
     const chosenFeats = await this.repository.findChosenFeats(character.id_character);
     for (const chosen of chosenFeats) {
       const feat = FEATS[chosen.feat_id];
@@ -605,7 +634,7 @@ export class CharacterSheetService {
     const equippedArmourRule = character.id_armour
       ? {armour_type: character.armour_type, armour_class_base: character.armour_class_base, max_dexterity_bonus: character.max_dexterity_bonus}
       : null;
-    const ac = calcArmorClass(equippedArmourRule, stats, character.has_shield, character.id_class, character.chosen_fighting_style);
+    const ac = calcArmorClass(equippedArmourRule, stats, character.has_shield, character.id_class, character.chosen_fighting_style, subclassRule?.id_subclass);
 
     const spellcastingResult = buildSpellcasting(
       classRule,
@@ -699,6 +728,7 @@ export class CharacterSheetService {
           character.resource_uses_expended?.[TRACKABLE_RESOURCES[character.id_class]?.key ?? ''] ?? 0,
         ),
         chi_abilities: getKnownChiAbilities(character.id_class, character.level).map(a => ({name: a.name, description: a.description, chi_cost: a.chiCost})),
+        class_resources: this.buildClassResources(classRule, subclassRule, character.level),
       },
     };
   }
@@ -970,7 +1000,23 @@ export class CharacterSheetService {
     const stats = this.statsFromRaw(attributes);
     const conModifier = getMod(stats.CON);
     const subraceRule = resolveSubrace(character.subrace ?? undefined);
-    const hpGained = calcRolledLevelUpHp(input.hit_die_roll, conModifier, subraceRule?.hpBonusPerLevel ?? 0);
+    const rolledHpGained = calcRolledLevelUpHp(
+      input.hit_die_roll,
+      conModifier,
+      (subraceRule?.hpBonusPerLevel ?? 0) + calcDraconicResilienceHpBonus(subclassRule?.id_subclass),
+    );
+
+    // Talentos com PV extra por nível (ex: Duro): retroativo (bônus * nível já aplicado de uma
+    // vez) no nível em que o talento é escolhido; nos níveis seguintes, some-se o bônus fixo.
+    const chosenFeats = await this.repository.findChosenFeats(id);
+    let featHpBonus = 0;
+    for (const chosen of chosenFeats) {
+      featHpBonus += FEATS[chosen.feat_id]?.hpBonusPerLevel ?? 0;
+    }
+    if (featId) {
+      featHpBonus += (FEATS[featId]?.hpBonusPerLevel ?? 0) * nextLevel;
+    }
+    const hpGained = rolledHpGained + featHpBonus;
 
     const newMaxHitPoints = character.max_hit_points + hpGained;
     const newCurrentHitPoints = character.current_hit_points + hpGained;
@@ -1146,7 +1192,7 @@ export class CharacterSheetService {
     await this.repository.updateEquipment(id, input.id_armour, input.has_shield);
 
     const stats = applyLevelBasedAttributeBonuses(this.statsFromRaw(attributes), character.id_class, character.level);
-    const ac = calcArmorClass(armour, stats, input.has_shield, character.id_class, character.chosen_fighting_style);
+    const ac = calcArmorClass(armour, stats, input.has_shield, character.id_class, character.chosen_fighting_style, character.id_subclass);
     return {armor_class: ac};
   }
 
