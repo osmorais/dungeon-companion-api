@@ -10,24 +10,24 @@ INSERT INTO Attribute_Type (name, full_name, description) VALUES
 ---
 
 INSERT INTO Skill (name, id_attribute, description) VALUES
-('Atletismo', 1, NULL),
-('Acrobacia', 2, NULL),
-('Furtividade', 2, NULL),
-('Prestidigitação', 2, NULL),
-('Arcanismo', 4, NULL),
-('História', 4, NULL),
-('Investigação', 4, NULL),
-('Natureza', 4, NULL),
-('Religião', 4, NULL),
-('Adestrar Animais', 5, NULL),
-('Intuição', 5, NULL),
-('Medicina', 5, NULL),
-('Percepção', 5, NULL),
-('Sobrevivência', 5, NULL),
-('Atuação', 6, NULL),
-('Enganação', 6, NULL),
-('Intimidação', 6, NULL),
-('Persuasão', 6, NULL);
+('Atletismo', 1, 'Seu teste de Força (Atletismo) cobre situações difíceis ao escalar, saltar ou nadar: escalar um paredão íngreme ou escorregadio, saltar uma distância maior que o normal, ou nadar contra correntes traiçoeiras e ondas de tempestade.'),
+('Acrobacia', 2, 'Testes de Destreza (Acrobacia) cobrem tentativas de se manter em pé em situações complicadas, como correr sobre gelo fino, equilibrar-se numa corda bamba ou ficar de pé no convés de um navio balançando, além de acrobacias como mergulhos, cambalhotas e piruetas.'),
+('Furtividade', 2, 'Faça um teste de Destreza (Furtividade) ao tentar se esconder de inimigos, esgueirar-se por guardas, escapar sem ser notado, surpreender alguém ou seguir alguém sem ser visto ou ouvido.'),
+('Prestidigitação', 2, 'Seu teste de Destreza (Prestidigitação) cobre atos de prestidigitação ou truques com as mãos, como implantar um objeto em alguém, surrupiar um porta-moedas ou esconder um objeto em si mesmo.'),
+('Arcanismo', 4, 'Seu teste de Inteligência (Arcanismo) mede sua capacidade de recordar conhecimentos sobre magias, itens mágicos, símbolos místicos, tradições arcanas, planos de existência e os habitantes desses planos.'),
+('História', 4, 'Seu teste de Inteligência (História) mede sua capacidade de recordar conhecimentos sobre acontecimentos históricos, pessoas lendárias, reinos antigos, disputas do passado, guerras recentes e civilizações perdidas.'),
+('Investigação', 4, 'Ao procurar por pistas e usá-las em deduções, você faz um teste de Inteligência (Investigação) — pra deduzir a localização de um objeto escondido, discernir que arma causou um ferimento ou achar um ponto de desabamento num túnel.'),
+('Natureza', 4, 'Seu teste de Inteligência (Natureza) mede sua capacidade de recordar conhecimentos sobre tipos de terreno, plantas e animais, clima e os ciclos naturais.'),
+('Religião', 4, 'Seu teste de Inteligência (Religião) mede sua capacidade de recordar conhecimentos sobre divindades, ritos e orações, hierarquias religiosas, símbolos sagrados e práticas de cultos secretos.'),
+('Adestrar Animais', 5, 'Quando é preciso saber se você consegue controlar sua montaria numa manobra arriscada, acalmar um animal domesticado ou intuir as intenções de um animal, o DM pode pedir um teste de Sabedoria (Lidar com Animais).'),
+('Intuição', 5, 'Seu teste de Sabedoria (Intuição) determina se você consegue adivinhar as verdadeiras intenções de uma criatura, como detectar uma mentira ou prever o próximo movimento dela, analisando linguagem corporal, hábitos de fala e maneirismos.'),
+('Medicina', 5, 'Um teste de Sabedoria (Medicina) permite que você tente estabilizar um companheiro ferido, evitando que ele morra, ou diagnosticar uma doença.'),
+('Percepção', 5, 'Seu teste de Sabedoria (Percepção) permite que você veja, ouça ou detecte de algum modo a presença de algo — é a perícia usada pra notar detalhes escondidos e reagir a ameaças ao seu redor.'),
+('Sobrevivência', 5, 'O DM pode pedir um teste de Sabedoria (Sobrevivência) pra seguir pistas, caçar animais selvagens, guiar o grupo por ermos, identificar sinais de criaturas perigosas nas proximidades, prever o tempo ou evitar areia movediça e outros perigos naturais.'),
+('Atuação', 6, 'Seu teste de Carisma (Atuação) determina o quão bem você consegue deleitar um público com música, dança, atuação, narrativa ou outra forma de entretenimento.'),
+('Enganação', 6, 'Seu teste de Carisma (Enganação) determina se você consegue ocultar a verdade de forma convincente, seja verbalmente ou por ações — de enganar um guarda a manter a cara séria contando uma mentira descarada.'),
+('Intimidação', 6, 'Quando você tenta influenciar alguém através de ações hostis e violência física, o DM pode pedir um teste de Carisma (Intimidação) — como arrancar informações de um prisioneiro ou convencer bandidos a recuar de um confronto.'),
+('Persuasão', 6, 'Quando você tenta influenciar alguém com tato, trato social ou gentileza, o DM pode pedir um teste de Carisma (Persuasão) — pra promover amizades, fazer pedidos cordiais ou seguir regras de etiqueta.');
 
 ---
 
