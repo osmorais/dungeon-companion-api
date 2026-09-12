@@ -298,6 +298,15 @@ export class CharacterRepository {
     return rows.length > 0;
   }
 
+  /** Talentos escolhidos em vez de ASI ao longo dos level-ups — pra reexibir na ficha (ver collectTraits). */
+  async findChosenFeats(idCharacter: number): Promise<{level: number; feat_id: string}[]> {
+    return this.db.sql<{level: number; feat_id: string}[]>`
+      SELECT level, feat_id FROM character_level_history
+      WHERE id_character = ${idCharacter} AND feat_id IS NOT NULL
+      ORDER BY level ASC
+    `;
+  }
+
   async countPreparedSpells(id: number): Promise<number> {
     const rows = await this.db.sql<{count: string}[]>`
       SELECT COUNT(*) AS count

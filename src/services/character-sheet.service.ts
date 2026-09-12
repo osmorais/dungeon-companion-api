@@ -589,6 +589,15 @@ export class CharacterSheetService {
     }));
 
     const traits = collectTraits(raceRule, subraceRule, classRule, bgRule, character.level, subclassRule, character.chosen_fighting_style);
+    const chosenFeats = await this.repository.findChosenFeats(character.id_character);
+    for (const chosen of chosenFeats) {
+      const feat = FEATS[chosen.feat_id];
+      traits.push({
+        name: feat?.displayName ?? chosen.feat_id,
+        source: `Talento (Nível ${chosen.level})`,
+        description: feat?.description ?? '',
+      });
+    }
     const languages = buildLanguages(raceRule, bgRule);
 
     // CA deixou de ser congelada em `character.armour_class` — recalculada a cada carregamento
