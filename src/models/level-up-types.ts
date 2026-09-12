@@ -67,6 +67,9 @@ export interface LevelUpPreview {
   subclass_options: LevelUpSubclassOption[] | null;
   subclass_spellcasting: LevelUpSubclassSpellcasting | null;
   expertise_choice: LevelUpExpertiseChoice | null;
+  /** Só populado no nível em que a classe ganha Estilo de Combate (Paladino/Ranger nv2) e o
+   *  personagem ainda não escolheu um (Guerreiro já escolhe na criação, nunca chega aqui). */
+  fighting_style_options: string[] | null;
 }
 
 /** Resultado da rolagem do dado de vida — feita pelo jogador, sob demanda, sem gravar nada. */
@@ -86,6 +89,8 @@ export interface LevelUpConfirmInput {
   id_subclass?: string;
   /** Obrigatório só no nível em que a classe concede Especialização/Aptidão (ver `expertise_choice` no preview). */
   expertise_skill_ids?: number[];
+  /** Obrigatório só no nível em que a classe ganha Estilo de Combate (ver `fighting_style_options` no preview). */
+  fighting_style?: string;
 }
 
 export interface LevelUpResult {
