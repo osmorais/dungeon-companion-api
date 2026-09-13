@@ -17,6 +17,7 @@ import {
   GameSessionPagedList,
   GrantXpInput,
   GrantXpResult,
+  MonsterAbilityKey,
   MonsterSession,
   NpcSession,
   RevealedMonster,
@@ -462,11 +463,26 @@ export class GameSessionService {
     });
   }
 
-  /** Só o mestre pode editar os status (nome, PV, CA) de um monstro já adicionado à sessão. */
+  private static readonly ABILITY_KEYS: MonsterAbilityKey[] = [
+    'strength',
+    'dexterity',
+    'constitution',
+    'intelligence',
+    'wisdom',
+    'charisma',
+  ];
+
+  /** Só o mestre pode editar os status (nome, PV, CA, atributos) de um monstro já adicionado à sessão. */
   async updateMonsterStats(
     idMonsterSession: string,
     userId: string,
-    stats: {customName?: string | null; hpCurrent: number; hpMax: number; ac: number},
+    stats: {
+      customName?: string | null;
+      hpCurrent: number;
+      hpMax: number;
+      ac: number;
+      abilities?: Partial<Record<MonsterAbilityKey, number>>;
+    },
   ): Promise<void> {
     if (
       typeof stats.hpCurrent !== 'number' ||
@@ -483,6 +499,20 @@ export class GameSessionService {
     if (typeof stats.ac !== 'number' || !Number.isInteger(stats.ac) || stats.ac < 0) {
       throw new HttpErrors.UnprocessableEntity('ac deve ser um número inteiro não-negativo');
     }
+    let abilities: Partial<Record<MonsterAbilityKey, number>> | undefined;
+    if (stats.abilities) {
+      abilities = {};
+      for (const key of GameSessionService.ABILITY_KEYS) {
+        const value = stats.abilities[key];
+        if (value === undefined) continue;
+        if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 30) {
+          throw new HttpErrors.UnprocessableEntity(
+            `${key} deve ser um número inteiro entre 1 e 30`,
+          );
+        }
+        abilities[key] = value;
+      }
+    }
     const trimmedName = stats.customName?.trim();
     const customName = trimmedName ? trimmedName : null;
     const result = await this.repository.updateMonsterStats(idMonsterSession, userId, {
@@ -490,6 +520,7 @@ export class GameSessionService {
       hpCurrent: stats.hpCurrent,
       hpMax: stats.hpMax,
       ac: stats.ac,
+      abilities,
     });
     if (result.status === 'not_found')
       throw new HttpErrors.NotFound('Monstro não encontrado na sessão');
@@ -505,6 +536,7 @@ export class GameSessionService {
       hp_current: stats.hpCurrent,
       hp_max: stats.hpMax,
       ac: stats.ac,
+      abilities,
     });
   }
 

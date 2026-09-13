@@ -99,6 +99,15 @@ export interface PlayerSession {
   character: PlayerCharacterSummary | null;
 }
 
+/** Chaves de atributo dentro de `MonsterSession.data_snapshot` (formato do SRD, em inglês). */
+export type MonsterAbilityKey =
+  | 'strength'
+  | 'dexterity'
+  | 'constitution'
+  | 'intelligence'
+  | 'wisdom'
+  | 'charisma';
+
 export interface MonsterSession {
   id_monster_session: string;
   id_game_session: string;

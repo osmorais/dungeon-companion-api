@@ -26,6 +26,7 @@ import {
   GameSessionPagedList,
   GrantXpInput,
   GrantXpResult,
+  MonsterAbilityKey,
   MonsterSession,
   NpcSession,
   PlayerSession,
@@ -211,18 +212,36 @@ export class GameSessionController {
               hp_current: {type: 'integer'},
               hp_max: {type: 'integer'},
               ac: {type: 'integer'},
+              abilities: {
+                type: 'object',
+                properties: {
+                  strength: {type: 'integer'},
+                  dexterity: {type: 'integer'},
+                  constitution: {type: 'integer'},
+                  intelligence: {type: 'integer'},
+                  wisdom: {type: 'integer'},
+                  charisma: {type: 'integer'},
+                },
+              },
             },
           },
         },
       },
     })
-    body: {custom_name?: string | null; hp_current: number; hp_max: number; ac: number},
+    body: {
+      custom_name?: string | null;
+      hp_current: number;
+      hp_max: number;
+      ac: number;
+      abilities?: Partial<Record<MonsterAbilityKey, number>>;
+    },
   ): Promise<void> {
     return this.gameSessionService.updateMonsterStats(id, currentUser.id, {
       customName: body.custom_name,
       hpCurrent: body.hp_current,
       hpMax: body.hp_max,
       ac: body.ac,
+      abilities: body.abilities,
     });
   }
 

@@ -10,6 +10,7 @@ import {
   GameSessionDetail,
   GameSessionSummary,
   GrantXpResult,
+  MonsterAbilityKey,
   MonsterSession,
   MonsterSessionInput,
   NpcSession,
@@ -748,19 +749,26 @@ export class GameSessionRepository {
     return {status: 'ok', idGameSession: id_game_session};
   }
 
-  /** Só o mestre da sessão pode editar os status (nome, PV, CA) de um monstro. */
+  /** Só o mestre da sessão pode editar os status (nome, PV, CA, atributos) de um monstro. */
   async updateMonsterStats(
     idMonsterSession: string,
     userId: string,
-    stats: {customName: string | null; hpCurrent: number; hpMax: number; ac: number},
+    stats: {
+      customName: string | null;
+      hpCurrent: number;
+      hpMax: number;
+      ac: number;
+      abilities?: Partial<Record<MonsterAbilityKey, number>>;
+    },
   ): Promise<{
     status: 'not_found' | 'unauthorized' | 'ok';
     idGameSession?: string;
+    dataSnapshot?: Record<string, unknown>;
   }> {
     const rows = await this.db.sql<
-      {id_game_session: string; session_owner_id: string | null}[]
+      {id_game_session: string; session_owner_id: string | null; data_snapshot: Record<string, unknown>}[]
     >`
-      SELECT ms.id_game_session, gs.user_id AS session_owner_id
+      SELECT ms.id_game_session, gs.user_id AS session_owner_id, ms.data_snapshot
       FROM monster_session ms
       JOIN game_session gs ON gs.id_game_session = ms.id_game_session
       WHERE ms.id_monster_session = ${idMonsterSession}
@@ -768,15 +776,18 @@ export class GameSessionRepository {
     `;
     if (!rows.length) return {status: 'not_found'};
 
-    const {id_game_session, session_owner_id} = rows[0];
+    const {id_game_session, session_owner_id, data_snapshot} = rows[0];
     if (session_owner_id !== userId) return {status: 'unauthorized'};
+
+    const mergedSnapshot = stats.abilities ? {...data_snapshot, ...stats.abilities} : data_snapshot;
 
     await this.db.sql`
       UPDATE monster_session
-      SET custom_name = ${stats.customName}, hp_current = ${stats.hpCurrent}, hp_max = ${stats.hpMax}, ac = ${stats.ac}
+      SET custom_name = ${stats.customName}, hp_current = ${stats.hpCurrent}, hp_max = ${stats.hpMax}, ac = ${stats.ac},
+          data_snapshot = ${this.db.sql.json(mergedSnapshot as never)}
       WHERE id_monster_session = ${idMonsterSession}
     `;
-    return {status: 'ok', idGameSession: id_game_session};
+    return {status: 'ok', idGameSession: id_game_session, dataSnapshot: mergedSnapshot};
   }
 
   /** Só o mestre da sessão pode revelar/esconder um monstro. */
