@@ -462,6 +462,52 @@ export class GameSessionService {
     });
   }
 
+  /** Só o mestre pode editar os status (nome, PV, CA) de um monstro já adicionado à sessão. */
+  async updateMonsterStats(
+    idMonsterSession: string,
+    userId: string,
+    stats: {customName?: string | null; hpCurrent: number; hpMax: number; ac: number},
+  ): Promise<void> {
+    if (
+      typeof stats.hpCurrent !== 'number' ||
+      !Number.isInteger(stats.hpCurrent) ||
+      stats.hpCurrent < 0
+    ) {
+      throw new HttpErrors.UnprocessableEntity(
+        'hp_current deve ser um número inteiro não-negativo',
+      );
+    }
+    if (typeof stats.hpMax !== 'number' || !Number.isInteger(stats.hpMax) || stats.hpMax < 1) {
+      throw new HttpErrors.UnprocessableEntity('hp_max deve ser um número inteiro maior que zero');
+    }
+    if (typeof stats.ac !== 'number' || !Number.isInteger(stats.ac) || stats.ac < 0) {
+      throw new HttpErrors.UnprocessableEntity('ac deve ser um número inteiro não-negativo');
+    }
+    const trimmedName = stats.customName?.trim();
+    const customName = trimmedName ? trimmedName : null;
+    const result = await this.repository.updateMonsterStats(idMonsterSession, userId, {
+      customName,
+      hpCurrent: stats.hpCurrent,
+      hpMax: stats.hpMax,
+      ac: stats.ac,
+    });
+    if (result.status === 'not_found')
+      throw new HttpErrors.NotFound('Monstro não encontrado na sessão');
+    if (result.status === 'unauthorized')
+      throw new HttpErrors.Forbidden(
+        'Você não tem permissão para alterar os status deste monstro',
+      );
+    this.events.publish({
+      type: 'monster_stats_updated',
+      id_game_session: result.idGameSession!,
+      id_monster_session: idMonsterSession,
+      custom_name: customName,
+      hp_current: stats.hpCurrent,
+      hp_max: stats.hpMax,
+      ac: stats.ac,
+    });
+  }
+
   /** Só o mestre pode trocar a imagem de um monstro já adicionado à sessão. */
   async setMonsterImage(
     idMonsterSession: string,

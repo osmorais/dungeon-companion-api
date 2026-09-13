@@ -748,6 +748,37 @@ export class GameSessionRepository {
     return {status: 'ok', idGameSession: id_game_session};
   }
 
+  /** Só o mestre da sessão pode editar os status (nome, PV, CA) de um monstro. */
+  async updateMonsterStats(
+    idMonsterSession: string,
+    userId: string,
+    stats: {customName: string | null; hpCurrent: number; hpMax: number; ac: number},
+  ): Promise<{
+    status: 'not_found' | 'unauthorized' | 'ok';
+    idGameSession?: string;
+  }> {
+    const rows = await this.db.sql<
+      {id_game_session: string; session_owner_id: string | null}[]
+    >`
+      SELECT ms.id_game_session, gs.user_id AS session_owner_id
+      FROM monster_session ms
+      JOIN game_session gs ON gs.id_game_session = ms.id_game_session
+      WHERE ms.id_monster_session = ${idMonsterSession}
+      LIMIT 1
+    `;
+    if (!rows.length) return {status: 'not_found'};
+
+    const {id_game_session, session_owner_id} = rows[0];
+    if (session_owner_id !== userId) return {status: 'unauthorized'};
+
+    await this.db.sql`
+      UPDATE monster_session
+      SET custom_name = ${stats.customName}, hp_current = ${stats.hpCurrent}, hp_max = ${stats.hpMax}, ac = ${stats.ac}
+      WHERE id_monster_session = ${idMonsterSession}
+    `;
+    return {status: 'ok', idGameSession: id_game_session};
+  }
+
   /** Só o mestre da sessão pode revelar/esconder um monstro. */
   async setMonsterRevealed(
     idMonsterSession: string,
