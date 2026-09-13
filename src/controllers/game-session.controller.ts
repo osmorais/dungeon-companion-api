@@ -33,7 +33,7 @@ import {
   RollLogInput,
 } from '../models/game-session-types';
 
-const IMAGE_UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
+const IMAGE_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
 
 /** Só os campos que o controller realmente usa do arquivo que o multer entrega. */
 interface MulterFile {
