@@ -193,6 +193,39 @@ export class GameSessionController {
     );
   }
 
+  @patch('/api/game-session/monster-session/{id}/stats')
+  @response(204, {description: 'Monster stats (name, HP, AC) updated'})
+  async updateMonsterStats(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      description: 'New monster stats',
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            required: ['hp_current', 'hp_max', 'ac'],
+            properties: {
+              custom_name: {type: 'string', nullable: true},
+              hp_current: {type: 'integer'},
+              hp_max: {type: 'integer'},
+              ac: {type: 'integer'},
+            },
+          },
+        },
+      },
+    })
+    body: {custom_name?: string | null; hp_current: number; hp_max: number; ac: number},
+  ): Promise<void> {
+    return this.gameSessionService.updateMonsterStats(id, currentUser.id, {
+      customName: body.custom_name,
+      hpCurrent: body.hp_current,
+      hpMax: body.hp_max,
+      ac: body.ac,
+    });
+  }
+
   @post('/api/game-session/monster-session/{id}/reveal')
   @response(204, {
     description: 'Reveals a monster to the players (name only, no stats/HP)',
