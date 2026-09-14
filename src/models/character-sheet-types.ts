@@ -243,8 +243,8 @@ export interface CharacterSheet {
       used: number;
       recharge_on: 'short_rest' | 'long_rest';
     }[];
-    /** Características ativáveis gastando um dos `resource_trackers` (hoje só as de Pontos de Chi do Monge) — vazio se não houver nenhuma neste nível. */
-    chi_abilities: {name: string; description: string; chi_cost: number; resource_key: string}[];
+    /** Características ativáveis gastando um dos `resource_trackers` (Canalizar Divindade, Fúria, Pontos de Chi, Forma Selvagem, etc.) — vazio se não houver nenhuma neste nível. */
+    class_abilities: {name: string; description: string; cost: number; resource_key: string}[];
     /** Recursos de classe/subclasse que escalam por nível (ex: "Ataque Furtivo": "2d6") — informativo, `null` se não houver nenhum neste nível. */
     class_resources: Record<string, string> | null;
   };

@@ -70,7 +70,7 @@ import {
   RestType,
   XP_THRESHOLDS,
   xpNeededForLevel,
-  getKnownChiAbilities,
+  getKnownClassAbilities,
   hasArcaneSecretsChoice,
 } from './character-sheet/rules';
 import {FEATS} from './character-sheet/feats';
@@ -308,7 +308,7 @@ export class CharacterSheetService {
         spells,
         avatar_preset: input.avatar_preset ?? null,
         resource_trackers: this.buildResourceTrackers(classRule, subclassRule, level, {}, stats),
-        chi_abilities: getKnownChiAbilities(classKey, level, core_build.id_subclass).map(a => ({name: a.name, description: a.description, chi_cost: a.chiCost, resource_key: a.resourceKey})),
+        class_abilities: getKnownClassAbilities(classKey, level, core_build.id_subclass).map(a => ({name: a.name, description: a.description, cost: a.cost, resource_key: a.resourceKey})),
         class_resources: this.buildClassResources(classRule, subclassRule, level),
       },
     };
@@ -771,7 +771,7 @@ export class CharacterSheetService {
           character.resource_uses_expended ?? {},
           stats,
         ),
-        chi_abilities: getKnownChiAbilities(character.id_class, character.level, character.id_subclass).map(a => ({name: a.name, description: a.description, chi_cost: a.chiCost, resource_key: a.resourceKey})),
+        class_abilities: getKnownClassAbilities(character.id_class, character.level, character.id_subclass).map(a => ({name: a.name, description: a.description, cost: a.cost, resource_key: a.resourceKey})),
         class_resources: this.buildClassResources(classRule, subclassRule, character.level),
       },
     };
