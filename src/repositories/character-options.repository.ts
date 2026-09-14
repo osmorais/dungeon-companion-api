@@ -79,4 +79,17 @@ export class CharacterOptionsRepository {
     `;
   }
 
+  /** Usado pra montar a lista completa de magias de um conjurador "de lista cheia"
+   *  (Clérigo/Druida/Paladino) — filtra por círculo pra só trazer o que o nível atual permite. */
+  async findSpellsByIdsUpToLevel(ids: number[], maxSpellLevel: number): Promise<Spell[]> {
+    if (ids.length === 0) return [];
+    return this.db.sql<Spell[]>`
+      SELECT id_spell, name, description, casting_time, range_distance, duration,
+             is_verbal, is_somatic, is_material, spelllevel AS "spellLevel", school
+      FROM spell
+      WHERE id_spell = ANY(${ids}) AND spelllevel BETWEEN 1 AND ${maxSpellLevel}
+      ORDER BY spelllevel, name
+    `;
+  }
+
 }

@@ -4093,6 +4093,61 @@ export const KNOWN_CASTER_CLASS_IDS: ReadonlySet<number> = new Set([2, 3, 6, 12]
 
 export const WIZARD_CLASS_ID = 9;
 
+/**
+ * Clérigo, Druida e Paladino "conhecem" instantaneamente toda a lista de magias da classe —
+ * eles não "aprendem" magias novas ao subir de nível, apenas preparam um subconjunto (limite =
+ * nível + modificador do atributo de conjuração, mín. 1) depois de cada descanso longo, e esse
+ * subconjunto pode mudar livremente a cada preparação. Por isso essas classes nunca recebem
+ * escolha de "magia nova" no level-up (ver `computeSpellChoices` em character-sheet.service.ts)
+ * — a lista completa de magias disponíveis (até o círculo que os espaços de magia do nível atual
+ * permitem) é montada sob demanda a partir de `CLASS_SPELLS` em vez de ficar presa às linhas já
+ * gravadas em `character_spell`. Mesmo agrupamento usado no frontend
+ * (`FULL_LIST_PREPARED_CASTER_CLASS_IDS` em `constants/spell-rules.ts`) — mantido em sincronia
+ * manualmente.
+ */
+export const FULL_LIST_PREPARED_CASTER_CLASS_IDS: ReadonlySet<number> = new Set([4, 5, 11]);
+
+/**
+ * IDs de magia (`id_spell`) que pertencem à lista de cada classe de "lista cheia" — cópia manual
+ * de `CLASS_SPELLS` em `dungeon-companion-web/src/app/constants/spell-rules.ts` (só as 3 classes
+ * que precisam disso no backend: Clérigo, Druida, Paladino). Truques não entram aqui — truques
+ * continuam sendo escolhidos e gravados normalmente em `character_spell`.
+ */
+export const CLASS_SPELLS: Record<number, number[]> = {
+  // Clérigo (4)
+  4: [
+    42, 68, 103, 108, 123, 124, 126, 146, 185, 249, 264, 279, 282, 284, 290, 316,
+    2, 4, 18, 23, 31, 56, 57, 139, 184, 201, 245, 280, 303, 310, 355, 362,
+    14, 15, 64, 65, 100, 130, 143, 153, 160, 167, 171, 178, 205, 250, 277, 302, 306, 312, 314, 327,
+    3, 39, 90, 100, 175, 200, 227, 276, 341,
+    63, 67, 71, 84, 109, 131, 221, 269, 270, 309, 311,
+    6, 40, 41, 51, 102, 106, 132, 226, 254, 273, 281, 292,
+    77, 168, 255, 300, 307, 324, 340, 353,
+    37, 52, 91, 157, 198, 251,
+    107, 252, 267, 274, 308, 322,
+  ],
+  // Druida (5)
+  5: [
+    11, 46, 86, 103, 108, 124, 126, 159, 164, 238, 244, 249, 258, 279, 282,
+    9, 18, 57, 98, 139, 150, 155, 184, 193, 199, 201, 203, 215, 259, 261, 280, 291, 310, 320, 358,
+    12, 14, 76, 88, 94, 130, 161, 167, 205, 217, 233, 235, 248, 277, 302, 306, 312, 351,
+    78, 83, 90, 133, 186, 200, 206, 218, 224, 227, 230, 262, 341, 356,
+    50, 67, 72, 79, 84, 105, 109, 115, 270, 298, 309, 354,
+    40, 51, 80, 106, 140, 226, 229, 292, 338,
+    168, 187, 220, 300, 340, 353,
+    17, 91, 157, 170, 350,
+    8, 107, 219, 308, 339,
+  ],
+  // Paladino (11)
+  11: [
+    38, 42, 68, 108, 119, 122, 123, 124, 126, 137, 146, 176, 185, 201, 279, 282,
+    4, 18, 23, 24, 93, 184, 201, 212, 245, 280, 310, 355, 362,
+    22, 35, 64, 100, 118, 130, 204, 205, 302, 312,
+    33, 34, 39, 120, 175, 200, 218, 227, 276,
+    62, 67, 109, 117, 131, 221, 243, 311,
+  ],
+};
+
 /** Tamanho do grimório do Mago — cresce 2 magias por nível, a partir do 1º. */
 export function getWizardSpellbookSize(level: number): number {
   return 6 + 2 * (level - 1);

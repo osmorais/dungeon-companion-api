@@ -57,6 +57,8 @@ import {
   SPELL_SLOTS,
   KNOWN_CASTER_CLASS_IDS,
   WIZARD_CLASS_ID,
+  FULL_LIST_PREPARED_CASTER_CLASS_IDS,
+  CLASS_SPELLS,
   THIRD_CASTER_SLOTS,
   getWizardSpellbookSize,
   firstSubclassChoiceLevel,
@@ -630,7 +632,7 @@ export class CharacterSheetService {
     }));
     const weaponResult = buildWeaponActions(weaponsForCalc, stats, profBonus, character.chosen_fighting_style);
 
-    const spellList: Spell[] = spells.map(s => ({
+    const knownSpells: Spell[] = spells.map(s => ({
       id_spell: s.id_spell,
       name: s.name,
       spellLevel: s.spellLevel,
@@ -644,6 +646,7 @@ export class CharacterSheetService {
       school: s.school,
       is_prepared: s.is_prepared,
     }));
+    const spellList = await this.buildFullSpellList(character.id_class, character.level, knownSpells);
 
     const traits = collectTraits(raceRule, subraceRule, classRule, bgRule, character.level, subclassRule, character.chosen_fighting_style, profBonus, stats);
     const chosenFeats = await this.repository.findChosenFeats(character.id_character);
@@ -789,6 +792,36 @@ export class CharacterSheetService {
     return Number.isFinite(n) ? n : 0;
   }
 
+  private static maxCastableCircle(levelSlots: Record<string, number>): number {
+    return Object.entries(levelSlots)
+      .filter(([, count]) => count > 0)
+      .reduce((max, [key]) => Math.max(max, parseInt(key.replace('level_', ''), 10)), 0);
+  }
+
+  /**
+   * Clérigo/Druida/Paladino "conhecem" toda a lista de magias da classe — em vez de depender das
+   * linhas já gravadas em `character_spell` (que só existem pras magias que já foram preparadas
+   * alguma vez), monta a lista sob demanda: truques continuam vindo de `knownSpells` (são
+   * escolhidos normalmente), mas magias com círculo são a lista completa da classe até o círculo
+   * que os espaços de magia do nível atual permitem, cruzando com `is_prepared` de quem já tem
+   * linha gravada (default `false` pra quem nunca foi preparada).
+   */
+  private async buildFullSpellList(classKey: number, level: number, knownSpells: Spell[]): Promise<Spell[]> {
+    if (!FULL_LIST_PREPARED_CASTER_CLASS_IDS.has(classKey)) return knownSpells;
+
+    const cantrips = knownSpells.filter(s => s.spellLevel === 0);
+    const preparedById = new Map(knownSpells.filter(s => s.spellLevel > 0).map(s => [s.id_spell, s.is_prepared ?? false]));
+
+    const maxCircle = CharacterSheetService.maxCastableCircle(SPELL_SLOTS[classKey]?.[level] ?? {});
+    if (maxCircle === 0) return cantrips;
+
+    const classSpellIds = CLASS_SPELLS[classKey] ?? [];
+    const fullList = await this.optionsRepository.findSpellsByIdsUpToLevel(classSpellIds, maxCircle);
+    const leveledSpells = fullList.map(s => ({...s, is_prepared: preparedById.get(s.id_spell) ?? false}));
+
+    return [...cantrips, ...leveledSpells];
+  }
+
   /**
    * Quantas magias/truques novos o personagem pode escolher neste nível — mesmo modelo do
    * wizard de criação (`hasSharedSpellPool` em character-wizard.component.ts): Bardo/Bruxo/
@@ -821,7 +854,7 @@ export class CharacterSheetService {
       spellsGained = Math.max(0, after - before);
     } else if (classKey === WIZARD_CLASS_ID) {
       spellsGained = Math.max(0, getWizardSpellbookSize(nextLevel) - getWizardSpellbookSize(currentLevel));
-    } else {
+    } else if (!FULL_LIST_PREPARED_CASTER_CLASS_IDS.has(classKey)) {
       const before = SPELL_SLOTS[classKey]?.[currentLevel] ?? {};
       const after = SPELL_SLOTS[classKey]?.[nextLevel] ?? {};
       for (const [circleKey, afterCount] of Object.entries(after)) {
@@ -829,6 +862,9 @@ export class CharacterSheetService {
         if (delta > 0) spellsGainedByCircle[circleKey] = delta;
       }
     }
+    // Clérigo/Druida/Paladino (FULL_LIST_PREPARED_CASTER_CLASS_IDS): nunca "aprendem" magia nova
+    // no level-up — a lista completa da classe já é exibida na ficha (ver buildFullSpellList) e
+    // eles só escolhem quais preparar depois de um descanso longo. spellsGained/byCircle ficam 0.
 
     return {
       cantrips_gained: cantripsGained,

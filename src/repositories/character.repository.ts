@@ -351,12 +351,23 @@ export class CharacterRepository {
     return parseInt(rows[0].count, 10);
   }
 
+  /**
+   * Clérigo/Druida/Paladino exibem a lista inteira da classe na ficha (ver `FULL_LIST_PREPARED_
+   * CASTER_CLASS_IDS`) sem que cada magia tenha necessariamente uma linha em `character_spell`
+   * ainda — por isso isto é um upsert: se a linha não existir (magia nunca preparada antes), cria.
+   */
   async setSpellPrepared(id: number, idSpell: number, isPrepared: boolean): Promise<void> {
-    await this.db.sql`
+    const result = await this.db.sql`
       UPDATE character_spell
       SET is_prepared = ${isPrepared}
       WHERE id_character = ${id} AND id_spell = ${idSpell}
     `;
+    if (result.count === 0) {
+      await this.db.sql`
+        INSERT INTO character_spell (id_character, id_spell, is_prepared)
+        VALUES (${id}, ${idSpell}, ${isPrepared})
+      `;
+    }
   }
 
   async updateAvatarPreset(id: number, preset: AvatarPreset): Promise<void> {
