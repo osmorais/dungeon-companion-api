@@ -1016,6 +1016,7 @@ export const CLASSES: Record<number, ClassRule> = {
       2: {
         features: [
           {name: 'Canalizar Divindade (1/descanso)', description: 'Você ganha a habilidade de canalizar energia divina diretamente da sua divindade, usando essa energia para alimentar efeitos mágicos. Você começa com duas opções: Expulsar Mortos-Vivos e uma opção determinada pelo seu domínio divino. Você pode usar Canalizar Divindade uma vez, recuperando o uso após um descanso curto ou longo.'},
+          {name: 'Canalizar Divindade: Expulsar Mortos-Vivos', description: 'Como sua ação no turno, você exibe seu símbolo sagrado e entoa uma prece contra os mortos-vivos. Cada morto-vivo capaz de vê-lo ou ouvi-lo e que esteja a até 9 metros de você deve realizar uma salvaguarda de Sabedoria. Em caso de falha, o morto-vivo é expulso por 1 minuto ou até sofrer algum dano. Uma criatura expulsa deve gastar seus turnos tentando se distanciar ao máximo de você, não podendo se aproximar a menos de 9 metros por vontade própria. Ela também não pode usar reações, podendo usar somente a ação Correr ou tentar escapar de qualquer efeito que a impeça de se mover. Caso não possa se mover, a criatura pode usar a ação Esquivar.'},
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: true,
