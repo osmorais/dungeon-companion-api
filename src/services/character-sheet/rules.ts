@@ -213,70 +213,311 @@ export function maxTrackableResourceUses(
 }
 
 /**
- * Característica ativável gastando um recurso consumível da classe (hoje só as de Pontos de
- * Chi do Monge — Rajada de Golpes/Defesa Paciente/Passo do Vento/Ataque Atordoante/Corpo Vazio).
- * `resourceKey` diz qual dos `TRACKABLE_RESOURCES` daquela classe ela consome (útil quando a
- * classe tem mais de um recurso rastreável). Não inclui as reativas (Defletir Projéteis,
- * rerolagem de Alma de Diamante), que só fazem sentido em resposta a um gatilho específico e
- * continuam só como texto informativo.
+ * Característica ativável gastando um dos recursos consumíveis rastreados da classe
+ * (`TRACKABLE_RESOURCES`) — Canalizar Divindade, Fúria, Pontos de Chi, Forma Selvagem,
+ * Inspiração Bárdica, Recuperação Arcana, etc. `resourceKey` diz qual recurso ela consome (útil
+ * quando a classe tem mais de um recurso rastreável). Não inclui características reativas
+ * (Defletir Projéteis, rerolagem de Alma de Diamante), que só fazem sentido em resposta a um
+ * gatilho específico e continuam só como texto informativo em `traits`/`featuresByLevel`.
  */
-export interface ChiAbility {
+export interface ClassAbility {
   name: string;
   description: string;
-  chiCost: number;
+  cost: number;
   levelLearned: number;
   resourceKey: string;
   /** Se definido, só existe pra essa subclasse (ex: Palma Vibrante = só Mão Aberta); ausente = disponível pra qualquer subclasse da classe. */
   subclassId?: string;
 }
 
-export const MONK_CHI_ABILITIES: ChiAbility[] = [
+const BARBARIAN_ABILITIES: ClassAbility[] = [
+  {
+    name: 'Fúria',
+    description: 'Em seu turno, você pode entrar em fúria como uma ação bônus. Enquanto em fúria, você tem vantagem em testes de Força e jogadas de ataque de Força, recebe bônus nas jogadas de dano corpo a corpo e resistência a dano de concussão, perfurante e cortante. A fúria dura 1 minuto e termina antes se você ficar inconsciente, se seu turno terminar sem você ter atacado uma criatura hostil ou sofrido dano desde o seu último turno, ou se você decidir encerrá-la.',
+    cost: 1,
+    levelLearned: 1,
+    resourceKey: 'Fúrias',
+  },
+];
+
+const BARD_ABILITIES: ClassAbility[] = [
+  {
+    name: 'Inspiração Bárdica',
+    description: 'Use uma ação bônus para escolher uma criatura que não seja você a até 18 metros. Ela ganha um dado de inspiração bárdica, que pode somar a um teste de habilidade, jogada de ataque ou teste de resistência realizado nos próximos 10 minutos (o tamanho do dado cresce conforme seu nível de bardo).',
+    cost: 1,
+    levelLearned: 1,
+    resourceKey: 'Inspiração Bárdica',
+  },
+];
+
+const CLERIC_ABILITIES: ClassAbility[] = [
+  {
+    name: 'Canalizar Divindade: Expulsar Mortos-Vivos',
+    description: 'Como sua ação no turno, você exibe seu símbolo sagrado e entoa uma prece contra os mortos-vivos. Cada morto-vivo capaz de vê-lo ou ouvi-lo e que esteja a até 9 metros de você deve realizar uma salvaguarda de Sabedoria. Em caso de falha, o morto-vivo é expulso por 1 minuto ou até sofrer algum dano.',
+    cost: 1,
+    levelLearned: 2,
+    resourceKey: 'Canalizar Divindade',
+  },
+  {
+    name: 'Canalizar Divindade: Conhecimento das Eras',
+    description: 'Você pode usar seu Canalizar Divindade para ganhar proficiência temporária (por 10 minutos) numa perícia ou ferramenta à sua escolha.',
+    cost: 1,
+    levelLearned: 2,
+    resourceKey: 'Canalizar Divindade',
+    subclassId: 'conhecimento',
+  },
+  {
+    name: 'Canalizar Divindade: Ler Pensamentos',
+    description: 'Você pode usar seu Canalizar Divindade para ler a mente de uma criatura por 1 minuto (teste de resistência de Sabedoria pra resistir); enquanto durar, também pode gastar sua ação pra plantar sugestivamente um pensamento na mente dela.',
+    cost: 1,
+    levelLearned: 6,
+    resourceKey: 'Canalizar Divindade',
+    subclassId: 'conhecimento',
+  },
+  {
+    name: 'Canalizar Divindade: Invocar Duplicidade',
+    description: 'Você pode usar seu Canalizar Divindade pra criar uma ilusão perfeita de si mesmo, que dura enquanto você mantiver concentração (até 1 minuto). Você pode ver e ouvir através dela e falar por ela.',
+    cost: 1,
+    levelLearned: 2,
+    resourceKey: 'Canalizar Divindade',
+    subclassId: 'enganacao',
+  },
+  {
+    name: 'Canalizar Divindade: Manto de Sombras',
+    description: 'Numa área de penumbra ou escuridão, você pode usar seu Canalizar Divindade pra ficar invisível até realizar um ataque, conjurar uma magia, ou até o final do seu próximo turno.',
+    cost: 1,
+    levelLearned: 6,
+    resourceKey: 'Canalizar Divindade',
+    subclassId: 'enganacao',
+  },
+  {
+    name: 'Canalizar Divindade: Golpe Dirigido',
+    description: 'Você pode usar seu Canalizar Divindade pra receber orientação divina em combate: quando fizer uma jogada de ataque, pode usar essa característica pra ganhar +10 nessa jogada, decidindo depois de ver a rolagem mas antes de saber se acertou.',
+    cost: 1,
+    levelLearned: 2,
+    resourceKey: 'Canalizar Divindade',
+    subclassId: 'guerra',
+  },
+  {
+    name: 'Canalizar Divindade: Bênção do Deus da Guerra',
+    description: 'Quando uma criatura próxima fizer uma jogada de ataque, você pode usar sua reação e seu Canalizar Divindade pra conceder a ela +10 nessa jogada.',
+    cost: 1,
+    levelLearned: 6,
+    resourceKey: 'Canalizar Divindade',
+    subclassId: 'guerra',
+  },
+  {
+    name: 'Canalizar Divindade: Radiação do Amanhecer',
+    description: 'Você pode usar seu Canalizar Divindade pra emitir luz radiante: criaturas hostis num raio de 9 metros sofrem 2d10 + seu nível de clérigo de dano radiante (metade se resistirem) e perdem qualquer vantagem de estarem na penumbra ou escuridão mágica.',
+    cost: 1,
+    levelLearned: 2,
+    resourceKey: 'Canalizar Divindade',
+    subclassId: 'luz',
+  },
+  {
+    name: 'Canalizar Divindade: Encantar Animais e Plantas',
+    description: 'Você pode usar seu Canalizar Divindade pra encantar animais e plantas ao seu redor, ficando amigáveis com você por 1 minuto ou até sofrerem dano.',
+    cost: 1,
+    levelLearned: 2,
+    resourceKey: 'Canalizar Divindade',
+    subclassId: 'natureza',
+  },
+  {
+    name: 'Canalizar Divindade: Ira da Tempestade Destruidora',
+    description: 'Quando você causa dano elétrico ou de trovão com uma magia de clérigo, pode usar seu Canalizar Divindade pra causar o dano máximo possível em vez de rolar.',
+    cost: 1,
+    levelLearned: 2,
+    resourceKey: 'Canalizar Divindade',
+    subclassId: 'tempestade',
+  },
+  {
+    name: 'Canalizar Divindade: Preservar a Vida',
+    description: 'Você pode usar seu Canalizar Divindade pra restaurar uma quantidade de pontos de vida igual a 5 vezes seu nível de clérigo, distribuída entre criaturas a até 9 metros (nenhuma pode receber mais da metade do máximo de PV).',
+    cost: 1,
+    levelLearned: 2,
+    resourceKey: 'Canalizar Divindade',
+    subclassId: 'vida',
+  },
+];
+
+const DRUID_ABILITIES: ClassAbility[] = [
+  {
+    name: 'Forma Selvagem',
+    description: 'Você pode usar uma ação para se transformar magicamente em uma forma de besta que já tenha visto antes. O grau de desafio máximo permitido e as restrições da forma (deslocamento de voo, deslocamento aquático) dependem do seu nível de druida.',
+    cost: 1,
+    levelLearned: 2,
+    resourceKey: 'Forma Selvagem',
+  },
+  {
+    name: 'Recuperação Natural',
+    description: 'Durante um descanso curto, você pode recuperar espaços de magia gastos com total combinado igual ou menor à metade do seu nível de druida (arredondado pra cima), nenhum de 6º círculo ou superior. Depois de usar, ajuste manualmente os espaços recuperados no controle de espaços de magia.',
+    cost: 1,
+    levelLearned: 2,
+    resourceKey: 'Recuperação Natural',
+    subclassId: 'terra',
+  },
+];
+
+const FIGHTER_ABILITIES: ClassAbility[] = [
+  {
+    name: 'Retomar o Fôlego',
+    description: 'Você tem uma reserva de resistência que pode usar para se proteger. Em seu turno, você pode usar uma ação bônus para recuperar pontos de vida iguais a 1d10 + seu nível de guerreiro.',
+    cost: 1,
+    levelLearned: 1,
+    resourceKey: 'Retomar Fôlego',
+  },
+  {
+    name: 'Surto de Ação',
+    description: 'Você pode empurrar-se além de seus limites normais por um momento. Em seu turno, você pode fazer uma ação adicional além de sua ação normal e uma possível ação bônus.',
+    cost: 1,
+    levelLearned: 2,
+    resourceKey: 'Surto de Ação',
+  },
+  {
+    name: 'Indomável',
+    description: 'Você pode refazer um teste de resistência que falhou. Se fizer isso, deve usar o novo resultado.',
+    cost: 1,
+    levelLearned: 9,
+    resourceKey: 'Indomável',
+  },
+];
+
+const SORCERER_ABILITIES: ClassAbility[] = [
+  {
+    name: 'Criar Espaço de Magia (1º círculo)',
+    description: 'Gaste 2 pontos de feitiçaria para criar um espaço de magia de 1º círculo. Ajuste manualmente o espaço recuperado no controle de espaços de magia.',
+    cost: 2,
+    levelLearned: 2,
+    resourceKey: 'Pontos de Feitiçaria',
+  },
+  {
+    name: 'Criar Espaço de Magia (2º círculo)',
+    description: 'Gaste 3 pontos de feitiçaria para criar um espaço de magia de 2º círculo. Ajuste manualmente o espaço recuperado no controle de espaços de magia.',
+    cost: 3,
+    levelLearned: 2,
+    resourceKey: 'Pontos de Feitiçaria',
+  },
+  {
+    name: 'Criar Espaço de Magia (3º círculo)',
+    description: 'Gaste 5 pontos de feitiçaria para criar um espaço de magia de 3º círculo. Ajuste manualmente o espaço recuperado no controle de espaços de magia.',
+    cost: 5,
+    levelLearned: 2,
+    resourceKey: 'Pontos de Feitiçaria',
+  },
+  {
+    name: 'Criar Espaço de Magia (4º círculo)',
+    description: 'Gaste 6 pontos de feitiçaria para criar um espaço de magia de 4º círculo. Ajuste manualmente o espaço recuperado no controle de espaços de magia.',
+    cost: 6,
+    levelLearned: 2,
+    resourceKey: 'Pontos de Feitiçaria',
+  },
+  {
+    name: 'Criar Espaço de Magia (5º círculo)',
+    description: 'Gaste 7 pontos de feitiçaria para criar um espaço de magia de 5º círculo. Ajuste manualmente o espaço recuperado no controle de espaços de magia.',
+    cost: 7,
+    levelLearned: 2,
+    resourceKey: 'Pontos de Feitiçaria',
+  },
+];
+
+const WARLOCK_ABILITIES: ClassAbility[] = [
+  {
+    name: 'Mestre Místico',
+    description: 'Gaste 1 minuto entoando encantamentos místicos para recuperar todos os espaços de magia gastos por Magia do Pacto.',
+    cost: 1,
+    levelLearned: 20,
+    resourceKey: 'Mestre Místico',
+  },
+];
+
+const WIZARD_ABILITIES: ClassAbility[] = [
+  {
+    name: 'Recuperação Arcana',
+    description: 'Uma vez por dia, ao terminar um descanso curto, você pode recuperar espaços de magia gastos com total combinado igual ou menor à metade do seu nível de mago (arredondado pra cima), nenhum de 6º círculo ou superior. Depois de usar, ajuste manualmente os espaços recuperados no controle de espaços de magia.',
+    cost: 1,
+    levelLearned: 1,
+    resourceKey: 'Recuperação Arcana',
+  },
+];
+
+const PALADIN_ABILITIES: ClassAbility[] = [
+  {
+    name: 'Sentido Divino',
+    description: 'Como ação, você abre sua percepção pra detectar o bem e o mal poderosos. Até o final do seu próximo turno, você sabe a localização de qualquer celestial, corruptor ou morto-vivo a até 18 metros que não esteja atrás de cobertura total.',
+    cost: 1,
+    levelLearned: 1,
+    resourceKey: 'Sentido Divino',
+  },
+  {
+    name: 'Curar pelo Toque (1 PV)',
+    description: 'Como ação, toque uma criatura e gaste pontos do seu reservatório de cura pra restaurar essa quantidade de pontos de vida a ela.',
+    cost: 1,
+    levelLearned: 1,
+    resourceKey: 'Curar pelo Toque',
+  },
+  {
+    name: 'Curar pelo Toque (curar doença ou veneno)',
+    description: 'Gaste 5 pontos do seu reservatório de cura pra curar uma doença ou neutralizar um veneno afetando a criatura tocada, em vez de restaurar pontos de vida.',
+    cost: 5,
+    levelLearned: 1,
+    resourceKey: 'Curar pelo Toque',
+  },
+  {
+    name: 'Toque Purificador',
+    description: 'Você pode usar sua ação para acabar com uma magia em você mesmo ou numa criatura que você toque.',
+    cost: 1,
+    levelLearned: 14,
+    resourceKey: 'Toque Purificador',
+  },
+];
+
+export const MONK_CHI_ABILITIES: ClassAbility[] = [
   {
     name: 'Rajada de Golpes',
     description: 'Imediatamente após você realizar a ação de Ataque no seu turno, você pode gastar 1 ponto de chi para realizar dois golpes desarmados com uma ação bônus.',
-    chiCost: 1,
+    cost: 1,
     levelLearned: 2,
     resourceKey: 'Pontos de Chi',
   },
   {
     name: 'Defesa Paciente',
     description: 'Você pode gastar 1 ponto de chi para realizar a ação de Esquivar, com uma ação bônus, no seu turno.',
-    chiCost: 1,
+    cost: 1,
     levelLearned: 2,
     resourceKey: 'Pontos de Chi',
   },
   {
     name: 'Passo do Vento',
     description: 'Você pode gastar 1 ponto de chi para realizar a Ação de Desengajar ou Disparada, com uma ação bônus, no seu turno, e sua distância de salto é dobrada nesse turno.',
-    chiCost: 1,
+    cost: 1,
     levelLearned: 2,
     resourceKey: 'Pontos de Chi',
   },
   {
     name: 'Ataque Atordoante',
     description: 'Você pode gastar 1 ponto de chi para tentar atordoar um alvo que atingir com um ataque corpo a corpo. O alvo deve fazer um teste de resistência de Constituição ou ficará atordoado até o final do seu próximo turno.',
-    chiCost: 1,
+    cost: 1,
     levelLearned: 5,
     resourceKey: 'Pontos de Chi',
   },
   {
     name: 'Corpo Vazio (Invisibilidade)',
     description: 'Você pode gastar 4 pontos de chi para se tornar invisível por 1 minuto.',
-    chiCost: 4,
+    cost: 4,
     levelLearned: 18,
     resourceKey: 'Pontos de Chi',
   },
   {
     name: 'Corpo Vazio (Projeção Astral)',
     description: 'Você pode gastar 8 pontos de chi para viajar astralmente (efeito similar ao da magia Projeção Astral, sem exigir componentes materiais).',
-    chiCost: 8,
+    cost: 8,
     levelLearned: 18,
     resourceKey: 'Pontos de Chi',
   },
   {
     name: 'Artes Sombrias',
     description: 'Você pode gastar 2 pontos de chi para conjurar trevas, visão no escuro, passos sem rastro ou silêncio, sem componentes materiais.',
-    chiCost: 2,
+    cost: 2,
     levelLearned: 3,
     resourceKey: 'Pontos de Chi',
     subclassId: 'sombra',
@@ -284,7 +525,7 @@ export const MONK_CHI_ABILITIES: ChiAbility[] = [
   {
     name: 'Técnica de Mão Oculta',
     description: 'Quando acertar uma criatura com um ataque garantido pela ação de Rajada de Golpes, pode gastar 1 ponto de chi para impor o efeito da magia escuridão num espaço adjacente a ela ou que ela ocupe.',
-    chiCost: 1,
+    cost: 1,
     levelLearned: 11,
     resourceKey: 'Pontos de Chi',
     subclassId: 'sombra',
@@ -292,16 +533,29 @@ export const MONK_CHI_ABILITIES: ChiAbility[] = [
   {
     name: 'Palma Vibrante',
     description: 'Quando acertar uma criatura com um ataque corpo-a-corpo desarmado, pode gastar 3 pontos de chi para iniciar vibrações letais que duram dias iguais ao seu nível de monge. Depois, pode usar uma ação para forçar um teste de resistência de Constituição (CD de golpes de chi): se falhar, a criatura cai a 0 PV; se for bem-sucedida, sofre 10d10 de dano de concussão.',
-    chiCost: 3,
+    cost: 3,
     levelLearned: 17,
     resourceKey: 'Pontos de Chi',
     subclassId: 'mao-aberta',
   },
 ];
 
-export function getKnownChiAbilities(classKey: number, level: number, idSubclass?: string | null): ChiAbility[] {
-  if (classKey !== CLASSES[10].id_class) return [];
-  return MONK_CHI_ABILITIES.filter(a => level >= a.levelLearned && (!a.subclassId || a.subclassId === idSubclass));
+const CLASS_ABILITY_TABLES: Record<number, ClassAbility[]> = {
+  1: BARBARIAN_ABILITIES, // Bárbaro
+  2: BARD_ABILITIES, // Bardo
+  3: WARLOCK_ABILITIES, // Bruxo
+  4: CLERIC_ABILITIES, // Clérigo
+  5: DRUID_ABILITIES, // Druida
+  6: SORCERER_ABILITIES, // Feiticeiro
+  7: FIGHTER_ABILITIES, // Guerreiro
+  9: WIZARD_ABILITIES, // Mago
+  10: MONK_CHI_ABILITIES, // Monge
+  11: PALADIN_ABILITIES, // Paladino
+};
+
+export function getKnownClassAbilities(classKey: number, level: number, idSubclass?: string | null): ClassAbility[] {
+  const table = CLASS_ABILITY_TABLES[classKey] ?? [];
+  return table.filter(a => level >= a.levelLearned && (!a.subclassId || a.subclassId === idSubclass));
 }
 
 /**
