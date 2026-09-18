@@ -604,3 +604,30 @@ ALTER TABLE character ADD COLUMN IF NOT EXISTS chosen_tool_proficiency VARCHAR(1
 -- Armas) — Defesa/Arqueria/Duelo têm efeito mecânico real (CA/ataque/dano); os outros três
 -- ficam só de exibição (exigiriam rerolagem de dado ou reação, fora do escopo atual).
 ALTER TABLE character ADD COLUMN IF NOT EXISTS chosen_fighting_style VARCHAR(50);
+
+-- ==========================================
+-- REORDENAR INICIATIVA / ATRASAR TURNO / VIDA TEMPORÁRIA (2026-09-18)
+-- ==========================================
+
+-- Ordem de turno deixa de ser 100% derivada de initiative_total (recalculada a cada leitura) e
+-- passa a ser persistida — atribuída quando o combate fica ativo (mesmo critério de desempate de
+-- antes: initiative_total > dex_modifier > id) e livremente editável pelo mestre depois disso.
+-- Nulo enquanto o combate ainda está na fase de rolagem de iniciativa.
+ALTER TABLE combat_participant ADD COLUMN IF NOT EXISTS turn_order INTEGER;
+
+-- true quando o participante atrasou o próprio turno nesta rodada (passa a agir por último,
+-- mantendo turn_order normal a partir da rodada seguinte). Limpo automaticamente sempre que a
+-- rodada avança (CombatRepository.clearDelayedFlags).
+ALTER TABLE combat_participant ADD COLUMN IF NOT EXISTS delayed_this_round BOOLEAN NOT NULL DEFAULT false;
+
+-- Substitui current_turn_index (índice posicional, frágil a reordenação/atraso) por uma
+-- referência estável ao participante da vez — reordenar ou atrasar nunca "pula" o turno pra
+-- outro participante por engano. A coluna current_turn_index antiga fica sem uso (não removida,
+-- só deixou de ser lida/escrita pelo código).
+ALTER TABLE combat_encounter ADD COLUMN IF NOT EXISTS current_turn_participant_id UUID
+    REFERENCES combat_participant(id_combat_participant)
+    ON DELETE SET NULL;
+
+-- Vida temporária (regra do livro: amortecedor de dano à parte do PV normal, pode deixar o total
+-- acima do máximo, nunca acumula com uma vida temporária existente, cura nunca a restaura).
+ALTER TABLE character ADD COLUMN IF NOT EXISTS temporary_hit_points INTEGER NOT NULL DEFAULT 0;

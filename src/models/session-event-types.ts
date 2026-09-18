@@ -25,7 +25,11 @@ export interface SessionEventPayloadMap {
     name: string;
     image_url: string | null;
   };
-  player_hp_updated: {id_player_session: string; current_hit_points: number};
+  player_hp_updated: {
+    id_player_session: string;
+    current_hit_points: number;
+    temporary_hit_points: number;
+  };
   player_xp_granted: {
     id_player_session: string;
     character_name: string;
@@ -63,6 +67,8 @@ export interface SessionEventPayloadMap {
   combat_started: {combat: CombatEncounterDetail};
   initiative_submitted: {combat: CombatEncounterDetail};
   turn_ended: {combat: CombatEncounterDetail};
+  turn_order_changed: {combat: CombatEncounterDetail};
+  turn_delayed: {combat: CombatEncounterDetail};
   combat_ended: {id_combat_encounter: string; hidden_monster_ids: string[]};
 }
 

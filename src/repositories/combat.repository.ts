@@ -24,7 +24,7 @@ export interface EncounterContext {
   dm_user_id: string | null;
   status: CombatStatus;
   round_number: number;
-  current_turn_index: number;
+  current_turn_participant_id: string | null;
 }
 
 @injectable({scope: BindingScope.TRANSIENT})
@@ -38,7 +38,7 @@ export class CombatRepository {
     idGameSession: string,
   ): Promise<CombatEncounter | null> {
     const rows = await this.db.sql<CombatEncounter[]>`
-      SELECT id_combat_encounter, id_game_session, status, round_number, current_turn_index, created_at
+      SELECT id_combat_encounter, id_game_session, status, round_number, current_turn_participant_id, created_at
       FROM combat_encounter
       WHERE id_game_session = ${idGameSession} AND status = ANY(${ACTIVE_STATUSES})
       ORDER BY created_at DESC
@@ -51,7 +51,7 @@ export class CombatRepository {
     const [row] = await this.db.sql<CombatEncounter[]>`
       INSERT INTO combat_encounter (id_game_session)
       VALUES (${idGameSession})
-      RETURNING id_combat_encounter, id_game_session, status, round_number, current_turn_index, created_at
+      RETURNING id_combat_encounter, id_game_session, status, round_number, current_turn_participant_id, created_at
     `;
     return row;
   }
@@ -163,6 +163,8 @@ export class CombatRepository {
         cp.id_monster_session,
         cp.initiative_roll,
         cp.initiative_total,
+        cp.turn_order,
+        cp.delayed_this_round,
         COALESCE(pchar.id_character, nchar.id_character) AS id_character,
         COALESCE(pdex.modifier_value, ndex.modifier_value, 0) AS dex_modifier
       FROM combat_participant cp
@@ -177,7 +179,7 @@ export class CombatRepository {
         ON ndex.id_character = nchar.id_character
         AND ndex.id_attribute = (SELECT id_attribute FROM attribute_type WHERE name = 'DES')
       WHERE cp.id_combat_encounter = ${idCombatEncounter}
-      ORDER BY cp.initiative_total DESC NULLS LAST, dex_modifier DESC, cp.id_combat_participant ASC
+      ORDER BY cp.turn_order ASC NULLS LAST, cp.initiative_total DESC NULLS LAST, dex_modifier DESC, cp.id_combat_participant ASC
     `;
   }
 
@@ -201,23 +203,54 @@ export class CombatRepository {
     `;
   }
 
-  async activateEncounter(idCombatEncounter: string): Promise<void> {
+  async activateEncounter(
+    idCombatEncounter: string,
+    firstParticipantId: string,
+  ): Promise<void> {
     await this.db.sql`
       UPDATE combat_encounter
-      SET status = 'active', current_turn_index = 0
+      SET status = 'active', current_turn_participant_id = ${firstParticipantId}
       WHERE id_combat_encounter = ${idCombatEncounter}
     `;
   }
 
   async updateTurnState(
     idCombatEncounter: string,
-    currentTurnIndex: number,
+    nextParticipantId: string,
     roundNumber: number,
   ): Promise<void> {
     await this.db.sql`
       UPDATE combat_encounter
-      SET current_turn_index = ${currentTurnIndex}, round_number = ${roundNumber}
+      SET current_turn_participant_id = ${nextParticipantId}, round_number = ${roundNumber}
       WHERE id_combat_encounter = ${idCombatEncounter}
+    `;
+  }
+
+  async setTurnOrder(
+    idCombatParticipant: string,
+    turnOrder: number,
+  ): Promise<void> {
+    await this.db.sql`
+      UPDATE combat_participant SET turn_order = ${turnOrder}
+      WHERE id_combat_participant = ${idCombatParticipant}
+    `;
+  }
+
+  async setDelayed(
+    idCombatParticipant: string,
+    delayed: boolean,
+  ): Promise<void> {
+    await this.db.sql`
+      UPDATE combat_participant SET delayed_this_round = ${delayed}
+      WHERE id_combat_participant = ${idCombatParticipant}
+    `;
+  }
+
+  /** Chamado quando uma nova rodada começa — atrasos só valem pra rodada em que foram pedidos. */
+  async clearDelayedFlags(idCombatEncounter: string): Promise<void> {
+    await this.db.sql`
+      UPDATE combat_participant SET delayed_this_round = false
+      WHERE id_combat_encounter = ${idCombatEncounter} AND delayed_this_round = true
     `;
   }
 
@@ -236,7 +269,7 @@ export class CombatRepository {
         gs.user_id AS dm_user_id,
         ce.status,
         ce.round_number,
-        ce.current_turn_index
+        ce.current_turn_participant_id
       FROM combat_encounter ce
       JOIN game_session gs ON gs.id_game_session = ce.id_game_session
       WHERE ce.id_combat_encounter = ${idCombatEncounter}

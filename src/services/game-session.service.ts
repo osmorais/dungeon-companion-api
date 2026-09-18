@@ -277,6 +277,7 @@ export class GameSessionService {
   async updateCharacterHp(
     idPlayerSession: string,
     currentHitPoints: number,
+    temporaryHitPoints: number,
     userId: string,
   ): Promise<void> {
     if (
@@ -287,9 +288,19 @@ export class GameSessionService {
         'current_hit_points deve ser um número inteiro',
       );
     }
+    if (
+      typeof temporaryHitPoints !== 'number' ||
+      !Number.isInteger(temporaryHitPoints) ||
+      temporaryHitPoints < 0
+    ) {
+      throw new HttpErrors.UnprocessableEntity(
+        'temporary_hit_points deve ser um número inteiro não negativo',
+      );
+    }
     const result = await this.repository.updateCharacterHp(
       idPlayerSession,
       currentHitPoints,
+      temporaryHitPoints,
       userId,
     );
     if (result.status === 'not_found')
@@ -303,6 +314,7 @@ export class GameSessionService {
       id_game_session: result.idGameSession!,
       id_player_session: idPlayerSession,
       current_hit_points: currentHitPoints,
+      temporary_hit_points: temporaryHitPoints,
     });
   }
 
