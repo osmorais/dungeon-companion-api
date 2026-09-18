@@ -133,6 +133,7 @@ export class GameSessionRepository {
         character_level: number | null;
         max_hit_points: number | null;
         current_hit_points: number | null;
+        temporary_hit_points: number | null;
         xp_points: number | null;
         avatar_preset: unknown | null;
       }[]
@@ -149,6 +150,7 @@ export class GameSessionRepository {
         c.level         AS character_level,
         c.max_hit_points,
         c.current_hit_points,
+        c.temporary_hit_points,
         c.xp_points,
         c.avatar_preset
       FROM player_session ps
@@ -173,6 +175,7 @@ export class GameSessionRepository {
               level: row.character_level ?? 0,
               max_hit_points: row.max_hit_points ?? 0,
               current_hit_points: row.current_hit_points ?? 0,
+              temporary_hit_points: row.temporary_hit_points ?? 0,
               experience_points: row.xp_points ?? 0,
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               avatar_preset: (row.avatar_preset as any) ?? null,
@@ -191,6 +194,7 @@ export class GameSessionRepository {
         character_level: number | null;
         max_hit_points: number | null;
         current_hit_points: number | null;
+        temporary_hit_points: number | null;
         xp_points: number | null;
         avatar_preset: unknown | null;
       }[]
@@ -205,6 +209,7 @@ export class GameSessionRepository {
         c.level         AS character_level,
         c.max_hit_points,
         c.current_hit_points,
+        c.temporary_hit_points,
         c.xp_points,
         c.avatar_preset
       FROM npc_session ns
@@ -227,6 +232,7 @@ export class GameSessionRepository {
               level: row.character_level ?? 0,
               max_hit_points: row.max_hit_points ?? 0,
               current_hit_points: row.current_hit_points ?? 0,
+              temporary_hit_points: row.temporary_hit_points ?? 0,
               experience_points: row.xp_points ?? 0,
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               avatar_preset: (row.avatar_preset as any) ?? null,
@@ -482,6 +488,7 @@ export class GameSessionRepository {
         character_level: number | null;
         max_hit_points: number | null;
         current_hit_points: number | null;
+        temporary_hit_points: number | null;
         xp_points: number | null;
         avatar_preset: unknown | null;
       }[]
@@ -498,6 +505,7 @@ export class GameSessionRepository {
         c.level         AS character_level,
         c.max_hit_points,
         c.current_hit_points,
+        c.temporary_hit_points,
         c.xp_points,
         c.avatar_preset
       FROM player_session ps
@@ -524,6 +532,7 @@ export class GameSessionRepository {
               level: row.character_level ?? 0,
               max_hit_points: row.max_hit_points ?? 0,
               current_hit_points: row.current_hit_points ?? 0,
+              temporary_hit_points: row.temporary_hit_points ?? 0,
               experience_points: row.xp_points ?? 0,
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               avatar_preset: (row.avatar_preset as any) ?? null,
@@ -655,6 +664,7 @@ export class GameSessionRepository {
   async updateCharacterHp(
     idPlayerSession: string,
     currentHitPoints: number,
+    temporaryHitPoints: number,
     userId: string,
   ): Promise<{
     status: 'not_found' | 'unauthorized' | 'ok';
@@ -682,7 +692,9 @@ export class GameSessionRepository {
       return {status: 'unauthorized'};
 
     await this.db.sql`
-      UPDATE character SET current_hit_points = ${currentHitPoints} WHERE id_character = ${id_character}
+      UPDATE character
+      SET current_hit_points = ${currentHitPoints}, temporary_hit_points = ${temporaryHitPoints}
+      WHERE id_character = ${id_character}
     `;
     return {status: 'ok', idGameSession: id_game_session};
   }

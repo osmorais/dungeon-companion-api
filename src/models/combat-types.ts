@@ -8,7 +8,9 @@ export interface CombatEncounter {
   id_game_session: string;
   status: CombatStatus;
   round_number: number;
-  current_turn_index: number;
+  /** Referência estável ao participante da vez — não um índice, pra sobreviver a reordenações
+   *  manuais do mestre e a atrasos de turno sem "pular" pra outro participante por engano. */
+  current_turn_participant_id: string | null;
   created_at: Date;
 }
 
@@ -22,6 +24,12 @@ export interface CombatParticipant {
   initiative_roll: number | null;
   initiative_total: number | null;
   dex_modifier: number;
+  /** Posição na ordem de turnos, atribuída quando o combate fica ativo e editável pelo mestre
+   *  depois disso (reordenar). Nulo enquanto ainda se está rolando iniciativa. */
+  turn_order: number | null;
+  /** true quando esse participante atrasou o próprio turno nesta rodada — some no início da
+   *  próxima rodada (ver CombatRepository.clearDelayedFlags). */
+  delayed_this_round: boolean;
 }
 
 export interface StartEncounterParticipantInput {
@@ -43,4 +51,9 @@ export interface SubmitInitiativeInput {
   rolls: number[];
   modifier: number;
   total: number;
+}
+
+export interface MoveParticipantInput {
+  id_combat_participant: string;
+  direction: 'up' | 'down';
 }

@@ -86,6 +86,9 @@ export interface PlayerCharacterSummary {
   level: number;
   max_hit_points: number;
   current_hit_points: number;
+  /** Amortecedor de dano à parte do PV normal — pode deixar o total acima do máximo (regra do
+   *  livro: nunca acumula com uma vida temporária existente, cura nunca a restaura). */
+  temporary_hit_points: number;
   experience_points: number;
   avatar_preset: AvatarPreset | null;
 }

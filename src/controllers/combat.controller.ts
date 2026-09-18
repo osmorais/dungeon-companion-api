@@ -5,6 +5,7 @@ import {SecurityBindings, UserProfile} from '@loopback/security';
 import {CombatService} from '../services/combat.service';
 import {
   CombatEncounterDetail,
+  MoveParticipantInput,
   StartEncounterParticipantInput,
   SubmitInitiativeInput,
 } from '../models/combat-types';
@@ -71,5 +72,39 @@ export class CombatController {
     @inject(SecurityBindings.USER) currentUser: UserProfile,
   ): Promise<void> {
     return this.combatService.endEncounter(id, currentUser.id);
+  }
+
+  @post('/api/game-session/combat/{id}/move-participant')
+  @response(204, {
+    description:
+      'Moves a participant one position up/down in the initiative order',
+  })
+  async moveParticipant(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      description: 'Participant to move and direction',
+      required: true,
+      content: {'application/json': {schema: {type: 'object'}}},
+    })
+    body: MoveParticipantInput,
+  ): Promise<void> {
+    return this.combatService.moveParticipant(
+      id,
+      body.id_combat_participant,
+      body.direction,
+      currentUser.id,
+    );
+  }
+
+  @post('/api/game-session/combat/{id}/delay-turn')
+  @response(204, {
+    description: 'Delays the current turn to the end of the current round',
+  })
+  async delayTurn(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+  ): Promise<void> {
+    return this.combatService.delayTurn(id, currentUser.id);
   }
 }

@@ -353,23 +353,27 @@ export class GameSessionController {
     @param.path.string('idPlayerSession') idPlayerSession: string,
     @inject(SecurityBindings.USER) currentUser: UserProfile,
     @requestBody({
-      description: 'New current HP value',
+      description: 'New current and temporary HP values',
       required: true,
       content: {
         'application/json': {
           schema: {
             type: 'object',
-            required: ['current_hit_points'],
-            properties: {current_hit_points: {type: 'integer'}},
+            required: ['current_hit_points', 'temporary_hit_points'],
+            properties: {
+              current_hit_points: {type: 'integer'},
+              temporary_hit_points: {type: 'integer'},
+            },
           },
         },
       },
     })
-    body: {current_hit_points: number},
+    body: {current_hit_points: number; temporary_hit_points: number},
   ): Promise<void> {
     return this.gameSessionService.updateCharacterHp(
       idPlayerSession,
       body.current_hit_points,
+      body.temporary_hit_points,
       currentUser.id,
     );
   }
