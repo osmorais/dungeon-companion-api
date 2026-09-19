@@ -91,6 +91,9 @@ export interface PlayerCharacterSummary {
   temporary_hit_points: number;
   experience_points: number;
   avatar_preset: AvatarPreset | null;
+  /** Foto de verdade (via Supabase Storage), à parte do avatar_preset — usada como fundo do
+   *  toast de rolagem na sessão. */
+  image_url: string | null;
 }
 
 export interface PlayerSession {

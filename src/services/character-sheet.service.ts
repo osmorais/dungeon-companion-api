@@ -11,6 +11,7 @@ import {
   AvatarPreset,
   CharacterBackground,
   EquipmentUpdateInput,
+  UploadImageResult,
 } from '../models/character-sheet-types';
 import {Armour, Spell, WeaponRow, Skill} from '../models/character-options-types';
 import {
@@ -24,6 +25,7 @@ import {
 import {CharacterRepository} from '../repositories/character.repository';
 import {GameSessionRepository} from '../repositories/game-session.repository';
 import {CharacterOptionsRepository} from '../repositories/character-options.repository';
+import {SupabaseStorageService} from './supabase-storage.service';
 import {
   resolveRace,
   resolveSubrace,
@@ -85,6 +87,8 @@ export class CharacterSheetService {
     private gameSessionRepository: GameSessionRepository,
     @service(CharacterOptionsRepository)
     private optionsRepository: CharacterOptionsRepository,
+    @service(SupabaseStorageService)
+    private storageService: SupabaseStorageService,
   ) {}
 
   /**
@@ -763,6 +767,7 @@ export class CharacterSheetService {
         spellcasting_info: spellcastingInfo,
         spells: spellList,
         avatar_preset: character.avatar_preset ?? null,
+        image_url: character.image_url ?? null,
         id_character: character.id_character,
         resource_trackers: this.buildResourceTrackers(
           classRule,
@@ -1276,6 +1281,26 @@ export class CharacterSheetService {
     if (raw.character.user_id !== userId) throw new Error('Unauthorized');
     await this.repository.updateAvatarPreset(id, preset);
     return {success: true};
+  }
+
+  /** Foto de verdade (via Supabase Storage) — usada como fundo do toast de rolagem na sessão. */
+  async updateCharacterImage(
+    id: number,
+    userId: string,
+    buffer: Buffer,
+    contentType: string,
+    originalName: string,
+  ): Promise<UploadImageResult> {
+    const raw = await this.repository.findCharacterById(id);
+    if (!raw) throw new HttpErrors.NotFound('Personagem não encontrado');
+    if (raw.character.user_id !== userId) {
+      throw new HttpErrors.Forbidden(
+        'Você não pode alterar a imagem deste personagem',
+      );
+    }
+    const imageUrl = await this.storageService.uploadImage(buffer, contentType, originalName);
+    await this.repository.updateImage(id, imageUrl);
+    return {image_url: imageUrl};
   }
 
   /** Troca a armadura/escudo equipados — CA é recalculada na hora (não fica congelada, ver `loadCharacter`). */

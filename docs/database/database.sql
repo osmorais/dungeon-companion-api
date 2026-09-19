@@ -631,3 +631,13 @@ ALTER TABLE combat_encounter ADD COLUMN IF NOT EXISTS current_turn_participant_i
 -- Vida temporária (regra do livro: amortecedor de dano à parte do PV normal, pode deixar o total
 -- acima do máximo, nunca acumula com uma vida temporária existente, cura nunca a restaura).
 ALTER TABLE character ADD COLUMN IF NOT EXISTS temporary_hit_points INTEGER NOT NULL DEFAULT 0;
+
+-- ==========================================
+-- IMAGEM DE FUNDO DO JOGADOR NA SESSÃO (2026-09-19)
+-- ==========================================
+
+-- Foto de verdade (via Supabase Storage, mesmo bucket dos monstros) — à parte do avatar_preset
+-- (ícone de estoque). Botão "UPLOAD IMAGEM" no cabeçalho da ficha; usada como fundo escurecido
+-- do toast de rolagem na sessão (session-panel), tanto pra jogador quanto pra NPC (mesma coluna,
+-- personagem compartilhado).
+ALTER TABLE character ADD COLUMN IF NOT EXISTS image_url TEXT;

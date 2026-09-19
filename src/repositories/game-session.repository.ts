@@ -135,6 +135,7 @@ export class GameSessionRepository {
         current_hit_points: number | null;
         temporary_hit_points: number | null;
         xp_points: number | null;
+        image_url: string | null;
         avatar_preset: unknown | null;
       }[]
     >`
@@ -152,6 +153,7 @@ export class GameSessionRepository {
         c.current_hit_points,
         c.temporary_hit_points,
         c.xp_points,
+        c.image_url,
         c.avatar_preset
       FROM player_session ps
       LEFT JOIN character c  ON c.id_character = ps.id_character
@@ -177,6 +179,7 @@ export class GameSessionRepository {
               current_hit_points: row.current_hit_points ?? 0,
               temporary_hit_points: row.temporary_hit_points ?? 0,
               experience_points: row.xp_points ?? 0,
+              image_url: row.image_url ?? null,
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               avatar_preset: (row.avatar_preset as any) ?? null,
             }
@@ -196,6 +199,7 @@ export class GameSessionRepository {
         current_hit_points: number | null;
         temporary_hit_points: number | null;
         xp_points: number | null;
+        image_url: string | null;
         avatar_preset: unknown | null;
       }[]
     >`
@@ -211,6 +215,7 @@ export class GameSessionRepository {
         c.current_hit_points,
         c.temporary_hit_points,
         c.xp_points,
+        c.image_url,
         c.avatar_preset
       FROM npc_session ns
       LEFT JOIN character c  ON c.id_character = ns.id_character
@@ -234,6 +239,7 @@ export class GameSessionRepository {
               current_hit_points: row.current_hit_points ?? 0,
               temporary_hit_points: row.temporary_hit_points ?? 0,
               experience_points: row.xp_points ?? 0,
+              image_url: row.image_url ?? null,
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               avatar_preset: (row.avatar_preset as any) ?? null,
             }
@@ -490,6 +496,7 @@ export class GameSessionRepository {
         current_hit_points: number | null;
         temporary_hit_points: number | null;
         xp_points: number | null;
+        image_url: string | null;
         avatar_preset: unknown | null;
       }[]
     >`
@@ -507,6 +514,7 @@ export class GameSessionRepository {
         c.current_hit_points,
         c.temporary_hit_points,
         c.xp_points,
+        c.image_url,
         c.avatar_preset
       FROM player_session ps
       LEFT JOIN character c  ON c.id_character = ps.id_character
@@ -534,6 +542,7 @@ export class GameSessionRepository {
               current_hit_points: row.current_hit_points ?? 0,
               temporary_hit_points: row.temporary_hit_points ?? 0,
               experience_points: row.xp_points ?? 0,
+              image_url: row.image_url ?? null,
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               avatar_preset: (row.avatar_preset as any) ?? null,
             }

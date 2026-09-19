@@ -1,10 +1,54 @@
 import {inject} from '@loopback/core';
-import {del, get, param, patch, post, requestBody, response, HttpErrors, RestBindings, Response} from '@loopback/rest';
+import {
+  del,
+  get,
+  param,
+  patch,
+  post,
+  requestBody,
+  response,
+  HttpErrors,
+  Request,
+  RestBindings,
+  Response,
+} from '@loopback/rest';
 import {authenticate} from '@loopback/authentication';
 import {SecurityBindings, UserProfile} from '@loopback/security';
+import multer from 'multer';
 import {AiAgentService, CharacterSheetService} from '../services';
-import {AvatarPreset, CharacterInput, CharacterBackground, EquipmentUpdateInput} from '../models/character-sheet-types';
+import {
+  AvatarPreset,
+  CharacterInput,
+  CharacterBackground,
+  EquipmentUpdateInput,
+  UploadImageResult,
+} from '../models/character-sheet-types';
 import {LevelUpConfirmInput} from '../models/level-up-types';
+
+const IMAGE_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
+
+/** Só os campos que o controller realmente usa do arquivo que o multer entrega. */
+interface MulterFile {
+  buffer: Buffer;
+  mimetype: string;
+  originalname: string;
+}
+
+const imageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {fileSize: IMAGE_UPLOAD_MAX_BYTES},
+  fileFilter: (
+    _req: unknown,
+    file: MulterFile,
+    cb: (error: Error | null, acceptFile?: boolean) => void,
+  ) => {
+    if (!file.mimetype.startsWith('image/')) {
+      cb(new Error('O arquivo precisa ser uma imagem'));
+      return;
+    }
+    cb(null, true);
+  },
+});
 
 @authenticate('jwt')
 export class CharacterController {
@@ -105,6 +149,45 @@ export class CharacterController {
     body: {avatar_preset: AvatarPreset},
   ): Promise<object> {
     return this.characterSheetService.updateAvatarPreset(id, body.avatar_preset, currentUser.id);
+  }
+
+  @post('/api/character-sheet/{id}/image')
+  @response(200, {
+    description: 'Uploads a custom image for a character',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async uploadImage(
+    @param.path.number('id') id: number,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @inject(RestBindings.Http.REQUEST) request: Request,
+    @inject(RestBindings.Http.RESPONSE) httpResponse: Response,
+  ): Promise<UploadImageResult> {
+    const file = await this.parseImageUpload(request, httpResponse);
+    return this.characterSheetService.updateCharacterImage(
+      id,
+      currentUser.id,
+      file.buffer,
+      file.mimetype,
+      file.originalname,
+    );
+  }
+
+  /** multer não tem binding nativo no LoopBack — roda como middleware Express dentro do handler. */
+  private parseImageUpload(request: Request, httpResponse: Response): Promise<MulterFile> {
+    return new Promise((resolve, reject) => {
+      imageUpload.single('image')(request, httpResponse, (err: Error | null) => {
+        if (err) {
+          reject(new HttpErrors.BadRequest(err.message));
+          return;
+        }
+        const file = (request as unknown as {file?: MulterFile}).file;
+        if (!file) {
+          reject(new HttpErrors.UnprocessableEntity('Arquivo de imagem é obrigatório'));
+          return;
+        }
+        resolve(file);
+      });
+    });
   }
 
   @patch('/api/character-sheet/{id}/equipment')
