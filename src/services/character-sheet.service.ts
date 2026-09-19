@@ -25,6 +25,7 @@ import {
 import {CharacterRepository} from '../repositories/character.repository';
 import {GameSessionRepository} from '../repositories/game-session.repository';
 import {CharacterOptionsRepository} from '../repositories/character-options.repository';
+import {CombatRepository} from '../repositories/combat.repository';
 import {SupabaseStorageService} from './supabase-storage.service';
 import {
   resolveRace,
@@ -89,6 +90,8 @@ export class CharacterSheetService {
     private optionsRepository: CharacterOptionsRepository,
     @service(SupabaseStorageService)
     private storageService: SupabaseStorageService,
+    @service(CombatRepository)
+    private combatRepository: CombatRepository,
   ) {}
 
   /**
@@ -689,6 +692,12 @@ export class CharacterSheetService {
       ? spellcastingResult
       : undefined;
 
+    // Só consulta se a classe realmente precisa preparar magia — evita uma query à toa pras
+    // outras (maioria das classes/personagens não-conjuradores).
+    const inActiveCombat = classRule.preparesSpells
+      ? await this.combatRepository.isCharacterInActiveCombat(character.id_character)
+      : false;
+
     return {
       character_sheet: {
         header: {
@@ -768,6 +777,8 @@ export class CharacterSheetService {
         spells: spellList,
         avatar_preset: character.avatar_preset ?? null,
         image_url: character.image_url ?? null,
+        /** Trava a UI de preparar magia — em combate não é possível trocar o que está preparado. */
+        in_active_combat: inActiveCombat,
         id_character: character.id_character,
         resource_trackers: this.buildResourceTrackers(
           classRule,
@@ -1598,6 +1609,12 @@ export class CharacterSheetService {
     if (!classRule.preparesSpells) {
       throw new HttpErrors.UnprocessableEntity(
         'Esta classe não precisa preparar magias com antecedência',
+      );
+    }
+
+    if (await this.combatRepository.isCharacterInActiveCombat(id)) {
+      throw new HttpErrors.Conflict(
+        'Não é possível preparar magias durante o combate',
       );
     }
 
