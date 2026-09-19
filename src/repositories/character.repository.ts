@@ -378,6 +378,14 @@ export class CharacterRepository {
     `;
   }
 
+  /** Foto de verdade (via Supabase Storage), à parte do avatar_preset (ícone de estoque) —
+   *  usada como fundo do toast de rolagem na sessão. */
+  async updateImage(id: number, imageUrl: string): Promise<void> {
+    await this.db.sql`
+      UPDATE character SET image_url = ${imageUrl} WHERE id_character = ${id}
+    `;
+  }
+
   /**
    * Remove o personagem. As tabelas filhas (atributos, perícias, magias, armas,
    * itens, histórico) e os vínculos de sessão (player_session/npc_session) têm
@@ -440,7 +448,7 @@ export class CharacterRepository {
         c.resource_uses_expended,
         c.chosen_tool_proficiency, c.chosen_fighting_style,
         c.hit_dice_spent, c.user_id,
-        c.avatar_preset,
+        c.avatar_preset, c.image_url,
         al.name   AS alignment_name,
         cb.id_background
       FROM character c

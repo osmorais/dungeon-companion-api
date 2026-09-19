@@ -19,6 +19,10 @@ export interface EquipmentUpdateInput {
   has_shield: boolean;
 }
 
+export interface UploadImageResult {
+  image_url: string;
+}
+
 export interface CharacterBackground {
   id_character_background: number;
   id_character: number;
@@ -157,6 +161,8 @@ export interface CharacterRawData {
     hit_dice_spent: number;
     user_id: string;
     avatar_preset: AvatarPreset | null;
+    /** Foto de verdade (via Supabase Storage), à parte do avatar_preset (ícone de estoque). */
+    image_url: string | null;
   };
   attributes: Array<{attribute_name: string; score: number; modifier: number}>;
   skills: Array<{id_skill: number; name: string; id_attribute: number; attribute_name: string; description: string; is_trained: boolean; is_expert: boolean; level_value: number; total_skill_value: number}>;
@@ -236,6 +242,7 @@ export interface CharacterSheet {
     };
     spells: Spell[];
     avatar_preset?: AvatarPreset | null;
+    image_url?: string | null;
     /** Recursos consumíveis rastreados (Fúria/Pontos de Chi/Canalizar Divindade/Surto de Ação/...) — vazio se a classe não tiver nenhum neste nível. Uma classe pode ter mais de um ao mesmo tempo. */
     resource_trackers: {
       name: string;
