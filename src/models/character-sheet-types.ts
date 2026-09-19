@@ -243,6 +243,7 @@ export interface CharacterSheet {
     spells: Spell[];
     avatar_preset?: AvatarPreset | null;
     image_url?: string | null;
+    in_active_combat?: boolean;
     /** Recursos consumíveis rastreados (Fúria/Pontos de Chi/Canalizar Divindade/Surto de Ação/...) — vazio se a classe não tiver nenhum neste nível. Uma classe pode ter mais de um ao mesmo tempo. */
     resource_trackers: {
       name: string;

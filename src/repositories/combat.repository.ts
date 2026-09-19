@@ -278,6 +278,22 @@ export class CombatRepository {
     return rows[0] ?? null;
   }
 
+  /** true se o personagem (como jogador ou NPC) está num combate ainda não encerrado, em
+   *  qualquer sessão — usado pra travar preparo de magia durante o combate. */
+  async isCharacterInActiveCombat(idCharacter: number): Promise<boolean> {
+    const rows = await this.db.sql<{id_combat_participant: string}[]>`
+      SELECT cp.id_combat_participant
+      FROM combat_participant cp
+      JOIN combat_encounter ce ON ce.id_combat_encounter = cp.id_combat_encounter
+      LEFT JOIN player_session ps ON ps.id_player_session = cp.id_player_session
+      LEFT JOIN npc_session ns ON ns.id_npc_session = cp.id_npc_session
+      WHERE ce.status = ANY(${ACTIVE_STATUSES})
+        AND (ps.id_character = ${idCharacter} OR ns.id_character = ${idCharacter})
+      LIMIT 1
+    `;
+    return rows.length > 0;
+  }
+
   async findParticipantContext(
     idCombatParticipant: string,
   ): Promise<ParticipantContext | null> {
