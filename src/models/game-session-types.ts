@@ -181,6 +181,14 @@ export interface RollLogInput {
   is_hidden?: boolean;
 }
 
+/** Anúncio de "jogador lançou uma magia" — só informativo, não persiste (ao contrário da
+ *  rolagem): existe só pra disparar o toast em tela de todo mundo na sessão via socket. */
+export interface SpellCastInput {
+  id_character: number;
+  actor_name: string;
+  spell_name: string;
+}
+
 export interface GameSessionDetail {
   game_session: GameSession;
   players: PlayerSession[];

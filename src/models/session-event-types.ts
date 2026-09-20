@@ -64,6 +64,7 @@ export interface SessionEventPayloadMap {
   };
   monster_hidden: {id_monster_session: string};
   roll_added: {roll: RollLogEntry};
+  spell_cast: {id_character: number; actor_name: string; spell_name: string};
   combat_started: {combat: CombatEncounterDetail};
   initiative_submitted: {combat: CombatEncounterDetail};
   turn_ended: {combat: CombatEncounterDetail};
