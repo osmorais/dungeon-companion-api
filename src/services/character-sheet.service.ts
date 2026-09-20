@@ -532,11 +532,11 @@ export class CharacterSheetService {
     if (!raw) return null;
 
     if (raw.character.user_id !== userId) {
-      const isDm = await this.repository.isSessionDmOfCharacter(
+      const isSessionMate = await this.repository.isSessionMateOfCharacter(
         raw.character.id_character,
         userId,
       );
-      if (!isDm) throw new Error('Unauthorized');
+      if (!isSessionMate) throw new Error('Unauthorized');
     }
 
     const {character, attributes, skills, spells, weapons, items} = raw;

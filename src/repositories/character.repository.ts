@@ -133,14 +133,36 @@ export class CharacterRepository {
     });
   }
 
-  async isSessionDmOfCharacter(idCharacter: number, userId: string): Promise<boolean> {
+  /** Dono (mestre ou jogador) de qualquer sessão em que `idCharacter` participa como jogador ou
+   *  NPC — usado por CharacterSheetService.loadCharacter pra liberar a ficha completa pra
+   *  qualquer colega de sessão, não só pro mestre (ex: tooltip de atributos ao passar o mouse
+   *  no avatar de outro jogador). */
+  async isSessionMateOfCharacter(idCharacter: number, userId: string): Promise<boolean> {
     const rows = await this.db.sql<{found: boolean}[]>`
       SELECT EXISTS (
         SELECT 1
         FROM player_session ps
         JOIN game_session gs ON gs.id_game_session = ps.id_game_session
         WHERE ps.id_character = ${idCharacter}
-          AND gs.user_id = ${userId}
+          AND (
+            gs.user_id = ${userId}
+            OR EXISTS (
+              SELECT 1 FROM player_session ps2
+              WHERE ps2.id_game_session = ps.id_game_session AND ps2.user_id = ${userId}
+            )
+          )
+        UNION ALL
+        SELECT 1
+        FROM npc_session ns
+        JOIN game_session gs ON gs.id_game_session = ns.id_game_session
+        WHERE ns.id_character = ${idCharacter}
+          AND (
+            gs.user_id = ${userId}
+            OR EXISTS (
+              SELECT 1 FROM player_session ps2
+              WHERE ps2.id_game_session = ns.id_game_session AND ps2.user_id = ${userId}
+            )
+          )
       ) AS found
     `;
     return rows[0].found;
