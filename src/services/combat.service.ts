@@ -329,10 +329,11 @@ export class CombatService {
         'Esse combate não está mais na fase de rolagem de iniciativa',
       );
     }
-    if (
-      context.participant_type !== 'player' ||
-      context.player_user_id !== userId
-    ) {
+    // O mestre também pode rolar iniciativa pelo jogador (ex: jogador ausente/AFK) — além do
+    // próprio dono do personagem.
+    const isOwnCharacter = context.player_user_id === userId;
+    const isDm = context.dm_user_id === userId;
+    if (context.participant_type !== 'player' || (!isOwnCharacter && !isDm)) {
       throw new HttpErrors.Forbidden(
         'Você não pode registrar essa rolagem de iniciativa',
       );
