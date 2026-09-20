@@ -25,6 +25,7 @@ import {
   RollLogEntry,
   RollLogInput,
   RollType,
+  SpellCastInput,
 } from '../models/game-session-types';
 
 const ROLL_TYPES: RollType[] = [
@@ -691,6 +692,44 @@ export class GameSessionService {
       roll,
     });
     return roll;
+  }
+
+  /** Só anuncia (broadcast via socket) — ao contrário de addRoll, não persiste nada, é puramente
+   *  informativo pro toast em tela de todo mundo na sessão. */
+  async announceSpellCast(
+    idGameSession: string,
+    input: SpellCastInput,
+    userId: string,
+  ): Promise<void> {
+    const hasAccess = await this.repository.hasSessionAccess(
+      idGameSession,
+      userId,
+    );
+    if (!hasAccess)
+      throw new HttpErrors.Forbidden('Você não tem acesso a esta sessão');
+
+    if (!input.actor_name?.trim())
+      throw new HttpErrors.UnprocessableEntity('actor_name é obrigatório');
+    if (!input.spell_name?.trim())
+      throw new HttpErrors.UnprocessableEntity('spell_name é obrigatório');
+
+    const canPost = await this.repository.canPostRollFor(
+      idGameSession,
+      input.id_character,
+      userId,
+    );
+    if (!canPost)
+      throw new HttpErrors.Forbidden(
+        'Você não pode anunciar uma magia pra esse personagem',
+      );
+
+    this.events.publish({
+      type: 'spell_cast',
+      id_game_session: idGameSession,
+      id_character: input.id_character,
+      actor_name: input.actor_name,
+      spell_name: input.spell_name,
+    });
   }
 
   async listSessions(

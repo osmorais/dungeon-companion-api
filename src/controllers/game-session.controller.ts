@@ -32,6 +32,7 @@ import {
   PlayerSession,
   RollLogEntry,
   RollLogInput,
+  SpellCastInput,
 } from '../models/game-session-types';
 
 const IMAGE_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
@@ -490,6 +491,23 @@ export class GameSessionController {
     body: RollLogInput,
   ): Promise<RollLogEntry> {
     return this.gameSessionService.addRoll(id, body, currentUser.id);
+  }
+
+  @post('/api/game-session/{id}/spell-cast')
+  @response(204, {
+    description: 'Broadcasts that a character cast a spell in the session — informational only, not persisted',
+  })
+  async announceSpellCast(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      description: 'Spell cast to announce',
+      required: true,
+      content: {'application/json': {schema: {type: 'object'}}},
+    })
+    body: SpellCastInput,
+  ): Promise<void> {
+    return this.gameSessionService.announceSpellCast(id, body, currentUser.id);
   }
 
   @post('/api/game-session/{id}/grant-xp')
