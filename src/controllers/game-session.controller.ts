@@ -280,6 +280,18 @@ export class GameSessionController {
     return this.gameSessionService.defeatMonster(id, currentUser.id);
   }
 
+  @post('/api/game-session/monster-session/{id}/duplicate')
+  @response(201, {
+    description: 'Duplicates a monster already in the session, copying all its current data',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async duplicateMonster(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+  ): Promise<MonsterSession> {
+    return this.gameSessionService.duplicateMonster(id, currentUser.id);
+  }
+
   @post('/api/game-session/monster-session/{id}/image')
   @response(200, {
     description:
