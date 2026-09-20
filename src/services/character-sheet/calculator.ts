@@ -283,7 +283,7 @@ export function calcArmorClass(
     ac = armor.armour_class_base ?? 10;
   }
 
-  // Estilo de Combate "Defesa" (Guerreiro): +1 CA enquanto estiver usando armadura.
+  // Estilo de Luta "Defesa" (Guerreiro): +1 CA enquanto estiver usando armadura.
   if (armor?.armour_type != null && fightingStyle === 'Defesa') ac += 1;
 
   return hasShield ? ac + 2 : ac;
@@ -354,7 +354,7 @@ export function buildWeaponActions(
     w.attack_bonus = profBonus + abilityMod;
     w.damage_modifier = abilityMod;
 
-    // Estilo de Combate (Guerreiro): Arqueria (+2 ataque à distância) e Duelo (+2 dano com uma
+    // Estilo de Luta (Guerreiro): Arqueria (+2 ataque à distância) e Duelo (+2 dano com uma
     // única arma corpo a corpo de uma mão só, sem outra arma empunhada — aproximação: só se
     // esse for o único item na lista de armas).
     if (fightingStyle === 'Arqueria' && w.isRanged) {
@@ -423,7 +423,7 @@ export function collectTraits(
       : null;
 
   return traits.map(t => {
-    if (fightingStyle && t.name === 'Estilo de Combate') {
+    if (fightingStyle && t.name === 'Estilo de Luta') {
       return {...t, description: `Escolhido: ${fightingStyle}. ${t.description}`};
     }
     // CDs fixas informativas: preenche o valor calculado no lugar da fórmula genérica do texto.
