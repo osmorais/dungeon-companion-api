@@ -176,10 +176,13 @@ export const TRACKABLE_RESOURCES: Record<number, TrackableResource[]> = {
     {key: 'Integridade Corporal', rechargeOn: 'long_rest'},
   ],
   11: [
-    // Paladino — os três só recarregam em descanso longo.
+    // Paladino — os três primeiros só recarregam em descanso longo.
     {key: 'Sentido Divino', rechargeOn: 'long_rest'},
     {key: 'Curar pelo Toque', rechargeOn: 'long_rest'},
     {key: 'Toque Purificador', rechargeOn: 'long_rest'},
+    // Canalizar Divindade (nv3, via Juramento) — 1 uso fixo, não escala por nível (diferente do
+    // Clérigo), recarrega em descanso curto ou longo.
+    {key: 'Canalizar Divindade', rechargeOn: 'short_rest'},
   ],
 };
 
@@ -468,6 +471,56 @@ const PALADIN_ABILITIES: ClassAbility[] = [
     cost: 1,
     levelLearned: 14,
     resourceKey: 'Toque Purificador',
+  },
+  // Canalizar Divindade — duas opções por Juramento Sagrado, ambas liberadas no nv3 junto com a
+  // escolha da subclasse (ao contrário do Clérigo, aqui não há uma segunda leva no nv6/7).
+  {
+    name: 'Canalizar Divindade: Arma Sagrada',
+    description: 'Como ação, você empunha sua arma com luz sagrada por 1 minuto: ela emite luz plena a 6 metros e penumbra por mais 6, ganha um bônus igual ao seu modificador de Carisma (mínimo +1) em jogadas de ataque, e causa dano radiante em vez do tipo normal.',
+    cost: 1,
+    levelLearned: 3,
+    resourceKey: 'Canalizar Divindade',
+    subclassId: 'devocao',
+  },
+  {
+    name: 'Canalizar Divindade: Expulsar os Infiéis',
+    description: 'Como ação, apresente seu símbolo sagrado — cada fiel ou morto-vivo a até 9 metros que possa vê-lo deve fazer um teste de resistência de Sabedoria ou ficará amedrontado por 1 minuto ou até sofrer dano.',
+    cost: 1,
+    levelLearned: 3,
+    resourceKey: 'Canalizar Divindade',
+    subclassId: 'devocao',
+  },
+  {
+    name: 'Canalizar Divindade: Ira da Natureza',
+    description: 'Como ação, vinhas espectrais brotam do chão e tentam prender uma criatura a até 4,5 metros — teste de resistência de Força ou Destreza (à sua escolha) ou fica restringida, podendo repetir o teste no fim de cada um dos seus turnos.',
+    cost: 1,
+    levelLearned: 3,
+    resourceKey: 'Canalizar Divindade',
+    subclassId: 'anciones',
+  },
+  {
+    name: 'Canalizar Divindade: Expulsar os Ímpios',
+    description: 'Como ação, apresente seu símbolo sagrado — cada fada ou fiel a até 9 metros que possa vê-lo deve fazer um teste de resistência de Sabedoria ou ficará amedrontado por 1 minuto ou até sofrer dano.',
+    cost: 1,
+    levelLearned: 3,
+    resourceKey: 'Canalizar Divindade',
+    subclassId: 'anciones',
+  },
+  {
+    name: 'Canalizar Divindade: Voto de Inimizade',
+    description: 'Como ação, você jura vingança contra uma criatura que possa ver a até 3 metros, ganhando vantagem em jogadas de ataque contra ela por 1 minuto ou até ela cair a 0 pontos de vida ou ficar inconsciente.',
+    cost: 1,
+    levelLearned: 3,
+    resourceKey: 'Canalizar Divindade',
+    subclassId: 'vinganca',
+  },
+  {
+    name: 'Canalizar Divindade: Abjurar Inimigo',
+    description: 'Como ação, uma criatura que você possa ver a até 18 metros deve fazer um teste de resistência de Sabedoria (CD de suas magias de paladino) ou ficará amedrontada por 1 minuto ou até sofrer dano — com deslocamento 0 e desvantagem em ataques contra qualquer um exceto você.',
+    cost: 1,
+    levelLearned: 3,
+    resourceKey: 'Canalizar Divindade',
+    subclassId: 'vinganca',
   },
 ];
 
@@ -2398,13 +2451,13 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: true,
-        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '15'},
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '15', 'Canalizar Divindade': '1'},
       },
       4: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
-        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '20'},
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '20', 'Canalizar Divindade': '1'},
       },
       5: {
         features: [
@@ -2412,7 +2465,7 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '25'},
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '25', 'Canalizar Divindade': '1'},
       },
       6: {
         features: [
@@ -2420,25 +2473,25 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '30'},
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '30', 'Canalizar Divindade': '1'},
       },
       7: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: true,
-        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '35'},
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '35', 'Canalizar Divindade': '1'},
       },
       8: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
-        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '40'},
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '40', 'Canalizar Divindade': '1'},
       },
       9: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '45'},
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '45', 'Canalizar Divindade': '1'},
       },
       10: {
         features: [
@@ -2446,7 +2499,7 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '50'},
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '50', 'Canalizar Divindade': '1'},
       },
       11: {
         features: [
@@ -2454,19 +2507,19 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '55'},
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '55', 'Canalizar Divindade': '1'},
       },
       12: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
-        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '60'},
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '60', 'Canalizar Divindade': '1'},
       },
       13: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '65'},
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '65', 'Canalizar Divindade': '1'},
       },
       14: {
         features: [
@@ -2474,25 +2527,25 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '70', 'Toque Purificador': 'mod:CHA'},
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '70', 'Toque Purificador': 'mod:CHA', 'Canalizar Divindade': '1'},
       },
       15: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: true,
-        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '75', 'Toque Purificador': 'mod:CHA'},
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '75', 'Toque Purificador': 'mod:CHA', 'Canalizar Divindade': '1'},
       },
       16: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
-        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '80', 'Toque Purificador': 'mod:CHA'},
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '80', 'Toque Purificador': 'mod:CHA', 'Canalizar Divindade': '1'},
       },
       17: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '85', 'Toque Purificador': 'mod:CHA'},
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '85', 'Toque Purificador': 'mod:CHA', 'Canalizar Divindade': '1'},
       },
       18: {
         features: [
@@ -2500,19 +2553,19 @@ export const CLASSES: Record<number, ClassRule> = {
         ],
         isAsiLevel: false,
         isSubclassFeatureLevel: false,
-        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '90', 'Toque Purificador': 'mod:CHA'},
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '90', 'Toque Purificador': 'mod:CHA', 'Canalizar Divindade': '1'},
       },
       19: {
         features: [],
         isAsiLevel: true,
         isSubclassFeatureLevel: false,
-        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '95', 'Toque Purificador': 'mod:CHA'},
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '95', 'Toque Purificador': 'mod:CHA', 'Canalizar Divindade': '1'},
       },
       20: {
         features: [],
         isAsiLevel: false,
         isSubclassFeatureLevel: true,
-        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '100', 'Toque Purificador': 'mod:CHA'},
+        resources: {'Sentido Divino': 'mod:CHA+1', 'Curar pelo Toque': '100', 'Toque Purificador': 'mod:CHA', 'Canalizar Divindade': '1'},
       },
     },
     startingEquipment: ['Espada Longa', 'Escudo', 'Cota de Malha', 'Símbolo Sagrado', 'Pacote do Padre'],
