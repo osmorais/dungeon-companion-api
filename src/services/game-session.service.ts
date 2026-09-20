@@ -223,6 +223,27 @@ export class GameSessionService {
     return monster;
   }
 
+  /** Duplica um monstro já na sessão, copiando todos os dados (inclusive o PV atual) pra uma
+   *  linha nova — útil pra "clonar" um monstro que já tomou dano, sem reconfigurar do zero. */
+  async duplicateMonster(
+    idMonsterSession: string,
+    userId: string,
+  ): Promise<MonsterSession> {
+    const result = await this.repository.duplicateMonster(idMonsterSession, userId);
+    if (result.status === 'not_found')
+      throw new HttpErrors.NotFound('Monstro não encontrado na sessão');
+    if (result.status === 'unauthorized')
+      throw new HttpErrors.Forbidden('Apenas o mestre pode duplicar monstros');
+
+    const monster = result.monster!;
+    this.events.publish({
+      type: 'monster_added',
+      id_game_session: monster.id_game_session,
+      monster,
+    });
+    return monster;
+  }
+
   async removeMonster(idMonsterSession: string, userId: string): Promise<void> {
     const result = await this.repository.removeMonster(
       idMonsterSession,

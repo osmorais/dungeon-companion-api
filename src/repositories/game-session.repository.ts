@@ -109,6 +109,43 @@ export class GameSessionRepository {
     return this.insertMonster(this.db.sql, idGameSession, monster);
   }
 
+  /**
+   * Cria uma nova linha em monster_session copiando todos os dados (nome, PV atual/máximo, CA,
+   * snapshot, imagem) do monstro original — inclusive o PV atual, ao contrário de addMonster
+   * (que sempre parte do PV máximo do catálogo). A cópia sempre entra oculta (mesmo default de
+   * insertMonster), mesmo que o original já estivesse revelado.
+   */
+  async duplicateMonster(
+    idMonsterSession: string,
+    userId: string,
+  ): Promise<{status: 'not_found' | 'unauthorized' | 'ok'; monster?: MonsterSession}> {
+    const rows = await this.db.sql<
+      (MonsterSession & {session_owner_id: string | null})[]
+    >`
+      SELECT ms.id_monster_session, ms.id_game_session, ms.monster_api_slug, ms.custom_name,
+        ms.hp_current, ms.hp_max, ms.ac, ms.data_snapshot, ms.is_revealed, ms.image_url,
+        gs.user_id AS session_owner_id
+      FROM monster_session ms
+      JOIN game_session gs ON gs.id_game_session = ms.id_game_session
+      WHERE ms.id_monster_session = ${idMonsterSession}
+      LIMIT 1
+    `;
+    if (!rows.length) return {status: 'not_found'};
+    const original = rows[0];
+    if (original.session_owner_id !== userId) return {status: 'unauthorized'};
+
+    const monster = await this.insertMonster(this.db.sql, original.id_game_session, {
+      monster_api_slug: original.monster_api_slug,
+      custom_name: original.custom_name ?? undefined,
+      hp_current: original.hp_current,
+      hp_max: original.hp_max,
+      ac: original.ac,
+      data_snapshot: original.data_snapshot,
+      image_url: original.image_url,
+    });
+    return {status: 'ok', monster};
+  }
+
   async findById(id: string): Promise<GameSessionDetail | null> {
     const sessions = await this.db.sql<GameSession[]>`
       SELECT id_game_session, session_name, session_code, max_player_quantity, dm_name, user_id, created_at
