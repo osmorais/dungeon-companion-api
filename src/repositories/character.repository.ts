@@ -233,7 +233,7 @@ export class CharacterRepository {
       /** Só setado quando esse é o nível de escolha de subclasse; nos demais fica `null` e o
        *  COALESCE abaixo mantém a subclasse já escolhida antes intacta. */
       idSubclass: string | null;
-      /** Só setado quando esse é o nível de escolha de Estilo de Combate (Paladino/Ranger nv2);
+      /** Só setado quando esse é o nível de escolha de Estilo de Luta (Paladino/Ranger nv2);
        *  nos demais fica `null` e o COALESCE abaixo mantém o estilo já escolhido antes intacto. */
       fightingStyle: string | null;
       /** Payload livre de uma escolha nova feita neste nível (ex: atributo do talento Resiliente,

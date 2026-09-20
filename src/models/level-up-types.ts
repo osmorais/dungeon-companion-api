@@ -67,7 +67,7 @@ export interface LevelUpPreview {
   subclass_options: LevelUpSubclassOption[] | null;
   subclass_spellcasting: LevelUpSubclassSpellcasting | null;
   expertise_choice: LevelUpExpertiseChoice | null;
-  /** Só populado no nível em que a classe ganha Estilo de Combate (Paladino/Ranger nv2) e o
+  /** Só populado no nível em que a classe ganha Estilo de Luta (Paladino/Ranger nv2) e o
    *  personagem ainda não escolheu um (Guerreiro já escolhe na criação, nunca chega aqui). */
   fighting_style_options: string[] | null;
   /** Segredos Mágicos do Bardo (nv10/14/18): as magias de `spell_choices` podem vir de qualquer
@@ -92,7 +92,7 @@ export interface LevelUpConfirmInput {
   id_subclass?: string;
   /** Obrigatório só no nível em que a classe concede Especialização/Aptidão (ver `expertise_choice` no preview). */
   expertise_skill_ids?: number[];
-  /** Obrigatório só no nível em que a classe ganha Estilo de Combate (ver `fighting_style_options` no preview). */
+  /** Obrigatório só no nível em que a classe ganha Estilo de Luta (ver `fighting_style_options` no preview). */
   fighting_style?: string;
   /** Payload livre de uma escolha nova feita neste nível (ex: atributo do talento Resiliente,
    *  perícias do Afiar Habilidades, magias de Segredos Mágicos) — ver `findChoiceData`. */

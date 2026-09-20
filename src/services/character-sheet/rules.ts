@@ -84,7 +84,7 @@ export interface ClassRule {
    * listas devem ser mantidas em sincronia manualmente pra uma classe já preenchida.
    */
   featuresByLevel?: Record<number, ClassLevelData>;
-  /** Escolha de Estilo de Combate — `level` é o nível em que a classe realmente ganha essa escolha (1 pro Guerreiro, 2 pro Paladino/Ranger). */
+  /** Escolha de Estilo de Luta — `level` é o nível em que a classe realmente ganha essa escolha (1 pro Guerreiro, 2 pro Paladino/Ranger). */
   fightingStyleChoice?: {level: number; options: string[]};
   startingEquipment: string[];
   /** Riqueza inicial alternativa (tabela "Riqueza Inicial por Classe" do PHB) — rolado pelo jogador na criação, em vez de pegar o equipamento fixo. Ex: Guerreiro = 5d4×10 PO. */
@@ -1723,14 +1723,14 @@ export const CLASSES: Record<number, ClassRule> = {
     spellSlotsLevel1: 0,
     preparesSpells: false,
     traits: [
-      {name: 'Estilo de Combate', source: 'Classe', description: 'Você adota um estilo particular de combate como sua especialidade. Escolha uma das opções: Arqueria, Defesa, Duelo, Grande Arma, Proteção ou Combate com Duas Armas.'},
+      {name: 'Estilo de Luta', source: 'Classe', description: 'Você adota um estilo particular de combate como sua especialidade. Escolha uma das opções: Arqueria, Defesa, Duelo, Grande Arma, Proteção ou Combate com Duas Armas.'},
       {name: 'Retomar Fôlego', source: 'Classe', description: 'Você tem uma reserva de resistência que pode usar para se proteger. Em seu turno, você pode usar uma ação bônus para recuperar pontos de vida iguais a 1d10 + seu nível de guerreiro.'},
     ],
     fightingStyleChoice: {level: 1, options: ['Arqueria', 'Defesa', 'Duelo', 'Grande Arma', 'Proteção', 'Combate com Duas Armas']},
     featuresByLevel: {
       1: {
         features: [
-          {name: 'Estilo de Combate', description: 'Você adota um estilo particular de combate como sua especialidade. Escolha uma das opções: Arqueria, Defesa, Duelo, Grande Arma, Proteção ou Combate com Duas Armas.'},
+          {name: 'Estilo de Luta', description: 'Você adota um estilo particular de combate como sua especialidade. Escolha uma das opções: Arqueria, Defesa, Duelo, Grande Arma, Proteção ou Combate com Duas Armas.'},
           {name: 'Retomar Fôlego', description: 'Você tem uma reserva de resistência que pode usar para se proteger. Em seu turno, você pode usar uma ação bônus para recuperar pontos de vida iguais a 1d10 + seu nível de guerreiro.'},
         ],
         isAsiLevel: false,
@@ -3847,7 +3847,7 @@ export const SUBCLASSES: Record<number, SubclassRule[]> = {
         },
         10: {
           features: [
-            {name: 'Estilo de Combate Adicional', description: 'Você pode escolher um segundo Estilo de Combate da classe.'},
+            {name: 'Estilo de Luta Adicional', description: 'Você pode escolher um segundo Estilo de Luta da classe.'},
           ],
         },
         15: {
