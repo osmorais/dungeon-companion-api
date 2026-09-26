@@ -2,7 +2,6 @@
 import {inject, injectable, BindingScope} from '@loopback/core';
 import {PostgresDatasource} from '../datasources';
 import {
-  AddInventoryItemInput,
   InventoryItem,
   ItemCatalogEntry,
 } from '../models/player-inventory-types';
@@ -69,18 +68,21 @@ export class PlayerInventoryRepository {
     return rows[0] ?? null;
   }
 
-  /** `null` = id_item não existe no catálogo. Soma na quantidade se o jogador já tiver esse
-   *  item (UNIQUE (id_player_session, id_item) permite o upsert). */
+  /** `null` = id_item não existe no catálogo. */
+  async findCatalogItem(idItem: number): Promise<ItemCatalogEntry | null> {
+    const rows = await this.db.sql<ItemCatalogEntry[]>`
+      SELECT id_item, name, description, price_value, weight FROM item WHERE id_item = ${idItem}
+    `;
+    return rows[0] ?? null;
+  }
+
+  /** Soma na quantidade se o jogador já tiver esse item (UNIQUE (id_player_session, id_item)
+   *  permite o upsert). `catalogItem` já deve ter sido resolvido (ver findCatalogItem). */
   async addItem(
     idPlayerSession: string,
-    input: AddInventoryItemInput,
-  ): Promise<InventoryItem | null> {
-    const [catalogItem] = await this.db.sql<ItemCatalogEntry[]>`
-      SELECT id_item, name, description, price_value, weight FROM item WHERE id_item = ${input.id_item}
-    `;
-    if (!catalogItem) return null;
-
-    const quantity = input.quantity ?? 1;
+    catalogItem: ItemCatalogEntry,
+    quantity: number,
+  ): Promise<InventoryItem> {
     const [row] = await this.db.sql<InventoryItem[]>`
       INSERT INTO player_inventory_item (
         id_player_session, id_item, name, description, price_value, weight, quantity
@@ -93,6 +95,55 @@ export class PlayerInventoryRepository {
       RETURNING id_inventory_item, id_player_session, id_item, name, description, price_value, weight, quantity
     `;
     return row;
+  }
+
+  /** `null` = essa sessão de jogador não tem personagem vinculado. */
+  async findCharacterIdForPlayerSession(
+    idPlayerSession: string,
+  ): Promise<number | null> {
+    const rows = await this.db.sql<{id_character: number | null}[]>`
+      SELECT id_character FROM player_session WHERE id_player_session = ${idPlayerSession}
+    `;
+    return rows[0]?.id_character ?? null;
+  }
+
+  /**
+   * Debita `cost` do PO do personagem e adiciona o item numa única transação — `FOR UPDATE`
+   * trava a linha do personagem pra evitar corrida caso duas compras cheguem ao mesmo tempo.
+   * `insufficient_funds` = nada foi alterado (nem PO, nem inventário).
+   */
+  async addItemWithDebit(
+    idPlayerSession: string,
+    catalogItem: ItemCatalogEntry,
+    quantity: number,
+    idCharacter: number,
+    cost: number,
+  ): Promise<{ok: true; item: InventoryItem} | {ok: false}> {
+    return this.db.sql.begin(async sql => {
+      const [character] = await sql<{total_po: number}[]>`
+        SELECT total_po FROM character WHERE id_character = ${idCharacter} FOR UPDATE
+      `;
+      if (!character || character.total_po < cost) return {ok: false};
+
+      await sql`
+        UPDATE character
+        SET total_po = ROUND((total_po - ${cost})::numeric, 2)
+        WHERE id_character = ${idCharacter}
+      `;
+
+      const [item] = await sql<InventoryItem[]>`
+        INSERT INTO player_inventory_item (
+          id_player_session, id_item, name, description, price_value, weight, quantity
+        ) VALUES (
+          ${idPlayerSession}, ${catalogItem.id_item}, ${catalogItem.name}, ${catalogItem.description},
+          ${catalogItem.price_value}, ${catalogItem.weight}, ${quantity}
+        )
+        ON CONFLICT (id_player_session, id_item)
+        DO UPDATE SET quantity = player_inventory_item.quantity + EXCLUDED.quantity
+        RETURNING id_inventory_item, id_player_session, id_item, name, description, price_value, weight, quantity
+      `;
+      return {ok: true, item};
+    });
   }
 
   /** `null` = quantidade zerou (ou passou de zero) e a linha foi removida. */

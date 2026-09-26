@@ -317,12 +317,12 @@ export class CharacterController {
     @requestBody({
       description: 'New total gold (PO) value',
       required: true,
-      content: {'application/json': {schema: {type: 'object', required: ['total_po'], properties: {total_po: {type: 'integer'}}}}},
+      content: {'application/json': {schema: {type: 'object', required: ['total_po'], properties: {total_po: {type: 'number'}}}}},
     })
     body: {total_po: number},
   ): Promise<object> {
-    if (typeof body.total_po !== 'number' || !Number.isInteger(body.total_po) || body.total_po < 0) {
-      throw new HttpErrors.UnprocessableEntity('total_po deve ser um número inteiro não-negativo');
+    if (typeof body.total_po !== 'number' || !Number.isFinite(body.total_po) || body.total_po < 0) {
+      throw new HttpErrors.UnprocessableEntity('total_po deve ser um número não-negativo');
     }
     try {
       return await this.characterSheetService.updateCurrency(id, body.total_po, currentUser.id);

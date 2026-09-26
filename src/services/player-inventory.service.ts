@@ -51,15 +51,37 @@ export class PlayerInventoryService {
         'quantity deve ser um inteiro positivo',
       );
 
-    const added = await this.repository.addItem(idPlayerSession, {
-      ...input,
-      quantity,
-    });
-    if (!added)
+    const catalogItem = await this.repository.findCatalogItem(input.id_item);
+    if (!catalogItem)
       throw new HttpErrors.NotFound(
         `Item com id ${input.id_item} não encontrado no catálogo`,
       );
-    return added;
+
+    // Debita o PO e adiciona numa transação só — se não tiver PO suficiente, nada é alterado
+    // (a compra inteira é bloqueada, não só o débito).
+    if (input.debit_currency && catalogItem.price_value) {
+      const idCharacter =
+        await this.repository.findCharacterIdForPlayerSession(idPlayerSession);
+      if (!idCharacter)
+        throw new HttpErrors.UnprocessableEntity(
+          'Essa sessão não tem personagem vinculado pra debitar PO',
+        );
+      const cost = catalogItem.price_value * quantity;
+      const result = await this.repository.addItemWithDebit(
+        idPlayerSession,
+        catalogItem,
+        quantity,
+        idCharacter,
+        cost,
+      );
+      if (!result.ok)
+        throw new HttpErrors.UnprocessableEntity(
+          'PO insuficiente pra comprar esse item',
+        );
+      return result.item;
+    }
+
+    return this.repository.addItem(idPlayerSession, catalogItem, quantity);
   }
 
   /** `null` no retorno = a quantidade zerou e o item saiu do inventário. */
