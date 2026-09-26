@@ -26,8 +26,11 @@ export interface InventoryItem {
   quantity: number;
 }
 
-/** `quantity` ausente = 1. Adicionar um item já existente soma na quantidade (upsert). */
+/** `quantity` ausente = 1. Adicionar um item já existente soma na quantidade (upsert).
+ *  `debit_currency`: se true, desconta preço×quantidade do PO do personagem antes de adicionar
+ *  — falha (sem adicionar nada) se o personagem não tiver PO suficiente. */
 export interface AddInventoryItemInput {
   id_item: number;
   quantity?: number;
+  debit_currency?: boolean;
 }
