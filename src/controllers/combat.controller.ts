@@ -39,6 +39,29 @@ export class CombatController {
     );
   }
 
+  @post('/api/game-session/combat/{id}/add-participants')
+  @response(201, {
+    description:
+      'Adds new participants to a combat encounter already in progress',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async addParticipants(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      description: 'Participants to add to the ongoing encounter',
+      required: true,
+      content: {'application/json': {schema: {type: 'object'}}},
+    })
+    body: {participants: StartEncounterParticipantInput[]},
+  ): Promise<CombatEncounterDetail> {
+    return this.combatService.addParticipants(
+      id,
+      body.participants,
+      currentUser.id,
+    );
+  }
+
   @post('/api/game-session/combat-participant/{id}/initiative')
   @response(204, {description: 'Initiative roll registered'})
   async submitInitiative(

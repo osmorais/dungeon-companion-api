@@ -112,11 +112,13 @@ export class CombatRepository {
     idNpcSession: string,
     initiativeRoll: number,
     initiativeTotal: number,
-  ): Promise<void> {
-    await this.db.sql`
+  ): Promise<string> {
+    const [row] = await this.db.sql<{id_combat_participant: string}[]>`
       INSERT INTO combat_participant (id_combat_encounter, participant_type, id_npc_session, initiative_roll, initiative_total)
       VALUES (${idCombatEncounter}, 'npc', ${idNpcSession}, ${initiativeRoll}, ${initiativeTotal})
+      RETURNING id_combat_participant
     `;
+    return row.id_combat_participant;
   }
 
   /** Retorna, para cada monstro válido da sessão, sua Destreza (usada pra rolar a iniciativa). */
@@ -137,11 +139,13 @@ export class CombatRepository {
     idMonsterSession: string,
     initiativeRoll: number,
     initiativeTotal: number,
-  ): Promise<void> {
-    await this.db.sql`
+  ): Promise<string> {
+    const [row] = await this.db.sql<{id_combat_participant: string}[]>`
       INSERT INTO combat_participant (id_combat_encounter, participant_type, id_monster_session, initiative_roll, initiative_total)
       VALUES (${idCombatEncounter}, 'monster', ${idMonsterSession}, ${initiativeRoll}, ${initiativeTotal})
+      RETURNING id_combat_participant
     `;
+    return row.id_combat_participant;
   }
 
   /**
@@ -234,6 +238,53 @@ export class CombatRepository {
       UPDATE combat_participant SET turn_order = ${turnOrder}
       WHERE id_combat_participant = ${idCombatParticipant}
     `;
+  }
+
+  /** Coloca um participante no fim da ordem de turnos já em curso (turn_order = maior atual + 1),
+   *  sem mexer em ninguém mais — usado quando alguém entra num combate que já está 'active'. */
+  async appendTurnOrder(
+    idCombatEncounter: string,
+    idCombatParticipant: string,
+  ): Promise<void> {
+    await this.db.sql`
+      UPDATE combat_participant
+      SET turn_order = COALESCE(
+        (SELECT MAX(turn_order) FROM combat_participant WHERE id_combat_encounter = ${idCombatEncounter}),
+        -1
+      ) + 1
+      WHERE id_combat_participant = ${idCombatParticipant}
+    `;
+  }
+
+  /** ids de sessão (player/npc/monster) já presentes no combate — pra não adicionar duplicado
+   *  quando o mestre inclui alguém num combate já em andamento. */
+  async findExistingParticipantSessionIds(idCombatEncounter: string): Promise<{
+    playerSessionIds: string[];
+    npcSessionIds: string[];
+    monsterSessionIds: string[];
+  }> {
+    const rows = await this.db.sql<
+      {
+        id_player_session: string | null;
+        id_npc_session: string | null;
+        id_monster_session: string | null;
+      }[]
+    >`
+      SELECT id_player_session, id_npc_session, id_monster_session
+      FROM combat_participant
+      WHERE id_combat_encounter = ${idCombatEncounter}
+    `;
+    return {
+      playerSessionIds: rows
+        .map(r => r.id_player_session)
+        .filter((id): id is string => id !== null),
+      npcSessionIds: rows
+        .map(r => r.id_npc_session)
+        .filter((id): id is string => id !== null),
+      monsterSessionIds: rows
+        .map(r => r.id_monster_session)
+        .filter((id): id is string => id !== null),
+    };
   }
 
   async setDelayed(

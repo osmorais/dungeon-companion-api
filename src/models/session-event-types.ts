@@ -66,6 +66,7 @@ export interface SessionEventPayloadMap {
   roll_added: {roll: RollLogEntry};
   spell_cast: {id_character: number; actor_name: string; spell_name: string};
   combat_started: {combat: CombatEncounterDetail};
+  combat_participants_added: {combat: CombatEncounterDetail};
   initiative_submitted: {combat: CombatEncounterDetail};
   turn_ended: {combat: CombatEncounterDetail};
   turn_order_changed: {combat: CombatEncounterDetail};

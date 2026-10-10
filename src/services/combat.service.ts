@@ -190,30 +190,20 @@ export class CombatService {
     return {encounter, participants: participantDetails};
   }
 
-  async startEncounter(
+  /** Separa os participantes recebidos por tipo e confirma que todos pertencem à sessão. */
+  private async resolveParticipants(
     idGameSession: string,
     participants: StartEncounterParticipantInput[],
-    userId: string,
-  ): Promise<CombatEncounterDetail> {
-    const session = await this.gameSessionRepository.findById(idGameSession);
-    if (!session) throw new HttpErrors.NotFound('Sessão não encontrada');
-    if (session.game_session.user_id !== userId) {
-      throw new HttpErrors.Forbidden('Apenas o mestre pode iniciar um combate');
-    }
-
-    const existing =
-      await this.repository.findActiveEncounterByGameSession(idGameSession);
-    if (existing)
-      throw new HttpErrors.Conflict(
-        'Já existe um combate em andamento nessa sessão',
-      );
-
-    if (!participants.length) {
-      throw new HttpErrors.UnprocessableEntity(
-        'Selecione ao menos um participante para iniciar a luta',
-      );
-    }
-
+  ): Promise<{
+    validPlayerIds: string[];
+    npcInfos: {
+      id_npc_session: string;
+      id_character: number;
+      dex_modifier: number;
+    }[];
+    monsterInfos: {id_monster_session: string; dexterity: number}[];
+    idMonsterSessions: string[];
+  }> {
     const idPlayerSessions = participants
       .filter(p => p.participant_type === 'player')
       .map(p => p.id);
@@ -247,13 +237,24 @@ export class CombatService {
       );
     }
 
-    const encounter = await this.repository.createEncounter(idGameSession);
+    return {validPlayerIds, npcInfos, monsterInfos, idMonsterSessions};
+  }
 
-    await this.repository.addPlayerParticipants(
-      encounter.id_combat_encounter,
-      validPlayerIds,
-    );
-
+  /**
+   * Rola iniciativa (automática) e insere NPCs/monstros no combate. Quando `appendTurnOrder` é
+   * true (combate já 'active'), cada um entra no fim da ordem de turnos atual assim que é
+   * inserido — sem mexer no turn_order de quem já estava lá.
+   */
+  private async insertNpcAndMonsterParticipants(
+    idCombatEncounter: string,
+    npcInfos: {
+      id_npc_session: string;
+      id_character: number;
+      dex_modifier: number;
+    }[],
+    monsterInfos: {id_monster_session: string; dexterity: number}[],
+    appendTurnOrder: boolean,
+  ): Promise<void> {
     const npcFeatBonuses = await this.getInitiativeFeatBonuses(
       npcInfos.map(n => n.id_character),
     );
@@ -261,25 +262,71 @@ export class CombatService {
       const roll = this.rollD20();
       const modifier =
         npc.dex_modifier + (npcFeatBonuses[npc.id_character] ?? 0);
-      await this.repository.addNpcParticipant(
-        encounter.id_combat_encounter,
+      const idParticipant = await this.repository.addNpcParticipant(
+        idCombatEncounter,
         npc.id_npc_session,
         roll,
         roll + modifier,
       );
+      if (appendTurnOrder)
+        await this.repository.appendTurnOrder(idCombatEncounter, idParticipant);
     }
 
     // Monstros não jogam: a rolagem de iniciativa é automática, igual aos NPCs.
     for (const monster of monsterInfos) {
       const roll = this.rollD20();
       const dexModifier = Math.floor((monster.dexterity - 10) / 2);
-      await this.repository.addMonsterParticipant(
-        encounter.id_combat_encounter,
+      const idParticipant = await this.repository.addMonsterParticipant(
+        idCombatEncounter,
         monster.id_monster_session,
         roll,
         roll + dexModifier,
       );
+      if (appendTurnOrder)
+        await this.repository.appendTurnOrder(idCombatEncounter, idParticipant);
     }
+  }
+
+  async startEncounter(
+    idGameSession: string,
+    participants: StartEncounterParticipantInput[],
+    userId: string,
+  ): Promise<CombatEncounterDetail> {
+    const session = await this.gameSessionRepository.findById(idGameSession);
+    if (!session) throw new HttpErrors.NotFound('Sessão não encontrada');
+    if (session.game_session.user_id !== userId) {
+      throw new HttpErrors.Forbidden('Apenas o mestre pode iniciar um combate');
+    }
+
+    const existing =
+      await this.repository.findActiveEncounterByGameSession(idGameSession);
+    if (existing)
+      throw new HttpErrors.Conflict(
+        'Já existe um combate em andamento nessa sessão',
+      );
+
+    if (!participants.length) {
+      throw new HttpErrors.UnprocessableEntity(
+        'Selecione ao menos um participante para iniciar a luta',
+      );
+    }
+
+    const {validPlayerIds, npcInfos, monsterInfos, idMonsterSessions} =
+      await this.resolveParticipants(idGameSession, participants);
+
+    const encounter = await this.repository.createEncounter(idGameSession);
+
+    await this.repository.addPlayerParticipants(
+      encounter.id_combat_encounter,
+      validPlayerIds,
+    );
+
+    await this.insertNpcAndMonsterParticipants(
+      encounter.id_combat_encounter,
+      npcInfos,
+      monsterInfos,
+      false,
+    );
 
     if (validPlayerIds.length === 0) {
       await this.activateWithComputedOrder(encounter.id_combat_encounter);
@@ -312,6 +359,91 @@ export class CombatService {
     return combat;
   }
 
+  /**
+   * O mestre adiciona jogador(es), NPC(s) e/ou monstro(s) a um combate já criado — rolando
+   * iniciativa ou 'active'. NPCs/monstros entram já rolados e (se 'active') no fim da ordem de
+   * turnos atual; jogadores entram sem iniciativa e, se o combate já estiver 'active', só
+   * ganham turn_order quando rolam a própria iniciativa (ver submitInitiative).
+   */
+  async addParticipants(
+    idCombatEncounter: string,
+    participants: StartEncounterParticipantInput[],
+    userId: string,
+  ): Promise<CombatEncounterDetail> {
+    const context =
+      await this.repository.findEncounterContext(idCombatEncounter);
+    if (!context) throw new HttpErrors.NotFound('Combate não encontrado');
+    if (context.dm_user_id !== userId) {
+      throw new HttpErrors.Forbidden(
+        'Apenas o mestre pode adicionar participantes ao combate',
+      );
+    }
+    if (context.status === 'finished') {
+      throw new HttpErrors.Conflict('Esse combate já foi encerrado');
+    }
+    if (!participants.length) {
+      throw new HttpErrors.UnprocessableEntity(
+        'Selecione ao menos um participante para adicionar',
+      );
+    }
+
+    const existing =
+      await this.repository.findExistingParticipantSessionIds(
+        idCombatEncounter,
+      );
+    const deduped = participants.filter(p => {
+      if (p.participant_type === 'player')
+        return !existing.playerSessionIds.includes(p.id);
+      if (p.participant_type === 'npc')
+        return !existing.npcSessionIds.includes(p.id);
+      return !existing.monsterSessionIds.includes(p.id);
+    });
+    if (!deduped.length) {
+      throw new HttpErrors.Conflict('Esses participantes já estão no combate');
+    }
+
+    const {validPlayerIds, npcInfos, monsterInfos, idMonsterSessions} =
+      await this.resolveParticipants(context.id_game_session, deduped);
+
+    await this.repository.addPlayerParticipants(
+      idCombatEncounter,
+      validPlayerIds,
+    );
+
+    await this.insertNpcAndMonsterParticipants(
+      idCombatEncounter,
+      npcInfos,
+      monsterInfos,
+      context.status === 'active',
+    );
+
+    const newlyRevealed = await this.gameSessionRepository.revealMonsters(
+      context.id_game_session,
+      idMonsterSessions,
+    );
+    for (const monster of newlyRevealed) {
+      this.events.publish({
+        type: 'monster_revealed',
+        id_game_session: context.id_game_session,
+        id_monster_session: monster.id_monster_session,
+        name:
+          monster.custom_name ??
+          this.monsterSnapshotName(monster.data_snapshot),
+        image_url: monster.image_url,
+      });
+    }
+
+    const combat = (await this.getActiveEncounterDetail(
+      context.id_game_session,
+    ))!;
+    this.events.publish({
+      type: 'combat_participants_added',
+      id_game_session: context.id_game_session,
+      combat,
+    });
+    return combat;
+  }
+
   private monsterSnapshotName(snapshot: unknown): string {
     return (snapshot as {name?: string} | undefined)?.name ?? 'Monstro';
   }
@@ -324,10 +456,8 @@ export class CombatService {
     const context =
       await this.repository.findParticipantContext(idCombatParticipant);
     if (!context) throw new HttpErrors.NotFound('Participante não encontrado');
-    if (context.status !== 'rolling_initiative') {
-      throw new HttpErrors.Conflict(
-        'Esse combate não está mais na fase de rolagem de iniciativa',
-      );
+    if (context.status === 'finished') {
+      throw new HttpErrors.Conflict('Esse combate já foi encerrado');
     }
     // O mestre também pode rolar iniciativa pelo jogador (ex: jogador ausente/AFK) — além do
     // próprio dono do personagem.
@@ -355,11 +485,20 @@ export class CombatService {
       input.total,
     );
 
-    const pending = await this.repository.countPendingParticipants(
-      context.id_combat_encounter,
-    );
-    if (pending === 0) {
-      await this.activateWithComputedOrder(context.id_combat_encounter);
+    if (context.status === 'rolling_initiative') {
+      const pending = await this.repository.countPendingParticipants(
+        context.id_combat_encounter,
+      );
+      if (pending === 0) {
+        await this.activateWithComputedOrder(context.id_combat_encounter);
+      }
+    } else {
+      // Combate já 'active' — quem chegou depois só entra no fim da ordem atual, sem
+      // reordenar ninguém que já estava jogando (ver addParticipants).
+      await this.repository.appendTurnOrder(
+        context.id_combat_encounter,
+        idCombatParticipant,
+      );
     }
 
     const combat = (await this.getActiveEncounterDetail(
