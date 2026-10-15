@@ -60,3 +60,7 @@ Required `.env` variables:
 - `PGHOST`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`, `ENDPOINT_ID` — Neon PostgreSQL
 - `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`
 - `AI_PROVIDER` — `anthropic` or `openai`
+
+## Testes
+
+Toda implementação nova termina rodando a suíte existente e criando testes para o que foi implementado — ver `.claude/rules/testes.md`.
