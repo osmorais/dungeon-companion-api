@@ -1,9 +1,11 @@
 import {ApplicationConfig, DungeonCompanionApiApplication} from './application';
 import {SessionSocketGateway} from './services/session-socket.gateway';
+import {assertJwtSecretConfigured} from './strategies/jwt.util';
 
 export * from './application';
 
 export async function main(options: ApplicationConfig = {}) {
+  assertJwtSecretConfigured();
   const app = new DungeonCompanionApiApplication(options);
   await app.boot();
   await app.start();

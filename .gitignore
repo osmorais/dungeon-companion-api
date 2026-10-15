@@ -65,3 +65,6 @@ typings/
 
 # Emacs auto-save file
 \#*#
+
+# Build dos testes unitários (npm run test:unit)
+/dist-test

@@ -7,10 +7,10 @@ import crypto from 'crypto';
 import {OAuth2Client} from 'google-auth-library';
 import {UserRepository} from '../repositories/user.repository';
 import {User, UserPublic} from '../models/user.model';
+import {getJwtSecret, verifyJwtToken} from '../strategies/jwt.util';
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? '';
 
-const JWT_SECRET = process.env.JWT_SECRET ?? 'changeme-set-JWT_SECRET-in-env';
 const JWT_EXPIRES_IN = '8h';
 
 @injectable({scope: BindingScope.TRANSIENT})
@@ -29,14 +29,14 @@ export class AuthService {
   }
 
   generateToken(user: Pick<User, 'id' | 'email'>): string {
-    return jwt.sign({id: user.id, email: user.email}, JWT_SECRET, {
+    return jwt.sign({id: user.id, email: user.email}, getJwtSecret(), {
       expiresIn: JWT_EXPIRES_IN,
     });
   }
 
   async verifyToken(token: string): Promise<{id: string; email: string}> {
     try {
-      return jwt.verify(token, JWT_SECRET) as {id: string; email: string};
+      return verifyJwtToken(token);
     } catch {
       throw new HttpErrors.Unauthorized('Token inválido ou expirado');
     }
@@ -101,6 +101,11 @@ export class AuthService {
     }
     if (!payload?.email) {
       throw new HttpErrors.Unauthorized('Token Google inválido');
+    }
+    // Sem isso, uma conta Google com e-mail não verificado conseguiria se vincular (logo
+    // abaixo, por igualdade de e-mail) a uma conta local de outra pessoa e assumi-la.
+    if (payload.email_verified !== true) {
+      throw new HttpErrors.Unauthorized('O e-mail desta conta Google não está verificado');
     }
 
     let user = await this.userRepository.findByGoogleId(payload.sub);

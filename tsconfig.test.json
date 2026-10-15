@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json.schemastore.org/tsconfig",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist-test",
+    "declaration": false,
+    "tsBuildInfoFile": "dist-test/.tsbuildinfo"
+  },
+  "include": ["src"],
+  "exclude": ["**/node_modules/**", "**/dist/**", "**/*.d.ts", "src/__tests__/acceptance"]
+}

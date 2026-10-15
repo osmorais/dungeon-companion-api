@@ -1042,24 +1042,4 @@ export class GameSessionRepository {
       OFFSET (${page} - 1) * ${pageSize}
     `;
   }
-
-  async findPaged(
-    pageSize: number,
-    page: number,
-  ): Promise<GameSessionSummary[]> {
-    return this.db.sql<GameSessionSummary[]>`
-      SELECT
-        id_game_session,
-        session_name,
-        session_code,
-        max_player_quantity,
-        dm_name,
-        created_at,
-        COUNT(*) OVER() AS total_count
-      FROM game_session
-      ORDER BY created_at DESC
-      LIMIT ${pageSize}
-      OFFSET (${page} - 1) * ${pageSize}
-    `;
-  }
 }

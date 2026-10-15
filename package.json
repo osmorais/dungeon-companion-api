@@ -26,6 +26,7 @@
     "test": "mocha dist/__tests__",
     "posttest": "npm run lint",
     "test:dev": "mocha dist/__tests__/**/*.js && npm run posttest",
+    "test:unit": "tsc -p tsconfig.test.json && mocha \"dist-test/__tests__/unit/**/*.unit.js\"",
     "docker:build": "docker build -t dungeon-companion-api .",
     "docker:run": "docker run -p 3000:3000 -d dungeon-companion-api",
     "openapi-spec": "node ./dist/openapi-spec",

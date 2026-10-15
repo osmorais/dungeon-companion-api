@@ -753,19 +753,6 @@ export class GameSessionService {
     });
   }
 
-  async listSessions(
-    pageSize: number,
-    page: number,
-  ): Promise<GameSessionPagedList> {
-    const rows = await this.repository.findPaged(pageSize, page);
-    return {
-      GameSessionPagedList: rows,
-      page,
-      pageSize,
-      total_count: rows[0]?.total_count ?? 0,
-    };
-  }
-
   async listUserSessions(
     userId: string,
     pageSize: number,

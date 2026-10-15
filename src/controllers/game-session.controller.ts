@@ -91,22 +91,6 @@ export class GameSessionController {
     }
   }
 
-  @get('/api/game-session')
-  @response(200, {
-    description: 'Returns a paginated list of game sessions',
-    content: {'application/json': {schema: {type: 'object'}}},
-  })
-  async listSessions(
-    @inject(SecurityBindings.USER) _currentUser: UserProfile,
-    @param.query.number('page') page?: number,
-    @param.query.number('pageSize') pageSize?: number,
-  ): Promise<GameSessionPagedList> {
-    const MAX_PAGE_SIZE = 50;
-    const resolvedPageSize = Math.min(pageSize ?? 10, MAX_PAGE_SIZE);
-    const resolvedPage = page ?? 1;
-    return this.gameSessionService.listSessions(resolvedPageSize, resolvedPage);
-  }
-
   @post('/api/game-session/{id}/npc')
   @response(201, {
     description: 'Adds an NPC to a game session',
