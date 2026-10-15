@@ -152,7 +152,14 @@ export class CombatService {
     );
     const nextIndex = (currentIndex + 1) % order.length;
     const isNewRound = nextIndex === 0;
-    const next = order[nextIndex];
+    // Rodada nova limpa os atrasos — então ela começa pelo primeiro da ordem canônica
+    // (`participants` já vem ordenado por turn_order), não pelo primeiro da ordem efetiva desta
+    // rodada, que ainda empurra quem atrasou pro fim.
+    const next = isNewRound
+      ? [...participants].sort(
+          (a, b) => (a.turn_order ?? 0) - (b.turn_order ?? 0),
+        )[0]
+      : order[nextIndex];
 
     await this.repository.updateTurnState(
       idCombatEncounter,
@@ -663,15 +670,15 @@ export class CombatService {
     }
 
     await this.repository.setDelayed(current.id_combat_participant, true);
-    const updatedParticipants = participants.map(p =>
-      p.id_combat_participant === current.id_combat_participant
-        ? {...p, delayed_this_round: true}
-        : p,
-    );
 
+    // O próximo é calculado pela ordem de ANTES do atraso (quem vinha logo depois dele). Com o
+    // atraso já aplicado, ele cairia no fim da ordem efetiva, o próximo índice daria a volta pro
+    // 0 e advanceToNextTurn trataria isso como rodada nova — incrementando a rodada e limpando o
+    // atraso que acabou de ser marcado. A partir do próximo endTurn a ordem efetiva (relida do
+    // banco) já o coloca no fim da rodada.
     await this.advanceToNextTurn(
       idCombatEncounter,
-      updatedParticipants,
+      participants,
       current.id_combat_participant,
       context.round_number,
     );

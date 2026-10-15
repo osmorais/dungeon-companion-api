@@ -11,6 +11,7 @@ npm start              # build + start server at http://127.0.0.1:3000
 npm run build:watch    # watch mode for development
 npm test               # rebuild + lint + mocha suite
 npm run test:dev       # mocha only (skips rebuild/lint — use during iteration)
+npm run test:unit      # testes unitários (sem banco): compila src/ + src/__tests__ em dist-test/ e roda src/__tests__/unit — rodar a cada implementação
 npm run lint           # prettier + eslint check
 npm run lint:fix       # auto-fix style issues
 npm run migrate        # run database schema migrations

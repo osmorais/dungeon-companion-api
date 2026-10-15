@@ -1,13 +1,26 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import {Armour, Skill, Spell, WeaponRow} from '../../models/character-options-types';
-import {CharacterInput, CharacterRawData, FinalStats} from '../../models/character-sheet-types';
+import {
+  Armour,
+  Skill,
+  Spell,
+  WeaponRow,
+} from '../../models/character-options-types';
+import {
+  CharacterInput,
+  CharacterRawData,
+  FinalStats,
+} from '../../models/character-sheet-types';
 
 /** Atributos finais (já em inglês), todos 10 por padrão. */
 export function stats(overrides: Partial<FinalStats> = {}): FinalStats {
   return {STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10, ...overrides};
 }
 
-export function armour(type: string, base: number, maxDex: number | null = null): Armour {
+export function armour(
+  type: string,
+  base: number,
+  maxDex: number | null = null,
+): Armour {
   return {
     id_armour: 1,
     name: type,
@@ -36,7 +49,12 @@ export function weapon(name: string, properties: string | null): WeaponRow {
   };
 }
 
-export function spell(id: number, name: string, level: number, isPrepared?: boolean): Spell {
+export function spell(
+  id: number,
+  name: string,
+  level: number,
+  isPrepared?: boolean,
+): Spell {
   return {
     id_spell: id,
     name,
@@ -53,7 +71,12 @@ export function spell(id: number, name: string, level: number, isPrepared?: bool
   };
 }
 
-export function skill(id: number, name: string, trained = true, expert = false): Skill {
+export function skill(
+  id: number,
+  name: string,
+  trained = true,
+  expert = false,
+): Skill {
   return {
     id_skill: id,
     name,
@@ -68,12 +91,14 @@ export function skill(id: number, name: string, trained = true, expert = false):
 }
 
 /** Entrada mínima válida de criação: Humano Guerreiro (Soldado) nível 1, estilo Defesa. */
-export function characterInput(overrides: {
-  core_build?: Partial<CharacterInput['core_build']>;
-  base_values?: CharacterInput['attributes']['base_values'];
-  choices?: Partial<CharacterInput['choices']>;
-  equipment?: Partial<CharacterInput['equipment']>;
-} = {}): CharacterInput {
+export function characterInput(
+  overrides: {
+    core_build?: Partial<CharacterInput['core_build']>;
+    base_values?: CharacterInput['attributes']['base_values'];
+    choices?: Partial<CharacterInput['choices']>;
+    equipment?: Partial<CharacterInput['equipment']>;
+  } = {},
+): CharacterInput {
   return {
     core_build: {
       level: 1,
@@ -87,7 +112,14 @@ export function characterInput(overrides: {
     },
     attributes: {
       generation_method: 'standard_array',
-      base_values: overrides.base_values ?? {FOR: 15, DES: 14, CON: 13, INT: 12, SAB: 10, CAR: 8},
+      base_values: overrides.base_values ?? {
+        FOR: 15,
+        DES: 14,
+        CON: 13,
+        INT: 12,
+        SAB: 10,
+        CAR: 8,
+      },
     },
     choices: {
       skills: [],
@@ -105,13 +137,25 @@ export function characterInput(overrides: {
 }
 
 /** Personagem como vem de `CharacterRepository.findCharacterById` — Guerreiro nv1 do usuário "owner". */
-export function rawCharacter(overrides: {
-  character?: Partial<CharacterRawData['character']>;
-  scores?: Partial<Record<'FOR' | 'DES' | 'CON' | 'INT' | 'SAB' | 'CAR', number>>;
-  skills?: CharacterRawData['skills'];
-  spells?: CharacterRawData['spells'];
-} = {}): CharacterRawData {
-  const scores = {FOR: 16, DES: 14, CON: 14, INT: 10, SAB: 12, CAR: 8, ...overrides.scores};
+export function rawCharacter(
+  overrides: {
+    character?: Partial<CharacterRawData['character']>;
+    scores?: Partial<
+      Record<'FOR' | 'DES' | 'CON' | 'INT' | 'SAB' | 'CAR', number>
+    >;
+    skills?: CharacterRawData['skills'];
+    spells?: CharacterRawData['spells'];
+  } = {},
+): CharacterRawData {
+  const scores = {
+    FOR: 16,
+    DES: 14,
+    CON: 14,
+    INT: 10,
+    SAB: 12,
+    CAR: 8,
+    ...overrides.scores,
+  };
   return {
     character: {
       id_character: 1,
