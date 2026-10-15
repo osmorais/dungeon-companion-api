@@ -6,7 +6,7 @@ import {UserProfile, SecurityBindings, securityId} from '@loopback/security';
 import {AuthService} from '../services/auth.service';
 import {EmailService} from '../services/email.service';
 
-const COOKIE_NAME = 'token';
+export const COOKIE_NAME = 'token';
 const IS_PROD = process.env.NODE_ENV === 'production';
 
 // Cross-origin (Hostinger → Render) requires SameSite=None + Secure.
@@ -22,7 +22,7 @@ function cookieOptions() {
   };
 }
 
-function clearCookieOptions() {
+export function clearCookieOptions() {
   return {
     httpOnly: true,
     secure: IS_PROD,

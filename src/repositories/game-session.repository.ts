@@ -907,11 +907,16 @@ export class GameSessionRepository {
     status: 'not_found' | 'unauthorized' | 'ok';
     idGameSession?: string;
     monster?: MonsterSession;
+    previousImageUrl?: string | null;
   }> {
     const rows = await this.db.sql<
-      {id_game_session: string; session_owner_id: string | null}[]
+      {
+        id_game_session: string;
+        session_owner_id: string | null;
+        image_url: string | null;
+      }[]
     >`
-      SELECT ms.id_game_session, gs.user_id AS session_owner_id
+      SELECT ms.id_game_session, gs.user_id AS session_owner_id, ms.image_url
       FROM monster_session ms
       JOIN game_session gs ON gs.id_game_session = ms.id_game_session
       WHERE ms.id_monster_session = ${idMonsterSession}
@@ -926,7 +931,12 @@ export class GameSessionRepository {
       RETURNING id_monster_session, id_game_session, monster_api_slug, custom_name,
                 hp_current, hp_max, ac, data_snapshot, is_revealed, image_url
     `;
-    return {status: 'ok', idGameSession: rows[0].id_game_session, monster};
+    return {
+      status: 'ok',
+      idGameSession: rows[0].id_game_session,
+      monster,
+      previousImageUrl: rows[0].image_url,
+    };
   }
 
   /**
@@ -973,12 +983,32 @@ export class GameSessionRepository {
     return rows.map(r => r.id_monster_session);
   }
 
-  async deleteById(id: string): Promise<boolean> {
-    const result = await this.db.sql`
-      DELETE FROM game_session
-      WHERE id_game_session = ${id}
+  /**
+   * Só o mestre (dono) apaga a sessão. Devolve as imagens dos monstros que estavam nela, pra
+   * limpeza do storage depois que o DELETE em cascata já removeu os registros.
+   */
+  async deleteOwnedSession(
+    id: string,
+    userId: string,
+  ): Promise<{
+    status: 'not_found' | 'unauthorized' | 'ok';
+    imageUrls: string[];
+  }> {
+    const sessions = await this.db.sql<{user_id: string | null}[]>`
+      SELECT user_id FROM game_session WHERE id_game_session = ${id} LIMIT 1
     `;
-    return result.count > 0;
+    if (!sessions.length) return {status: 'not_found', imageUrls: []};
+    if (sessions[0].user_id !== userId)
+      return {status: 'unauthorized', imageUrls: []};
+
+    const images = await this.db.sql<{image_url: string}[]>`
+      SELECT DISTINCT image_url FROM monster_session
+      WHERE id_game_session = ${id} AND image_url IS NOT NULL
+    `;
+    await this.db.sql`
+      DELETE FROM game_session WHERE id_game_session = ${id}
+    `;
+    return {status: 'ok', imageUrls: images.map(r => r.image_url)};
   }
 
   async findPagedByUser(

@@ -10,6 +10,7 @@ import {SessionEventsService} from '../../../services/session-events.service';
 import {CombatService} from '../../../services/combat.service';
 import {MonsterCatalogService} from '../../../services/monster-catalog.service';
 import {SupabaseStorageService} from '../../../services/supabase-storage.service';
+import {ImageCleanupService} from '../../../services/image-cleanup.service';
 import {GameSessionRepository} from '../../../repositories/game-session.repository';
 import {
   GameSessionDetail,
@@ -76,6 +77,8 @@ describe('GameSessionService', () => {
   let repository: StubbedInstanceWithSinonAccessor<GameSessionRepository>;
   let combatService: StubbedInstanceWithSinonAccessor<CombatService>;
   let events: SessionEvent[];
+  let storage: StubbedInstanceWithSinonAccessor<SupabaseStorageService>;
+  let imageCleanup: StubbedInstanceWithSinonAccessor<ImageCleanupService>;
   let service: GameSessionService;
 
   beforeEach(() => {
@@ -90,7 +93,8 @@ describe('GameSessionService', () => {
       combatService,
       bus,
       createStubInstance(MonsterCatalogService),
-      createStubInstance(SupabaseStorageService),
+      (storage = createStubInstance(SupabaseStorageService)),
+      (imageCleanup = createStubInstance(ImageCleanupService)),
     );
   });
 
@@ -286,6 +290,114 @@ describe('GameSessionService', () => {
         name: 'Monstro',
         image_url: null,
       });
+    });
+
+    it('derrotar NÃO limpa a imagem (o modal de derrota ainda vai carregá-la)', async () => {
+      repository.stubs.removeMonster.resolves({
+        status: 'ok',
+        idGameSession: 'gs',
+        customName: 'Chefão',
+        dataSnapshot: {},
+        imageUrl: 'https://x/chefao.png',
+      });
+      await service.defeatMonster('m', 'dm');
+      expect(imageCleanup.stubs.deleteIfUnreferenced.called).to.be.false();
+    });
+
+    it('remover limpa a imagem do monstro depois de avisar a sessão', async () => {
+      repository.stubs.removeMonster.resolves({
+        status: 'ok',
+        idGameSession: 'gs',
+        customName: null,
+        dataSnapshot: {},
+        imageUrl: 'https://x/m.png',
+      });
+      await service.removeMonster('m', 'dm');
+      expect(events[0]).to.containDeep({type: 'monster_removed'});
+      sinon.assert.calledWith(imageCleanup.stubs.deleteIfUnreferenced, [
+        'https://x/m.png',
+      ]);
+    });
+
+    it('remover sem permissão não limpa nada', async () => {
+      repository.stubs.removeMonster.resolves({status: 'unauthorized'});
+      await expect(service.removeMonster('m', 'player')).to.be.rejectedWith(
+        /Apenas o mestre/,
+      );
+      expect(imageCleanup.stubs.deleteIfUnreferenced.called).to.be.false();
+    });
+
+    it('trocar a imagem anuncia a nova e limpa a anterior', async () => {
+      storage.stubs.uploadImage.resolves('https://x/nova.png');
+      repository.stubs.setMonsterImage.resolves({
+        status: 'ok',
+        idGameSession: 'gs',
+        monster: {id_monster_session: 'm'} as MonsterSession,
+        previousImageUrl: 'https://x/velha.png',
+      });
+      await service.setMonsterImage('m', 'dm', Buffer.from('i'), 'image/png');
+      expect(events[0]).to.containDeep({
+        type: 'monster_image_updated',
+        image_url: 'https://x/nova.png',
+      });
+      sinon.assert.calledOnceWithExactly(
+        imageCleanup.stubs.deleteIfUnreferenced,
+        ['https://x/velha.png'],
+      );
+    });
+
+    it('troca de imagem recusada descarta o arquivo recém-enviado', async () => {
+      storage.stubs.uploadImage.resolves('https://x/nova.png');
+      repository.stubs.setMonsterImage.resolves({status: 'unauthorized'});
+      await expect(
+        service.setMonsterImage('m', 'player', Buffer.from('i'), 'image/png'),
+      ).to.be.rejectedWith(/Apenas o mestre/);
+      sinon.assert.calledOnceWithExactly(
+        imageCleanup.stubs.deleteIfUnreferenced,
+        ['https://x/nova.png'],
+      );
+      expect(events).to.be.empty();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('deleteSession', () => {
+    it('só o mestre exclui a sessão', async () => {
+      repository.stubs.deleteOwnedSession.resolves({
+        status: 'unauthorized',
+        imageUrls: [],
+      });
+      await expect(service.deleteSession('gs', 'player')).to.be.rejectedWith(
+        /Apenas o mestre/,
+      );
+      sinon.assert.calledWith(
+        repository.stubs.deleteOwnedSession,
+        'gs',
+        'player',
+      );
+      expect(imageCleanup.stubs.deleteIfUnreferenced.called).to.be.false();
+    });
+
+    it('sessão inexistente', async () => {
+      repository.stubs.deleteOwnedSession.resolves({
+        status: 'not_found',
+        imageUrls: [],
+      });
+      await expect(service.deleteSession('gs', 'dm')).to.be.rejectedWith(
+        /Sessão com id gs não encontrada/,
+      );
+    });
+
+    it('mestre exclui e as imagens dos monstros da sessão são limpas', async () => {
+      repository.stubs.deleteOwnedSession.resolves({
+        status: 'ok',
+        imageUrls: ['https://x/a.png', 'https://x/b.png'],
+      });
+      await service.deleteSession('gs', 'dm');
+      sinon.assert.calledWith(imageCleanup.stubs.deleteIfUnreferenced, [
+        'https://x/a.png',
+        'https://x/b.png',
+      ]);
     });
   });
 

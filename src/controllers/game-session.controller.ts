@@ -41,7 +41,6 @@ const IMAGE_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
 interface MulterFile {
   buffer: Buffer;
   mimetype: string;
-  originalname: string;
 }
 
 const imageUpload = multer({
@@ -294,7 +293,6 @@ export class GameSessionController {
       currentUser.id,
       file.buffer,
       file.mimetype,
-      file.originalname,
     );
   }
 
@@ -436,10 +434,10 @@ export class GameSessionController {
   @response(204, {description: 'Game session deleted successfully'})
   async deleteSession(
     @param.path.string('id') id: string,
-    @inject(SecurityBindings.USER) _currentUser: UserProfile,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
   ): Promise<void> {
     try {
-      await this.gameSessionService.deleteSession(id);
+      await this.gameSessionService.deleteSession(id, currentUser.id);
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
       if (message.startsWith('Sessão com id'))

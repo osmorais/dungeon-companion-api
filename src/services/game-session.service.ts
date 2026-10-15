@@ -6,6 +6,7 @@ import {CombatService} from './combat.service';
 import {SessionEventsService} from './session-events.service';
 import {MonsterCatalogService} from './monster-catalog.service';
 import {SupabaseStorageService} from './supabase-storage.service';
+import {ImageCleanupService} from './image-cleanup.service';
 import {xpNeededForLevel} from './character-sheet/rules';
 import {
   AddMonsterToSessionInput,
@@ -56,6 +57,8 @@ export class GameSessionService {
     private monsterCatalogService: MonsterCatalogService,
     @service(SupabaseStorageService)
     private storageService: SupabaseStorageService,
+    @service(ImageCleanupService)
+    private imageCleanup: ImageCleanupService,
   ) {}
 
   async createSession(
@@ -258,9 +261,14 @@ export class GameSessionService {
       id_game_session: result.idGameSession!,
       id_monster_session: idMonsterSession,
     });
+    await this.imageCleanup.deleteIfUnreferenced([result.imageUrl]);
   }
 
-  /** Remove o monstro (mesma query de removeMonster) e avisa a todos com o nome, pra notificação de derrota. */
+  /**
+   * Remove o monstro (mesma query de removeMonster) e avisa a todos com o nome, pra notificação de
+   * derrota. A imagem **não** é limpa do storage aqui: o modal de derrota de todos os jogadores
+   * carrega essa URL logo depois do evento. Se ficar órfã, sai na limpeza manual de órfãs.
+   */
   async defeatMonster(idMonsterSession: string, userId: string): Promise<void> {
     const result = await this.repository.removeMonster(
       idMonsterSession,
@@ -398,10 +406,13 @@ export class GameSessionService {
     return result.granted;
   }
 
-  async deleteSession(id: string): Promise<void> {
-    const deleted = await this.repository.deleteById(id);
-    if (!deleted)
+  async deleteSession(id: string, userId: string): Promise<void> {
+    const result = await this.repository.deleteOwnedSession(id, userId);
+    if (result.status === 'not_found')
       throw new HttpErrors.NotFound(`Sessão com id ${id} não encontrada`);
+    if (result.status === 'unauthorized')
+      throw new HttpErrors.Forbidden('Apenas o mestre pode excluir a sessão');
+    await this.imageCleanup.deleteIfUnreferenced(result.imageUrls);
   }
 
   async getSession(id: string, userId: string): Promise<GameSessionDetail> {
@@ -580,18 +591,17 @@ export class GameSessionService {
     userId: string,
     buffer: Buffer,
     contentType: string,
-    originalName: string,
   ): Promise<MonsterSession> {
-    const imageUrl = await this.storageService.uploadImage(
-      buffer,
-      contentType,
-      originalName,
-    );
+    const imageUrl = await this.storageService.uploadImage(buffer, contentType);
     const result = await this.repository.setMonsterImage(
       idMonsterSession,
       userId,
       imageUrl,
     );
+    // O upload acontece antes da checagem de permissão: se a troca não for aceita, o arquivo
+    // recém-enviado não é usado por ninguém e não pode ficar no storage.
+    if (result.status !== 'ok')
+      await this.imageCleanup.deleteIfUnreferenced([imageUrl]);
     if (result.status === 'not_found')
       throw new HttpErrors.NotFound('Monstro não encontrado na sessão');
     if (result.status === 'unauthorized')
@@ -604,6 +614,7 @@ export class GameSessionService {
       id_monster_session: idMonsterSession,
       image_url: imageUrl,
     });
+    await this.imageCleanup.deleteIfUnreferenced([result.previousImageUrl]);
     return result.monster!;
   }
 

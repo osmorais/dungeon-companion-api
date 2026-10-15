@@ -27,6 +27,7 @@ import {GameSessionRepository} from '../repositories/game-session.repository';
 import {CharacterOptionsRepository} from '../repositories/character-options.repository';
 import {CombatRepository} from '../repositories/combat.repository';
 import {SupabaseStorageService} from './supabase-storage.service';
+import {ImageCleanupService} from './image-cleanup.service';
 import {
   resolveRace,
   resolveSubrace,
@@ -92,6 +93,8 @@ export class CharacterSheetService {
     private storageService: SupabaseStorageService,
     @service(CombatRepository)
     private combatRepository: CombatRepository,
+    @service(ImageCleanupService)
+    private imageCleanup: ImageCleanupService,
   ) {}
 
   /**
@@ -1300,7 +1303,6 @@ export class CharacterSheetService {
     userId: string,
     buffer: Buffer,
     contentType: string,
-    originalName: string,
   ): Promise<UploadImageResult> {
     const raw = await this.repository.findCharacterById(id);
     if (!raw) throw new HttpErrors.NotFound('Personagem não encontrado');
@@ -1309,8 +1311,9 @@ export class CharacterSheetService {
         'Você não pode alterar a imagem deste personagem',
       );
     }
-    const imageUrl = await this.storageService.uploadImage(buffer, contentType, originalName);
+    const imageUrl = await this.storageService.uploadImage(buffer, contentType);
     await this.repository.updateImage(id, imageUrl);
+    await this.imageCleanup.deleteIfUnreferenced([raw.character.image_url]);
     return {image_url: imageUrl};
   }
 
@@ -1349,6 +1352,7 @@ export class CharacterSheetService {
     if (!raw) throw new Error('Character not found');
     if (raw.character.user_id !== userId) throw new Error('Unauthorized');
     await this.repository.deleteCharacter(id);
+    await this.imageCleanup.deleteIfUnreferenced([raw.character.image_url]);
     return {success: true};
   }
 

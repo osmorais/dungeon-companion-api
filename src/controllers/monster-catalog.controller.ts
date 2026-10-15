@@ -25,7 +25,6 @@ const IMAGE_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
 interface MulterFile {
   buffer: Buffer;
   mimetype: string;
-  originalname: string;
 }
 
 const imageUpload = multer({
@@ -123,7 +122,6 @@ export class MonsterCatalogController {
       currentUser.id,
       file.buffer,
       file.mimetype,
-      file.originalname,
     );
   }
 

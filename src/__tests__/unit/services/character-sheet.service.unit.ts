@@ -11,6 +11,7 @@ import {GameSessionRepository} from '../../../repositories/game-session.reposito
 import {CharacterOptionsRepository} from '../../../repositories/character-options.repository';
 import {CombatRepository} from '../../../repositories/combat.repository';
 import {SupabaseStorageService} from '../../../services/supabase-storage.service';
+import {ImageCleanupService} from '../../../services/image-cleanup.service';
 import {XP_THRESHOLDS} from '../../../services/character-sheet/rules';
 import {CharacterRawData} from '../../../models/character-sheet-types';
 import {armour, characterInput, rawCharacter, skill, spell} from '../fixtures';
@@ -19,6 +20,8 @@ describe('CharacterSheetService', () => {
   let repository: StubbedInstanceWithSinonAccessor<CharacterRepository>;
   let gameSessionRepository: StubbedInstanceWithSinonAccessor<GameSessionRepository>;
   let optionsRepository: StubbedInstanceWithSinonAccessor<CharacterOptionsRepository>;
+  let storage: StubbedInstanceWithSinonAccessor<SupabaseStorageService>;
+  let imageCleanup: StubbedInstanceWithSinonAccessor<ImageCleanupService>;
   let service: CharacterSheetService;
 
   beforeEach(() => {
@@ -31,12 +34,15 @@ describe('CharacterSheetService', () => {
       status: 'ok',
       updatedAttributes: {},
     });
+    storage = createStubInstance(SupabaseStorageService);
+    imageCleanup = createStubInstance(ImageCleanupService);
     service = new CharacterSheetService(
       repository,
       gameSessionRepository,
       optionsRepository,
-      createStubInstance(SupabaseStorageService),
+      storage,
       createStubInstance(CombatRepository),
+      imageCleanup,
     );
   });
 
@@ -908,6 +914,74 @@ describe('CharacterSheetService', () => {
         }),
       ).to.be.rejectedWith(/shields/);
       expect(repository.stubs.updateEquipment.called).to.be.false();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('imagem do personagem (limpeza do storage)', () => {
+    it('trocar a imagem salva a nova e limpa a antiga', async () => {
+      givenCharacter({character: {image_url: 'https://x/antiga.png'}});
+      storage.stubs.uploadImage.resolves('https://x/nova.png');
+      const result = await service.updateCharacterImage(
+        1,
+        'owner',
+        Buffer.from('img'),
+        'image/png',
+      );
+      expect(result).to.eql({image_url: 'https://x/nova.png'});
+      sinon.assert.calledWith(
+        storage.stubs.uploadImage,
+        sinon.match.any,
+        'image/png',
+      );
+      sinon.assert.calledWith(
+        repository.stubs.updateImage,
+        1,
+        'https://x/nova.png',
+      );
+      sinon.assert.calledWith(imageCleanup.stubs.deleteIfUnreferenced, [
+        'https://x/antiga.png',
+      ]);
+      // Limpa só depois de gravar a nova no banco.
+      sinon.assert.callOrder(
+        repository.stubs.updateImage,
+        imageCleanup.stubs.deleteIfUnreferenced,
+      );
+    });
+
+    it('outro usuário não troca a imagem nem sobe arquivo', async () => {
+      givenCharacter();
+      await expect(
+        service.updateCharacterImage(
+          1,
+          'outro',
+          Buffer.from('img'),
+          'image/png',
+        ),
+      ).to.be.rejectedWith(/não pode alterar a imagem/);
+      expect(storage.stubs.uploadImage.called).to.be.false();
+      expect(imageCleanup.stubs.deleteIfUnreferenced.called).to.be.false();
+    });
+
+    it('excluir o personagem limpa a imagem dele depois do DELETE', async () => {
+      givenCharacter({character: {image_url: 'https://x/foto.png'}});
+      expect(await service.deleteCharacter(1, 'owner')).to.eql({success: true});
+      sinon.assert.callOrder(
+        repository.stubs.deleteCharacter,
+        imageCleanup.stubs.deleteIfUnreferenced,
+      );
+      sinon.assert.calledWith(imageCleanup.stubs.deleteIfUnreferenced, [
+        'https://x/foto.png',
+      ]);
+    });
+
+    it('outro usuário não exclui o personagem', async () => {
+      givenCharacter();
+      await expect(service.deleteCharacter(1, 'outro')).to.be.rejectedWith(
+        'Unauthorized',
+      );
+      expect(repository.stubs.deleteCharacter.called).to.be.false();
+      expect(imageCleanup.stubs.deleteIfUnreferenced.called).to.be.false();
     });
   });
 });

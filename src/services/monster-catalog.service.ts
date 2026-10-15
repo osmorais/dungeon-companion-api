@@ -4,6 +4,7 @@ import {HttpErrors} from '@loopback/rest';
 import {MonsterCatalogRepository} from '../repositories/monster-catalog.repository';
 import {SrdMonsterService, SrdMonsterSummary} from './srd-monster.service';
 import {SupabaseStorageService} from './supabase-storage.service';
+import {ImageCleanupService} from './image-cleanup.service';
 import {MonsterCatalogEntry, MonsterCatalogPagedList} from '../models/monster-catalog-types';
 
 interface SrdMonsterShape {
@@ -20,6 +21,8 @@ export class MonsterCatalogService {
     private srdMonsterService: SrdMonsterService,
     @service(SupabaseStorageService)
     private storageService: SupabaseStorageService,
+    @service(ImageCleanupService)
+    private imageCleanup: ImageCleanupService,
   ) {}
 
   async searchSrdMonsters(): Promise<SrdMonsterSummary[]> {
@@ -75,7 +78,6 @@ export class MonsterCatalogService {
     userId: string,
     buffer: Buffer,
     contentType: string,
-    originalName: string,
   ): Promise<MonsterCatalogEntry> {
     const entry = await this.repository.findById(id);
     if (!entry) throw new HttpErrors.NotFound('Monstro não encontrado no catálogo');
@@ -84,8 +86,10 @@ export class MonsterCatalogService {
         'Você não pode alterar um monstro catalogado por outro mestre',
       );
     }
-    const imageUrl = await this.storageService.uploadImage(buffer, contentType, originalName);
-    return this.repository.updateImage(id, imageUrl);
+    const imageUrl = await this.storageService.uploadImage(buffer, contentType);
+    const updated = await this.repository.updateImage(id, imageUrl);
+    await this.imageCleanup.deleteIfUnreferenced([entry.image_url]);
+    return updated;
   }
 
   async deleteCatalogEntry(id: string, userId: string): Promise<void> {
@@ -95,5 +99,7 @@ export class MonsterCatalogService {
       throw new HttpErrors.Forbidden('Você não pode remover um monstro catalogado por outro mestre');
     }
     await this.repository.delete(id);
+    // Monstros já adicionados a sessões continuam usando a mesma URL — aí ela fica (ver ImageCleanupService).
+    await this.imageCleanup.deleteIfUnreferenced([entry.image_url]);
   }
 }
