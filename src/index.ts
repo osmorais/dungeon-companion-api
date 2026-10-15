@@ -72,7 +72,12 @@ if (require.main === module) {
       openApiSpec: {
         // useful when used with OpenAPI-to-GraphQL to locate your application
         setServersFromRequest: true,
+        // Em produção não publica o mapa da API (/openapi.json) — o frontend não usa.
+        disabled: process.env.NODE_ENV === 'production',
       },
+      // Sem isso, mesmo sem o RestExplorerComponent, /explorer redireciona pro explorer hospedado
+      // em explorer.loopback.io apontando pro nosso /openapi.json.
+      apiExplorer: {disabled: process.env.NODE_ENV === 'production'},
     },
   };
   main(config).catch(err => {

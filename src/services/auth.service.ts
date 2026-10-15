@@ -74,17 +74,23 @@ export class AuthService {
     }
     const token = crypto.randomBytes(32).toString('hex');
     const expires = new Date(Date.now() + 3600000);
-    await this.userRepository.updateResetToken(user.id, token, expires);
+    // O banco guarda só o hash: quem ler a tabela (backup, vazamento) não consegue usar o link.
+    await this.userRepository.updateResetToken(
+      user.id,
+      hashResetToken(token),
+      expires,
+    );
     return token;
   }
 
   async resetPassword(token: string, newPassword: string): Promise<void> {
-    const user = await this.userRepository.findByResetToken(token);
+    const tokenHash = hashResetToken(token);
+    const user = await this.userRepository.findByResetToken(tokenHash);
     if (!user) {
       throw new HttpErrors.BadRequest('Token inválido ou expirado');
     }
     const passwordHash = await this.hashPassword(newPassword);
-    await this.userRepository.resetPassword(token, passwordHash);
+    await this.userRepository.resetPassword(tokenHash, passwordHash);
   }
 
   async googleAuth(idToken: string): Promise<{token: string; user: UserPublic}> {
@@ -126,4 +132,12 @@ export class AuthService {
     const jwtToken = this.generateToken(user);
     return {token: jwtToken, user: {id: user.id, email: user.email, full_name: user.full_name}};
   }
+}
+
+/**
+ * SHA-256 basta (sem salt/bcrypt): o token já é 32 bytes aleatórios, então não há o que adivinhar
+ * por dicionário — o hash só impede que o valor guardado no banco funcione como link.
+ */
+export function hashResetToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
 }

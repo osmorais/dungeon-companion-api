@@ -41,10 +41,14 @@ export class DungeonCompanionApiApplication extends BootMixin(
 
     this.static('/', path.join(__dirname, '../public'));
 
-    this.configure(RestExplorerBindings.COMPONENT).to({
-      path: '/explorer',
-    });
-    this.component(RestExplorerComponent);
+    // Explorer (documentação interativa da API) só fora de produção — em produção ele expunha
+    // publicamente todos os endpoints e um formulário pra chamá-los.
+    if (process.env.NODE_ENV !== 'production') {
+      this.configure(RestExplorerBindings.COMPONENT).to({
+        path: '/explorer',
+      });
+      this.component(RestExplorerComponent);
+    }
 
     this.component(AuthenticationComponent);
     registerAuthenticationStrategy(this, JWTStrategy);

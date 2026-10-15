@@ -12,6 +12,7 @@ import {
 import {authenticate} from '@loopback/authentication';
 import {SecurityBindings, UserProfile} from '@loopback/security';
 import {AccountService} from '../services/account.service';
+import {RateLimitService} from '../services/rate-limit.service';
 import {
   AccountExport,
   AccountProfile,
@@ -26,6 +27,8 @@ export class AccountController {
   constructor(
     @service(AccountService)
     private accountService: AccountService,
+    @service(RateLimitService)
+    private rateLimit: RateLimitService,
   ) {}
 
   @get('/api/account')
@@ -85,6 +88,8 @@ export class AccountController {
     body: DeleteAccountInput,
     @inject(RestBindings.Http.RESPONSE) httpResponse: Response,
   ): Promise<{message: string}> {
+    // A confirmação pede a senha — sem limite, viraria um jeito de testar senhas com o token.
+    this.rateLimit.consume('accountDeleteUser', currentUser.id);
     await this.accountService.deleteAccount(currentUser.id, body);
     httpResponse.clearCookie(COOKIE_NAME, clearCookieOptions());
     return {message: 'Conta excluída.'};

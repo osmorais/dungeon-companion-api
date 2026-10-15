@@ -19,11 +19,12 @@ export class UserRepository {
     return rows[0];
   }
 
-  async findByResetToken(token: string): Promise<User | undefined> {
+  /** `tokenHash` é o SHA-256 do token do link (ver hashResetToken) — o token puro nunca é gravado. */
+  async findByResetToken(tokenHash: string): Promise<User | undefined> {
     const rows = await this.db.sql<User[]>`
       SELECT id, email, password_hash, full_name, reset_token, reset_token_expires, created_at
       FROM users
-      WHERE reset_token = ${token}
+      WHERE reset_token = ${tokenHash}
         AND reset_token_expires > NOW()
       LIMIT 1
     `;
@@ -64,21 +65,21 @@ export class UserRepository {
     `;
   }
 
-  async updateResetToken(id: string, token: string, expires: Date): Promise<void> {
+  async updateResetToken(id: string, tokenHash: string, expires: Date): Promise<void> {
     await this.db.sql`
       UPDATE users
-      SET reset_token = ${token}, reset_token_expires = ${expires}
+      SET reset_token = ${tokenHash}, reset_token_expires = ${expires}
       WHERE id = ${id}
     `;
   }
 
-  async resetPassword(token: string, passwordHash: string): Promise<void> {
+  async resetPassword(tokenHash: string, passwordHash: string): Promise<void> {
     await this.db.sql`
       UPDATE users
       SET password_hash = ${passwordHash},
           reset_token = NULL,
           reset_token_expires = NULL
-      WHERE reset_token = ${token}
+      WHERE reset_token = ${tokenHash}
         AND reset_token_expires > NOW()
     `;
   }

@@ -1,10 +1,21 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {inject, service} from '@loopback/core';
-import {get, post, requestBody, Response, RestBindings} from '@loopback/rest';
+import {
+  get,
+  post,
+  Request,
+  requestBody,
+  Response,
+  RestBindings,
+} from '@loopback/rest';
 import {authenticate} from '@loopback/authentication';
 import {UserProfile, SecurityBindings, securityId} from '@loopback/security';
 import {AuthService} from '../services/auth.service';
 import {EmailService} from '../services/email.service';
+import {clientIp, RateLimitService} from '../services/rate-limit.service';
+
+/** Mínimo pra senha nova (cadastro e redefinição). Contas antigas com 6-7 continuam entrando. */
+export const PASSWORD_MIN_LENGTH = 8;
 
 export const COOKIE_NAME = 'token';
 const IS_PROD = process.env.NODE_ENV === 'production';
@@ -35,6 +46,7 @@ export class AuthController {
   constructor(
     @service(AuthService) private authService: AuthService,
     @service(EmailService) private emailService: EmailService,
+    @service(RateLimitService) private rateLimit: RateLimitService,
   ) {}
 
   @authenticate.skip()
@@ -50,7 +62,7 @@ export class AuthController {
             required: ['email', 'password'],
             properties: {
               email: {type: 'string', format: 'email'},
-              password: {type: 'string', minLength: 6},
+              password: {type: 'string', minLength: PASSWORD_MIN_LENGTH},
               full_name: {type: 'string'},
             },
           },
@@ -58,8 +70,10 @@ export class AuthController {
       },
     })
     body: {email: string; password: string; full_name?: string},
+    @inject(RestBindings.Http.REQUEST) request: Request,
     @inject(RestBindings.Http.RESPONSE) response: Response,
   ) {
+    this.rateLimit.consume('signupIp', clientIp(request));
     const {token, user} = await this.authService.signup(
       body.email,
       body.password,
@@ -89,8 +103,11 @@ export class AuthController {
       },
     })
     body: {email: string; password: string},
+    @inject(RestBindings.Http.REQUEST) request: Request,
     @inject(RestBindings.Http.RESPONSE) response: Response,
   ) {
+    this.rateLimit.consume('loginIp', clientIp(request));
+    this.rateLimit.consume('loginEmail', body.email);
     const {token, user} = await this.authService.login(body.email, body.password);
     response.cookie(COOKIE_NAME, token, cookieOptions());
     return {token, user};
@@ -122,7 +139,10 @@ export class AuthController {
       },
     })
     body: {email: string},
+    @inject(RestBindings.Http.REQUEST) request: Request,
   ) {
+    this.rateLimit.consume('forgotPasswordIp', clientIp(request));
+    this.rateLimit.consume('forgotPasswordEmail', body.email);
     const token = await this.authService.forgotPassword(body.email);
     if (token) {
       await this.emailService.sendPasswordReset(body.email, token);
@@ -143,14 +163,16 @@ export class AuthController {
             required: ['token', 'newPassword'],
             properties: {
               token: {type: 'string'},
-              newPassword: {type: 'string', minLength: 6},
+              newPassword: {type: 'string', minLength: PASSWORD_MIN_LENGTH},
             },
           },
         },
       },
     })
     body: {token: string; newPassword: string},
+    @inject(RestBindings.Http.REQUEST) request: Request,
   ) {
+    this.rateLimit.consume('resetPasswordIp', clientIp(request));
     await this.authService.resetPassword(body.token, body.newPassword);
     return {message: 'Senha redefinida com sucesso.'};
   }
@@ -172,8 +194,10 @@ export class AuthController {
       },
     })
     body: {idToken: string},
+    @inject(RestBindings.Http.REQUEST) request: Request,
     @inject(RestBindings.Http.RESPONSE) response: Response,
   ) {
+    this.rateLimit.consume('googleIp', clientIp(request));
     const {token, user} = await this.authService.googleAuth(body.idToken);
     response.cookie(COOKIE_NAME, token, cookieOptions());
     return {token, user};
