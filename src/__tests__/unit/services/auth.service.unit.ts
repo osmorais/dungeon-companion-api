@@ -27,6 +27,18 @@ describe('AuthService — redefinição de senha', () => {
     );
   });
 
+  it('esqueci a senha: limpa os tokens vencidos antes (mesmo pra e-mail desconhecido)', async () => {
+    users.stubs.findByEmail.resolves(undefined);
+    await service.forgotPassword('x@x.com');
+    sinon.assert.calledOnce(users.stubs.clearExpiredResetTokens);
+    users.stubs.findByEmail.resolves(user);
+    await service.forgotPassword('a@x.com');
+    sinon.assert.callOrder(
+      users.stubs.clearExpiredResetTokens,
+      users.stubs.updateResetToken,
+    );
+  });
+
   it('esqueci a senha: e-mail desconhecido não gera token', async () => {
     users.stubs.findByEmail.resolves(undefined);
     expect(await service.forgotPassword('x@x.com')).to.equal('');

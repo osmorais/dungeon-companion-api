@@ -67,6 +67,9 @@ export class AuthService {
   }
 
   async forgotPassword(email: string): Promise<string> {
+    // Retenção: token vencido não serve pra nada — some do banco na próxima solicitação de
+    // qualquer usuário (rota com limite de tentativas, então o custo é baixo).
+    await this.userRepository.clearExpiredResetTokens();
     const user = await this.userRepository.findByEmail(email);
     if (!user) {
       // Don't reveal whether the email exists

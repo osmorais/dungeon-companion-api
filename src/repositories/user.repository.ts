@@ -73,6 +73,16 @@ export class UserRepository {
     `;
   }
 
+  /** Apaga tokens de redefinição já vencidos (de todos os usuários). Devolve quantos limpou. */
+  async clearExpiredResetTokens(): Promise<number> {
+    const result = await this.db.sql`
+      UPDATE users
+      SET reset_token = NULL, reset_token_expires = NULL
+      WHERE reset_token IS NOT NULL AND reset_token_expires <= NOW()
+    `;
+    return result.count;
+  }
+
   async resetPassword(tokenHash: string, passwordHash: string): Promise<void> {
     await this.db.sql`
       UPDATE users
