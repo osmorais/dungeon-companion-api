@@ -41,6 +41,15 @@ export class CharacterOptionsRepository {
     return this.db.sql<WeaponRow[]>`SELECT id_weapon, name, damage_die, damage_type, properties, weight, price_value FROM weapon`;
   }
 
+  /** Armas do equipamento inicial (`startingWeaponNames`) no mesmo formato de `findWeapons`. */
+  async findWeaponsByNames(names: string[]): Promise<WeaponRow[]> {
+    if (names.length === 0) return [];
+    return this.db.sql<WeaponRow[]>`
+      SELECT id_weapon, name, damage_die, damage_type, properties, weight, price_value
+      FROM weapon WHERE name = ANY(${names})
+    `;
+  }
+
   async findSpells(): Promise<Spell[]> {
     return this.db.sql<Spell[]>`
       SELECT id_spell, name, description, casting_time, range_distance, duration,

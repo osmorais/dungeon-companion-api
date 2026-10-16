@@ -8,6 +8,7 @@ import {
   WIZARD_CLASS_ID,
   getWizardSpellbookSize,
 } from './rules';
+import {CLASS_SPELL_LISTS} from './class-spell-lists';
 
 /**
  * Regras que a criação de personagem (nível 1) confere no backend — antes só o wizard limitava
@@ -161,11 +162,18 @@ export const RACE_ABILITY_BONUS_CHOICE: Record<
   6: {count: 2, amount: 1, exclude: ['CHA']},
 };
 
-/** Truque racial que entra em `choices.spells` além da cota da classe (Tiefling, Alto Elfo, Gnomo da Floresta). */
-export const RACE_FREE_CANTRIPS: Record<number, number> = {8: 1};
-export const SUBRACE_FREE_CANTRIPS: Record<string, number> = {
-  'alto-elfo': 1,
-  'gnomo-das-florestas': 1,
+/**
+ * Truque racial que entra em `choices.spells` além da cota da classe: fixo (Tiefling:
+ * Taumaturgia; Gnomo da Floresta: Ilusão Menor) ou qualquer truque de mago (Alto Elfo). Espelho de
+ * `racial-cantrips.ts` do web.
+ */
+export type RacialCantrip = {fixedSpellId?: number; spellListClassId?: number};
+export const RACE_FREE_CANTRIPS: Record<number, RacialCantrip> = {
+  8: {fixedSpellId: 333},
+};
+export const SUBRACE_FREE_CANTRIPS: Record<string, RacialCantrip> = {
+  'alto-elfo': {spellListClassId: WIZARD_CLASS_ID},
+  'gnomo-das-florestas': {fixedSpellId: 179},
 };
 
 /** Domínios do Clérigo (escolhidos no nível 1) com "Proficiência Adicional: armaduras pesadas". */
@@ -227,20 +235,30 @@ export function validateSkillChoices(
   }
 }
 
-/** Quantos truques e magias com círculo o personagem escolhe no nível 1. */
+export type CreationSpellLimits = {
+  cantrips: number;
+  leveled: number;
+  maxCircle: number;
+  /** Lista de magias da classe (vazia pra quem não conjura). */
+  classList: readonly number[];
+  racial: RacialCantrip | null;
+};
+
+/** Quantos truques e magias com círculo o personagem escolhe no nível 1, e de quais listas. */
 export function creationSpellLimits(
   classRule: ClassRule,
   idRace: number,
   subrace: string | null,
-): {cantrips: number; leveled: number; maxCircle: number} {
+): CreationSpellLimits {
   const resources = classRule.featuresByLevel?.[1]?.resources;
   const count = (key: string) => {
     const n = parseInt(resources?.[key] ?? '', 10);
     return Number.isFinite(n) ? n : 0;
   };
   const racial =
-    (RACE_FREE_CANTRIPS[idRace] ?? 0) +
-    (subrace ? (SUBRACE_FREE_CANTRIPS[subrace] ?? 0) : 0);
+    RACE_FREE_CANTRIPS[idRace] ??
+    (subrace ? SUBRACE_FREE_CANTRIPS[subrace] : undefined) ??
+    null;
   let leveled = 0;
   if (KNOWN_CASTER_CLASS_IDS.has(classRule.id_class))
     leveled = count('Magias Conhecidas');
@@ -250,14 +268,19 @@ export function creationSpellLimits(
     leveled = 0;
   return {
     cantrips:
-      (classRule.isSpellcaster ? count('Truques Conhecidos') : 0) + racial,
+      (classRule.isSpellcaster ? count('Truques Conhecidos') : 0) +
+      (racial ? 1 : 0),
     leveled,
     maxCircle: 1,
+    classList: classRule.isSpellcaster
+      ? (CLASS_SPELL_LISTS[classRule.id_class] ?? [])
+      : [],
+    racial,
   };
 }
 
 export function validateSpellChoices(
-  limits: {cantrips: number; leveled: number; maxCircle: number},
+  limits: CreationSpellLimits,
   spells: {id_spell: number; spell_level: number | null}[],
   submittedIds: number[],
 ): void {
@@ -268,6 +291,20 @@ export function validateSpellChoices(
     if (!known.has(id)) throw new Error(`Magia inexistente: ${id}`);
     if (known.get(id)! > limits.maxCircle)
       throw new Error('Magia acima do círculo permitido no nível 1');
+  }
+  // Fora da lista da classe só cabe o truque racial (um).
+  const classList = new Set(limits.classList);
+  const isRacialOption = (id: number) =>
+    !!limits.racial &&
+    known.get(id) === 0 &&
+    (limits.racial.fixedSpellId === id ||
+      (limits.racial.spellListClassId !== undefined &&
+        (CLASS_SPELL_LISTS[limits.racial.spellListClassId] ?? []).includes(
+          id,
+        )));
+  const offList = submittedIds.filter(id => !classList.has(id));
+  if (offList.some(id => !isRacialOption(id)) || offList.length > 1) {
+    throw new Error('Magia fora da lista da classe');
   }
   const cantrips = submittedIds.filter(id => known.get(id) === 0).length;
   if (cantrips > limits.cantrips)

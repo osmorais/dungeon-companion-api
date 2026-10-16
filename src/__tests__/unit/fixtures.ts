@@ -1,4 +1,7 @@
 /* eslint-disable @typescript-eslint/naming-convention */
+import {readFileSync} from 'fs';
+import {join} from 'path';
+import {CLASS_SPELL_LISTS} from '../../services/character-sheet/class-spell-lists';
 import {
   Armour,
   Skill,
@@ -51,8 +54,36 @@ export function weapon(name: string, properties: string | null): WeaponRow {
   };
 }
 
-/** Círculo de cada magia criada por `spell()` — o stub de `findSpellLevelsByIds` lê daqui. */
-export const SPELL_LEVELS = new Map<number, number>();
+/**
+ * Círculo de cada magia: o do seed (`database_inserts.sql`, igual a produção) e, por cima, o de
+ * cada magia criada por `spell()` — o stub de `findSpellLevelsByIds` lê daqui.
+ */
+export const SPELL_LEVELS = new Map<number, number>(seedSpellLevels());
+
+function seedSpellLevels(): [number, number][] {
+  const seed = readFileSync(
+    join(process.cwd(), 'docs/database/database_inserts.sql'),
+    'utf8',
+  );
+  const start = seed.search(/INSERT INTO Spell/i);
+  const block = seed.slice(start, start + seed.slice(start).search(/;\r?\n/));
+  // (id, 'nome', 'descrição', tempo, alcance, duração, material, V, S, M, círculo, escola)
+  return [
+    ...block.matchAll(
+      /\r?\n\((\d+), '(?:[^']|'')*', '(?:[^']|'')*', (?:'(?:[^']|'')*'|NULL), (?:\d+|NULL), (?:'(?:[^']|'')*'|NULL), (?:'(?:[^']|'')*'|NULL), (?:TRUE|FALSE), (?:TRUE|FALSE), (?:TRUE|FALSE), (\d+)/g,
+    ),
+  ].map(m => [Number(m[1]), Number(m[2])]);
+}
+
+/** A `nth`-ésima magia de verdade do círculo `level` na lista da classe (nome genérico). */
+export function classSpell(idClass: number, level: number, nth = 0): Spell {
+  const ids = CLASS_SPELL_LISTS[idClass].filter(
+    id => SPELL_LEVELS.get(id) === level,
+  );
+  if (ids.length <= nth)
+    throw new Error(`Classe ${idClass} sem magia de círculo ${level}`);
+  return spell(ids[nth], `Magia ${ids[nth]}`, level);
+}
 
 export function spell(
   id: number,

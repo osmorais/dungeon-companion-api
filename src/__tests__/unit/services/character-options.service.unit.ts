@@ -20,7 +20,9 @@ describe('CharacterOptionsService', () => {
       })),
     );
     repository.stubs.findRaces.resolves([]);
-    repository.stubs.findClasses.resolves([]);
+    repository.stubs.findClasses.resolves([
+      {id_class: 1, name: 'Bárbaro', starting_gold_po: 0},
+    ] as never);
     repository.stubs.findBackgrounds.resolves(
       Object.values(BACKGROUNDS).map(b => ({
         id_background: b.id_background,
@@ -54,5 +56,18 @@ describe('CharacterOptionsService', () => {
         ids: 2,
       });
     }
+  });
+
+  it('armas do kit vão pro wizard na classe e no antecedente', async () => {
+    const {classes, backgrounds} = await givenOptions();
+    expect(classes[0].starting_weapons).to.eql([
+      'Machado Grande',
+      'Machadinha',
+      'Azagaia',
+    ]);
+    const outlander = backgrounds.find(b => b.id_background === 7)!;
+    expect(outlander.starting_weapons).to.eql(['Bordão']);
+    const sage = backgrounds.find(b => b.id_background === 12)!;
+    expect(sage.starting_weapons).to.eql([]);
   });
 });

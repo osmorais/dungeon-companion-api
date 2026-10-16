@@ -66,6 +66,7 @@ import {
   validateSkillChoices,
   validateSpellChoices,
 } from './character-sheet/creation-rules';
+import {startingWeaponNames} from './character-sheet/starting-items';
 import {
   SPELL_SLOTS,
   KNOWN_CASTER_CLASS_IDS,
@@ -416,6 +417,21 @@ export class CharacterSheetService {
     let sheet: CharacterSheet;
     let computedSkills: CharacterSkillInsert[];
     try {
+      // Armas do kit da classe/antecedente entram junto com as escolhidas no wizard (sem repetir).
+      const kitWeapons = await this.optionsRepository.findWeaponsByNames(
+        startingWeaponNames(core_build.id_class, core_build.id_background),
+      );
+      const chosenIds = new Set(input.equipment.weapons.map(w => w.id_weapon));
+      input = {
+        ...input,
+        equipment: {
+          ...input.equipment,
+          weapons: [
+            ...input.equipment.weapons,
+            ...kitWeapons.filter(w => !chosenIds.has(w.id_weapon)),
+          ],
+        },
+      };
       sheet = this.build(input);
       const allSkills = await this.repository.findAllSkills();
       computedSkills = this.computeSkills(allSkills, input, sheet);

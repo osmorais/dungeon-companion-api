@@ -4,9 +4,22 @@ import {readFileSync} from 'fs';
 import {join} from 'path';
 import {
   STARTING_ITEM_MAP,
+  STARTING_WEAPON_MAP,
   startingInventory,
+  startingWeaponNames,
 } from '../../../services/character-sheet/starting-items';
 import {BACKGROUNDS, CLASSES} from '../../../services/character-sheet/rules';
+
+/** Nomes da tabela `weapon` no seed. */
+function weaponNames(): Set<string> {
+  const seed = readFileSync(
+    join(process.cwd(), 'docs/database/database_inserts.sql'),
+    'utf8',
+  );
+  const start = seed.search(/INSERT INTO Weapon/i);
+  const block = seed.slice(start, start + seed.slice(start).search(/;\r?\n/));
+  return new Set([...block.matchAll(/\(\s*'((?:[^']|'')*)'/g)].map(m => m[1]));
+}
 
 /** Nomes da tabela `item` no seed (fonte de verdade do catálogo, igual a produção). */
 function catalogNames(): Set<string> {
@@ -84,5 +97,56 @@ describe('starting-items', () => {
     expect(
       startingInventory(4, null).some(i => i.item === 'Livro de orações'),
     ).to.be.false();
+  });
+
+  describe('armas do kit', () => {
+    const ARMOR_SHIELD_GOLD = [
+      'Couro Batido',
+      'Cota de Malha',
+      'Cota de Escamas',
+      'Escudo',
+      'Escudo de Madeira',
+      'Bolsa com 10 po',
+      'Bolsa com 15 po',
+      'Bolsa com 25 po',
+      '5 po',
+    ];
+
+    it('todo item do livro que não vai pro inventário é arma mapeada, armadura, escudo ou dinheiro', () => {
+      const leftOut = Object.entries(STARTING_ITEM_MAP)
+        .filter(([, items]) => items.length === 0)
+        .map(([name]) => name)
+        .filter(
+          name =>
+            !ARMOR_SHIELD_GOLD.includes(name) && !STARTING_WEAPON_MAP[name],
+        );
+      expect(leftOut).to.eql([]);
+    });
+
+    it('toda arma do kit existe na tabela weapon (seed)', () => {
+      const weapons = weaponNames();
+      const missing = Object.values(STARTING_WEAPON_MAP).filter(
+        w => !weapons.has(w),
+      );
+      expect(missing).to.eql([]);
+    });
+
+    it('Bárbaro Forasteiro: armas da classe e do antecedente, sem repetir', () => {
+      expect(startingWeaponNames(1, 7)).to.eql([
+        'Machado Grande',
+        'Machadinha',
+        'Azagaia',
+        'Bordão',
+      ]);
+      expect(startingWeaponNames(8, null)).to.eql([
+        'Rapieira',
+        'Arco Curto',
+        'Adaga',
+      ]);
+      expect(startingWeaponNames(12, null)).to.eql([
+        'Espada Curta',
+        'Arco Longo',
+      ]);
+    });
   });
 });

@@ -18,6 +18,7 @@ import {
   SUBRACES,
 } from '../../../services/character-sheet/rules';
 import {normalizeSkill} from '../../../services/character-sheet/calculator';
+import {CLASS_SPELL_LISTS} from '../../../services/character-sheet/class-spell-lists';
 
 describe('creation-rules', () => {
   it('toda classe tem cota de perícias; listas só com perícias conhecidas', () => {
@@ -163,22 +164,22 @@ describe('creation-rules', () => {
 
   describe('magias no nível 1', () => {
     it('cota por classe + truque racial', () => {
-      expect(creationSpellLimits(CLASSES[2], 9, null)).to.eql({
+      expect(creationSpellLimits(CLASSES[2], 9, null)).to.containDeep({
         cantrips: 2,
         leveled: 4,
         maxCircle: 1,
       }); // Bardo
-      expect(creationSpellLimits(CLASSES[9], 9, null)).to.eql({
+      expect(creationSpellLimits(CLASSES[9], 9, null)).to.containDeep({
         cantrips: 3,
         leveled: 6,
         maxCircle: 1,
       }); // Mago
-      expect(creationSpellLimits(CLASSES[4], 9, null)).to.eql({
+      expect(creationSpellLimits(CLASSES[4], 9, null)).to.containDeep({
         cantrips: 3,
         leveled: 0,
         maxCircle: 1,
       }); // Clérigo
-      expect(creationSpellLimits(CLASSES[7], 9, null)).to.eql({
+      expect(creationSpellLimits(CLASSES[7], 9, null)).to.containDeep({
         cantrips: 0,
         leveled: 0,
         maxCircle: 1,
@@ -191,7 +192,80 @@ describe('creation-rules', () => {
         creationSpellLimits(CLASSES[7], 5, 'gnomo-das-florestas').cantrips,
       ).to.equal(1);
     });
-    const limits = {cantrips: 1, leveled: 1, maxCircle: 1};
+    const limits = {
+      cantrips: 1,
+      leveled: 1,
+      maxCircle: 1,
+      classList: [1, 2, 3, 4, 5],
+      racial: null,
+    };
+    it('lista da classe: Guerreiro não conjura (lista vazia); Bardo usa a lista dele', () => {
+      expect(creationSpellLimits(CLASSES[7], 9, null).classList).to.eql([]);
+      expect(creationSpellLimits(CLASSES[2], 9, null).classList).to.equal(
+        CLASS_SPELL_LISTS[2],
+      );
+    });
+    it('magia fora da lista da classe é recusada; só o truque racial passa', () => {
+      const bard = {...limits, classList: [9001, 9002]};
+      expect(() =>
+        validateSpellChoices(bard, [{id_spell: 99, spell_level: 0}], [99]),
+      ).to.throw(/fora da lista/);
+      const tiefling = {...bard, cantrips: 2, racial: {fixedSpellId: 333}};
+      validateSpellChoices(
+        tiefling,
+        [
+          {id_spell: 9001, spell_level: 0},
+          {id_spell: 333, spell_level: 0},
+        ],
+        [9001, 333],
+      );
+      expect(() =>
+        validateSpellChoices(
+          tiefling,
+          [
+            {id_spell: 333, spell_level: 0},
+            {id_spell: 99, spell_level: 0},
+          ],
+          [333, 99],
+        ),
+      ).to.throw(/fora da lista/);
+      // Alto Elfo: qualquer truque de mago, mas não magia de círculo nem truque de outra lista
+      const highElf = {...bard, cantrips: 1, racial: {spellListClassId: 9}};
+      const wizardCantrip = CLASS_SPELL_LISTS[9][0];
+      validateSpellChoices(
+        highElf,
+        [{id_spell: wizardCantrip, spell_level: 0}],
+        [wizardCantrip],
+      );
+      expect(() =>
+        validateSpellChoices(
+          highElf,
+          [{id_spell: wizardCantrip, spell_level: 1}],
+          [wizardCantrip],
+        ),
+      ).to.throw(/fora da lista/);
+    });
+    it('listas iguais às do web (contagem e soma dos ids por classe)', () => {
+      const summary = Object.fromEntries(
+        Object.entries(CLASS_SPELL_LISTS).map(([id, ids]) => [
+          id,
+          [ids.length, ids.reduce((a, b) => a + b, 0)],
+        ]),
+      );
+      expect(summary).to.eql({
+        2: [107, 20563],
+        3: [69, 13877],
+        4: [113, 20889],
+        5: [114, 20970],
+        6: [120, 24446],
+        9: [196, 38604],
+        11: [55, 8461],
+        12: [45, 7674],
+      });
+      for (const ids of Object.values(CLASS_SPELL_LISTS)) {
+        expect(new Set(ids).size).to.equal(ids.length);
+      }
+    });
     it('aceita dentro da cota', () => {
       validateSpellChoices(
         limits,

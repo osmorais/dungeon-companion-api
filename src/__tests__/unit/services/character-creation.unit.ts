@@ -38,6 +38,7 @@ import {
   DB_SKILLS,
   dbSkill,
   persistedFromCreation,
+  classSpell,
   spell,
   SPELL_LEVELS,
   weapon,
@@ -72,6 +73,7 @@ describe('Criação de personagem → ficha gravada', () => {
       },
     );
     optionsRepository.stubs.findSpellsByIdsUpToLevel.resolves([]);
+    optionsRepository.stubs.findWeaponsByNames.resolves([]);
     optionsRepository.stubs.findSpellLevelsByIds.callsFake(async ids =>
       ids.map(id => ({id_spell: id, spell_level: SPELL_LEVELS.get(id) ?? 0})),
     );
@@ -119,9 +121,9 @@ describe('Criação de personagem → ficha gravada', () => {
   const RACE_EXTRA_SKILL_CHOICES: Record<number, number> = {6: 2};
   /** Truque racial que o wizard injeta em `choices.spells` (Alto Elfo escolhe um truque de mago). */
   const RACIAL_CANTRIP: Record<string, Spell> = {
-    'alto-elfo': spell(902, 'Raio de Gelo', 0),
-    'gnomo-das-florestas': spell(901, 'Ilusão Menor', 0),
-    tiefling: spell(900, 'Taumaturgia', 0),
+    'alto-elfo': spell(288, 'Raio de Gelo', 0),
+    'gnomo-das-florestas': spell(179, 'Ilusão Menor', 0),
+    tiefling: spell(333, 'Taumaturgia', 0),
   };
   /** id_skill de cada perícia do antecedente (`BackgroundRule.skills`). */
   const SKILL_ID_BY_KEY: Record<string, number> = {
@@ -187,10 +189,10 @@ describe('Criação de personagem → ficha gravada', () => {
       opts.subrace ?? normalizeKey(RACES[opts.id_race].displayName);
     if (RACIAL_CANTRIP[cantripKey]) spells.push(RACIAL_CANTRIP[cantripKey]);
     if (SPELLCASTERS_WITH_CREATION_SPELLS.includes(opts.id_class)) {
-      spells.push(spell(10, 'Truque da Classe', 0));
+      spells.push(classSpell(opts.id_class, 0));
     }
     if (KNOWS_LEVELED_SPELLS_AT_CREATION.includes(opts.id_class)) {
-      spells.push(spell(20, 'Magia de 1º Círculo', 1));
+      spells.push(classSpell(opts.id_class, 1));
     }
 
     let expertise: number[] | undefined;
@@ -816,9 +818,9 @@ describe('Criação de personagem → ficha gravada', () => {
           choices: {
             fighting_style: undefined,
             spells: [
-              spell(1, 'Luz', 0),
-              spell(2, 'Mãos Mágicas', 0),
-              spell(3, 'Mísseis Mágicos', 1),
+              spell(204, 'Luz', 0),
+              spell(211, 'Mãos Mágicas', 0),
+              spell(222, 'Mísseis Mágicos', 1),
             ],
           },
         }),
@@ -839,7 +841,7 @@ describe('Criação de personagem → ficha gravada', () => {
           core_build: {id_class: 4, id_subclass: 'vida'},
           choices: {
             fighting_style: undefined,
-            spells: [spell(7, 'Chama Sagrada', 0)],
+            spells: [spell(58, 'Chama Sagrada', 0)],
           },
         }),
       );
@@ -853,7 +855,7 @@ describe('Criação de personagem → ficha gravada', () => {
       const {loaded} = await createAndLoad(
         characterInput({
           core_build: {id_race: 8},
-          choices: {spells: [spell(900, 'Taumaturgia', 0)]},
+          choices: {spells: [spell(333, 'Taumaturgia', 0)]},
         }),
       );
       expect(loaded.spells.map(s => s.name)).to.eql(['Taumaturgia']);
@@ -1018,12 +1020,12 @@ describe('Criação de personagem → ficha gravada', () => {
             fighting_style: undefined,
           },
         });
-      const cantrips = [1, 2, 3, 4].map(i => spell(950 + i, `Truque ${i}`, 0));
+      const cantrips = [0, 1, 2, 3].map(i => classSpell(9, 0, i));
       await rejects(wizard(cantrips), /Truques demais/);
-      await rejects(wizard([spell(960, 'Bola de Fogo', 3)]), /círculo/);
+      await rejects(wizard([spell(44, 'Bola de Fogo', 3)]), /círculo/);
       await rejects(
-        characterInput({choices: {spells: [spell(961, 'Raio de Fogo', 0)]}}),
-        /Truques demais/,
+        characterInput({choices: {spells: [spell(287, 'Raio de Fogo', 0)]}}),
+        /fora da lista/,
       );
     });
 
@@ -1054,6 +1056,43 @@ describe('Criação de personagem → ficha gravada', () => {
           RACES[1].toolProficiencyChoice!.options[0],
         ),
       );
+    });
+
+    it('magia de outra classe é recusada; truque racial do Tiefling passa', async () => {
+      const bard = (spells: Spell[], id_race = 9) =>
+        characterInput({
+          core_build: {id_class: 2, class: 'Bardo', id_race},
+          choices: {skills: [], spells, fighting_style: undefined},
+        });
+      await rejects(bard([spell(44, 'Bola de Fogo', 3)]), /círculo/);
+      await rejects(bard([spell(58, 'Chama Sagrada', 0)]), /fora da lista/);
+      await createAndLoad(
+        bard([classSpell(2, 0), spell(333, 'Taumaturgia', 0)], 8),
+      );
+    });
+
+    it('armas do kit da classe e do antecedente entram na ficha sem repetir', async () => {
+      optionsRepository.stubs.findWeaponsByNames.resolves([
+        {...weapon('Espada Longa', 'Versátil'), id_weapon: 133},
+        {...weapon('Besta Leve', 'Munição, Duas Mãos'), id_weapon: 123},
+      ]);
+      const {loaded} = await createAndLoad(
+        characterInput({
+          equipment: {
+            weapons: [{...weapon('Espada Longa', 'Versátil'), id_weapon: 133}],
+          },
+        }),
+      );
+      expect(
+        optionsRepository.stubs.findWeaponsByNames.calledWith([
+          'Espada Longa',
+          'Besta Leve',
+        ]),
+      ).to.be.true();
+      expect(loaded.weapons.map(w => w.name).sort()).to.eql([
+        'Besta Leve',
+        'Espada Longa',
+      ]);
     });
 
     it('Clérigo da Vida pode usar armadura pesada; da Luz não', async () => {

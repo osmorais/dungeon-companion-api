@@ -166,6 +166,54 @@ export const STARTING_ITEM_MAP: Record<string, StartingItem[]> = {
   'Dados de osso ou baralho': [one('Jogo de dados ou baralho')],
 };
 
+/**
+ * Armas do equipamento inicial (nome do livro → arma da tabela `weapon`) — entram na ficha
+ * (`character_weapon`) na criação, junto com as que o jogador marcou no wizard, sem repetir.
+ * Quantidade não importa na ficha ("Quatro Azagaias" vira uma linha de Azagaia).
+ */
+export const STARTING_WEAPON_MAP: Record<string, string> = {
+  'Machado Grande': 'Machado Grande',
+  'Dois Machados de Mão': 'Machadinha',
+  'Quatro Azagaias': 'Azagaia',
+  Rapieira: 'Rapieira',
+  'Besta Leve com 20 virotes': 'Besta Leve',
+  Bastão: 'Bordão',
+  Bordão: 'Bordão',
+  Maça: 'Maça',
+  Cimitarra: 'Cimitarra',
+  'Espada Longa': 'Espada Longa',
+  'Espada Curta': 'Espada Curta',
+  'Duas Espadas Curtas': 'Espada Curta',
+  'Duas Adagas': 'Adaga',
+  'Dez Dardos': 'Dardo',
+  'Arco Curto com 20 flechas': 'Arco Curto',
+  'Arco Longo com 20 flechas': 'Arco Longo',
+  'Clava (malagueta)': 'Porrete',
+};
+
+/** Nomes (tabela `weapon`) das armas do kit da classe e do antecedente, sem repetir. */
+export function startingWeaponNames(
+  idClass: number,
+  idBackground: number | null,
+): string[] {
+  const names = [
+    ...resolveClass(idClass).startingEquipment,
+    ...(idBackground ? resolveBackground(idBackground).startingItems : []),
+  ];
+  return kitWeapons(names);
+}
+
+/** Armas (tabela `weapon`) de uma lista de equipamento do livro, sem repetir. */
+export function kitWeapons(equipmentNames: string[]): string[] {
+  return [
+    ...new Set(
+      equipmentNames.flatMap(n =>
+        STARTING_WEAPON_MAP[n] ? [STARTING_WEAPON_MAP[n]] : [],
+      ),
+    ),
+  ];
+}
+
 /** Itens do catálogo (somados por nome) que o personagem recebe ao entrar numa sessão. */
 export function startingInventory(
   idClass: number,

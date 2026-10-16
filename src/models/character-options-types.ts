@@ -80,6 +80,8 @@ export interface CharacterClass {
   fighting_style_level?: number;
   /** Riqueza inicial alternativa (tabela "Riqueza Inicial por Classe" do PHB) — pra rolar na criação em vez de pegar o equipamento fixo. */
   starting_gold_dice: {count: number; sides: number; multiplier: number};
+  /** Armas do equipamento inicial da classe (tabela `weapon`) — entram na ficha na criação. */
+  starting_weapons: string[];
 }
 
 export interface Background {
@@ -93,6 +95,8 @@ export interface Background {
   skill_ids: number[];
   tools: string[];
   feature: TraitInfo;
+  /** Armas do equipamento do antecedente (tabela `weapon`) — entram na ficha na criação. */
+  starting_weapons: string[];
 }
 
 export interface Alignment {
