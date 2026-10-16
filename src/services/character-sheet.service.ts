@@ -78,6 +78,7 @@ import {
   hasArcaneSecretsChoice,
 } from './character-sheet/rules';
 import {FEATS} from './character-sheet/feats';
+import {buildSpellRoll} from './character-sheet/spell-mechanics';
 import {CLASS_ARMOUR_RULES} from './character-sheet/armour-rules';
 
 @injectable({scope: BindingScope.TRANSIENT})
@@ -702,6 +703,20 @@ export class CharacterSheetService {
     const spellcastingInfo = spellcastingResult.is_spellcaster
       ? spellcastingResult
       : undefined;
+    // Rolagem pronta (ataque/dano por círculo) pras magias com mecânica cadastrada — só pra quem
+    // conjura (truque racial de classe não conjuradora fica sem, não há bônus de ataque de magia).
+    const spellsWithRolls: Spell[] = spellcastingResult.is_spellcaster
+      ? spellList.map(s => {
+          const roll = buildSpellRoll(
+            s.id_spell,
+            s.spellLevel,
+            character.level,
+            getMod(stats[spellcastingResult.spellcasting_ability]),
+            spellcastingResult.spell_attack_bonus,
+          );
+          return roll ? {...s, roll} : s;
+        })
+      : spellList;
 
     // Só consulta se a classe realmente precisa preparar magia — evita uma query à toa pras
     // outras (maioria das classes/personagens não-conjuradores).
@@ -785,7 +800,7 @@ export class CharacterSheetService {
           has_shield: character.has_shield,
         },
         spellcasting_info: spellcastingInfo,
-        spells: spellList,
+        spells: spellsWithRolls,
         avatar_preset: character.avatar_preset ?? null,
         image_url: character.image_url ?? null,
         /** Trava a UI de preparar magia — em combate não é possível trocar o que está preparado. */

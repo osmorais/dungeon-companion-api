@@ -112,6 +112,24 @@ export interface Spell {
   school: string | null;
   /** Só presente na ficha de um personagem já criado (não no catálogo de opções). */
   is_prepared?: boolean;
+  /** Rolagem ao lançar (ataque/dano), já calculada pro personagem — só na ficha e só pras magias
+   *  com mecânica cadastrada em `spell-mechanics.ts`. */
+  roll?: SpellRoll;
+}
+
+/** Rolagem de uma magia pro personagem — ver `buildSpellRoll`. */
+export interface SpellRoll {
+  kind: 'attack' | 'auto';
+  attack_type: 'melee' | 'ranged' | null;
+  /** Bônus de ataque de magia do personagem (`null` em acerto automático). */
+  attack_bonus: number | null;
+  damage_type: string;
+  /** Nome de cada rolagem quando há mais de uma (raio, feixe, dardo). */
+  instance_label: string | null;
+  /** Opção rolada quando a magia tem várias (ex.: "Punho Cerrado"). */
+  variant: string | null;
+  /** Por círculo usado (chave "0" pra truque): quantas rolagens e os dados de cada uma. */
+  by_slot: Record<string, {instances: number; dice_count: number; dice_sides: number; modifier: number}>;
 }
 
 export interface Armour {

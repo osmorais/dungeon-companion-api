@@ -879,6 +879,55 @@ describe('CharacterSheetService', () => {
   });
 
   // -------------------------------------------------------------------------
+  describe('rolagem das magias na ficha', () => {
+    it('conjurador: magias com mecânica ganham a rolagem pronta, as outras não', async () => {
+      // Mago nv5, INT 16 (+3), prof 3 → ataque de magia +6
+      repository.stubs.findCharacterById.resolves(
+        rawCharacter({
+          character: {
+            id_class: 9,
+            level: 5,
+            proficiency_bonus: 3,
+            chosen_fighting_style: null,
+          },
+          scores: {INT: 16},
+          spells: [
+            {...spell(287, 'Raio de Fogo', 0), is_prepared: false},
+            {...spell(222, 'Mísseis Mágicos', 1), is_prepared: true},
+            {...spell(1, 'Luz', 0), is_prepared: false},
+          ],
+        }),
+      );
+      const sheet = (await service.loadCharacter(1, 'owner'))!.character_sheet;
+      const byName = new Map(sheet.spells.map(s => [s.name, s]));
+      expect(byName.get('Raio de Fogo')!.roll).to.containDeep({
+        kind: 'attack',
+        attack_bonus: 6,
+        by_slot: {
+          '0': {instances: 1, dice_count: 2, dice_sides: 10, modifier: 0},
+        },
+      });
+      expect(byName.get('Mísseis Mágicos')!.roll!.by_slot['3']).to.eql({
+        instances: 5,
+        dice_count: 1,
+        dice_sides: 4,
+        modifier: 1,
+      });
+      expect(byName.get('Luz')!.roll).to.be.undefined();
+    });
+
+    it('classe não conjuradora (truque racial) fica sem rolagem', async () => {
+      repository.stubs.findCharacterById.resolves(
+        rawCharacter({
+          spells: [{...spell(288, 'Raio de Gelo', 0), is_prepared: false}],
+        }),
+      );
+      const sheet = (await service.loadCharacter(1, 'owner'))!.character_sheet;
+      expect(sheet.spells[0].roll).to.be.undefined();
+    });
+  });
+
+  // -------------------------------------------------------------------------
   describe('equipamento', () => {
     it('recalcula a CA ao trocar armadura/escudo', async () => {
       givenCharacter();
