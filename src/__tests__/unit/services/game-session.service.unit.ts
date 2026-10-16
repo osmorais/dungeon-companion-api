@@ -550,6 +550,8 @@ describe('GameSessionService', () => {
           id_character: 1,
           actor_name: 'Merlin',
           spell_name: 'Bola de Fogo',
+          save_dc: null,
+          save_ability: null,
         },
       ]);
       expect(repository.stubs.addRoll.called).to.be.false();
@@ -562,6 +564,40 @@ describe('GameSessionService', () => {
           'u',
         ),
       ).to.be.rejectedWith(/não pode anunciar/);
+    });
+
+    it('magia de resistência leva a CD e o atributo pro toast; valida os dois juntos', async () => {
+      repository.stubs.hasSessionAccess.resolves(true);
+      repository.stubs.canPostRollFor.resolves(true);
+      const base = {
+        id_character: 1,
+        actor_name: 'Merlin',
+        spell_name: 'Bola de Fogo',
+      };
+      await service.announceSpellCast(
+        'gs',
+        {...base, save_dc: 15, save_ability: 'DEX'},
+        'u',
+      );
+      expect(events[0]).to.containDeep({save_dc: 15, save_ability: 'DEX'});
+
+      await expect(
+        service.announceSpellCast('gs', {...base, save_dc: 15}, 'u'),
+      ).to.be.rejectedWith(/vão juntos/);
+      await expect(
+        service.announceSpellCast(
+          'gs',
+          {...base, save_dc: 0, save_ability: 'DEX'},
+          'u',
+        ),
+      ).to.be.rejectedWith(/save_dc inválido/);
+      await expect(
+        service.announceSpellCast(
+          'gs',
+          {...base, save_dc: 15, save_ability: 'XYZ' as 'DEX'},
+          'u',
+        ),
+      ).to.be.rejectedWith(/save_ability inválido/);
     });
   });
 });

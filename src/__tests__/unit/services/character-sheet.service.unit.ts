@@ -895,6 +895,7 @@ describe('CharacterSheetService', () => {
             {...spell(287, 'Raio de Fogo', 0), is_prepared: false},
             {...spell(222, 'Mísseis Mágicos', 1), is_prepared: true},
             {...spell(1, 'Luz', 0), is_prepared: false},
+            {...spell(44, 'Bola de Fogo', 3), is_prepared: true},
           ],
         }),
       );
@@ -912,8 +913,16 @@ describe('CharacterSheetService', () => {
         dice_count: 1,
         dice_sides: 4,
         modifier: 1,
+        extra_dice: [],
       });
       expect(byName.get('Luz')!.roll).to.be.undefined();
+      // CD = 8 + prof 3 + INT 3
+      expect(byName.get('Bola de Fogo')!.roll).to.containDeep({
+        kind: 'save',
+        save_ability: 'DEX',
+        save_dc: 14,
+        save_on_success: 'half',
+      });
     });
 
     it('classe não conjuradora (truque racial) fica sem rolagem', async () => {

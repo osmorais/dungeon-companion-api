@@ -744,6 +744,22 @@ export class GameSessionService {
       throw new HttpErrors.UnprocessableEntity('actor_name é obrigatório');
     if (!input.spell_name?.trim())
       throw new HttpErrors.UnprocessableEntity('spell_name é obrigatório');
+    const saveDc = input.save_dc ?? null;
+    const saveAbility = input.save_ability ?? null;
+    if ((saveDc === null) !== (saveAbility === null))
+      throw new HttpErrors.UnprocessableEntity(
+        'save_dc e save_ability vão juntos',
+      );
+    if (
+      saveDc !== null &&
+      (!Number.isInteger(saveDc) || saveDc < 1 || saveDc > 40)
+    )
+      throw new HttpErrors.UnprocessableEntity('save_dc inválido');
+    if (
+      saveAbility !== null &&
+      !['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'].includes(saveAbility)
+    )
+      throw new HttpErrors.UnprocessableEntity('save_ability inválido');
 
     const canPost = await this.repository.canPostRollFor(
       idGameSession,
@@ -761,6 +777,8 @@ export class GameSessionService {
       id_character: input.id_character,
       actor_name: input.actor_name,
       spell_name: input.spell_name,
+      save_dc: saveDc,
+      save_ability: saveAbility,
     });
   }
 

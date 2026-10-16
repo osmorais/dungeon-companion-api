@@ -119,17 +119,33 @@ export interface Spell {
 
 /** Rolagem de uma magia pro personagem — ver `buildSpellRoll`. */
 export interface SpellRoll {
-  kind: 'attack' | 'auto';
+  kind: 'attack' | 'auto' | 'save';
   attack_type: 'melee' | 'ranged' | null;
-  /** Bônus de ataque de magia do personagem (`null` em acerto automático). */
+  /** Bônus de ataque de magia do personagem (só `kind: 'attack'`). */
   attack_bonus: number | null;
-  damage_type: string;
+  /** `null` em magia de resistência sem dano. */
+  damage_type: string | null;
+  /** Só `kind: 'save'`: atributo da resistência e CD de magia do personagem. */
+  save_ability: 'STR' | 'DEX' | 'CON' | 'INT' | 'WIS' | 'CHA' | null;
+  save_dc: number | null;
+  /** Dano quando o alvo passa: metade, nenhum ou total (`null` sem dano). */
+  save_on_success: 'half' | 'none' | 'full' | null;
   /** Nome de cada rolagem quando há mais de uma (raio, feixe, dardo). */
   instance_label: string | null;
   /** Opção rolada quando a magia tem várias (ex.: "Punho Cerrado"). */
   variant: string | null;
   /** Por círculo usado (chave "0" pra truque): quantas rolagens e os dados de cada uma. */
-  by_slot: Record<string, {instances: number; dice_count: number; dice_sides: number; modifier: number}>;
+  by_slot: Record<
+    string,
+    {
+      instances: number;
+      dice_count: number;
+      dice_sides: number;
+      modifier: number;
+      /** Grupos de dados extras que não escalam (Tempestade de Gelo: 4d6). */
+      extra_dice: {count: number; sides: number}[];
+    }
+  >;
 }
 
 export interface Armour {

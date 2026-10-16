@@ -1,23 +1,32 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {SpellRoll} from '../../models/character-options-types';
+import {StatKeyEn} from '../../models/character-sheet-types';
 
 /**
  * Mecânica de rolagem das magias — o que o modal de rolagem precisa pra lançar a magia sem o
  * jogador montar os dados na mão (ver `docs/dungeon-companion-magias-mecanicas.md`). A tabela
  * `spell` do banco guarda só o texto; a regra fica aqui, igual a `rules.ts`/`feats.ts`.
  *
- * Fase 1: magias de **ataque mágico** e de **acerto automático**. Efeitos além do dano imediato
- * (ex.: metade do dano ao errar na Flecha Ácida, cura do Toque Vampírico, dano repetido do Raio
- * de Bruxa) continuam só na descrição — o mestre aplica.
+ * Fase 1: magias de **ataque mágico** e de **acerto automático**. Fase 2: magias de
+ * **resistência** — com dano (o modal mostra a CD e rola o dano) e sem dano (só a CD no anúncio).
+ * Efeitos além do dano imediato (ex.: metade do dano ao errar na Flecha Ácida, cura do Toque
+ * Vampírico, dano repetido do Raio de Bruxa, condições) continuam só na descrição — o mestre
+ * aplica. Os números seguem o livro (`docs/magias.txt`).
  */
 export interface SpellMechanics {
   /** Nome como está na tabela `spell` — só pra leitura e pros testes; a chave é o `id_spell`. */
   name: string;
-  kind: 'attack' | 'auto';
+  kind: 'attack' | 'auto' | 'save';
   /** Só `kind: 'attack'`. */
   attack?: 'melee' | 'ranged';
-  /** Dano no círculo base (truque: no nível 1 do personagem), por raio/dardo. */
-  damage: {count: number; sides: number; type: string};
+  /** Só `kind: 'save'`. `onSuccess`: metade do dano, nenhum dano, ou dano total sempre (a
+   *  resistência só evita o efeito extra, ex.: Esquentar Metal). Sem dano: sem `onSuccess`. */
+  save?: {ability: StatKeyEn; onSuccess?: 'half' | 'none' | 'full'};
+  /** Dano no círculo base (truque: no nível 1 do personagem), por raio/dardo. Ausente só em
+   *  magia de resistência sem dano. */
+  damage?: {count: number; sides: number; type: string};
+  /** Segundo grupo de dados que não escala (Tempestade de Gelo: 2d8 concussão + 4d6 frio). */
+  extraDice?: {count: number; sides: number};
   /** Soma o modificador do atributo de conjuração ao dano (ex.: Arma Espiritual). */
   addCastingMod?: boolean;
   /** Bônus fixo no dano de cada raio/dardo (Mísseis Mágicos: +1). */
@@ -181,7 +190,242 @@ export const SPELL_MECHANICS: Record<number, SpellMechanics> = {
     attack: 'melee',
     damage: {count: 3, sides: 10, type: 'energia'},
   },
+
+  // -------------------------------------------------------------------------
+  // Resistência com dano (fase 2)
+  // -------------------------------------------------------------------------
+  // Truques
+  58: save('Chama Sagrada', 'DEX', 'none', 1, 8, 'radiante', {
+    cantripScaling: true,
+  }),
+  154: save('Espirro Ácido', 'DEX', 'none', 1, 6, 'ácido', {
+    cantripScaling: true,
+  }),
+  293: save('Rajada de Veneno', 'CON', 'none', 1, 12, 'veneno', {
+    cantripScaling: true,
+  }),
+  361: save('Zombaria Viciosa', 'WIS', 'none', 1, 4, 'psíquico', {
+    cantripScaling: true,
+  }),
+  // 1º círculo
+  48: save('Braços de Hadar', 'STR', 'half', 2, 6, 'necrótico', {
+    upcast: {count: 1},
+  }),
+  210: save('Mãos Flamejantes', 'DEX', 'half', 3, 6, 'fogo', {
+    upcast: {count: 1},
+  }),
+  244: save('Onda Troveante', 'CON', 'half', 2, 8, 'trovejante', {
+    upcast: {count: 1},
+  }),
+  304: save('Repreensão Infernal', 'DEX', 'half', 2, 10, 'fogo', {
+    upcast: {count: 1},
+  }),
+  332: save('Sussurros Dissonantes', 'WIS', 'half', 3, 6, 'psíquico', {
+    upcast: {count: 1},
+  }),
+  // 2º círculo
+  114: save('Despedaçar', 'CON', 'half', 3, 8, 'trovejante', {
+    upcast: {count: 1},
+  }),
+  150: save('Esfera Flamejante', 'DEX', 'half', 2, 6, 'fogo', {
+    upcast: {count: 1},
+  }),
+  // O dano não tem resistência; a de Constituição só evita largar o objeto.
+  155: save('Esquentar Metal', 'CON', 'full', 2, 8, 'fogo', {
+    upcast: {count: 1},
+  }),
+  291: save('Raio Lunar', 'CON', 'half', 2, 10, 'radiante', {
+    upcast: {count: 1},
+  }),
+  // 3º círculo
+  44: save('Bola de Fogo', 'DEX', 'half', 8, 6, 'fogo', {upcast: {count: 1}}),
+  94: save('Convocar Relâmpagos', 'DEX', 'half', 3, 10, 'elétrico', {
+    upcast: {count: 1},
+  }),
+  153: save(
+    'Espíritos Guardiões',
+    'WIS',
+    'half',
+    3,
+    8,
+    'radiante ou necrótico',
+    {upcast: {count: 1}},
+  ),
+  // Só o ácido do fim do turno tem resistência; o 2d6 de frio do início do turno é automático.
+  165: save('Fome de Hadar', 'DEX', 'none', 2, 6, 'ácido'),
+  171: save('Glifo de Vigilância', 'DEX', 'half', 5, 8, 'à escolha', {
+    upcast: {count: 1},
+    variant: 'Runa Explosiva',
+  }),
+  301: save('Relâmpago', 'DEX', 'half', 8, 6, 'elétrico', {upcast: {count: 1}}),
+  // 4º círculo
+  28: save('Assassino Fantasmagórico', 'WIS', 'none', 4, 10, 'psíquico', {
+    upcast: {count: 1},
+  }),
+  230: save('Muralha de Fogo', 'DEX', 'half', 5, 8, 'fogo', {
+    upcast: {count: 1},
+  }),
+  341: save('Tempestade de Gelo', 'DEX', 'half', 2, 8, 'concussão + 4d6 frio', {
+    upcast: {count: 1},
+    extraDice: {count: 4, sides: 6},
+  }),
+  342: save('Tentáculos Negros de Evard', 'DEX', 'none', 3, 6, 'contundente'),
+  // 5º círculo
+  67: save('Coluna de Chamas', 'DEX', 'half', 8, 6, 'fogo + radiante', {
+    upcast: {count: 1},
+  }),
+  73: save('Cone de Frio', 'CON', 'half', 8, 8, 'frio', {upcast: {count: 1}}),
+  82: save('Conjurar Saraivada', 'DEX', 'half', 8, 8, 'da munição'),
+  237: save('Névoa Mortal', 'CON', 'half', 5, 8, 'veneno', {
+    upcast: {count: 1},
+  }),
+  // 5d6 trovejante + 5d6 radiante/necrótico (o livro imprimiu "5d5" por engano).
+  243: save(
+    'Onda Destrutiva',
+    'CON',
+    'half',
+    10,
+    6,
+    'trovejante + radiante ou necrótico',
+  ),
+  270: save('Praga de Insetos', 'CON', 'half', 4, 10, 'perfurante', {
+    upcast: {count: 1},
+  }),
+  // 6º círculo
+  61: save('Círculo da Morte', 'CON', 'half', 8, 6, 'necrótico', {
+    upcast: {count: 2},
+  }),
+  // "Em Níveis Superiores" acrescenta alvos, não dados.
+  97: save('Corrente de Relâmpagos', 'DEX', 'half', 10, 8, 'elétrico'),
+  113: save('Desintegrar', 'DEX', 'none', 10, 6, 'energia', {
+    upcast: {count: 3},
+    bonus: 40,
+  }),
+  132: save('Doença Plena', 'CON', 'half', 14, 6, 'necrótico'),
+  149: save('Esfera Congelante de Otiluke', 'CON', 'half', 10, 6, 'frio', {
+    upcast: {count: 1},
+  }),
+  229: save('Muralha de Espinhos', 'DEX', 'half', 7, 8, 'perfurante', {
+    upcast: {count: 1},
+  }),
+  231: save('Muralha de Gelo', 'DEX', 'half', 10, 6, 'frio', {
+    upcast: {count: 2},
+  }),
+  292: save('Raio Solar', 'CON', 'half', 6, 8, 'radiante'),
+  // 7º círculo
+  45: save('Bola de Fogo Controlável', 'DEX', 'half', 12, 6, 'fogo', {
+    upcast: {count: 1},
+  }),
+  111: save('Dedo da Morte', 'CON', 'half', 7, 8, 'necrótico', {bonus: 30}),
+  340: save('Tempestade de Fogo', 'DEX', 'half', 7, 10, 'fogo'),
+  // 8º círculo
+  // O dano não tem resistência; a de Inteligência evita o efeito no intelecto.
+  142: save('Enfraquecer Intelecto', 'INT', 'full', 4, 6, 'psíquico'),
+  157: save('Explosão Solar', 'CON', 'half', 12, 6, 'radiante'),
+  241: save('Nuvem Incendiária', 'DEX', 'half', 10, 8, 'fogo'),
+  350: save('Tsunami', 'STR', 'half', 6, 10, 'concussão'),
+  // 9º círculo
+  60: save('Chuva de Meteoros', 'DEX', 'half', 40, 6, 'fogo + concussão'),
+  138: save('Encarnação Fantasmagórica', 'WIS', 'none', 4, 10, 'psíquico'),
+
+  // -------------------------------------------------------------------------
+  // Resistência sem dano rolável (fase 2): o anúncio mostra a CD. Inclui magias com dano
+  // condicional/especial demais pra um botão de rolar (Símbolo, Terremoto, Muralha Prismática…).
+  // Fora: Contato Extraplanar (CD fixa 15, não a do conjurador) e as que somam dano no próximo
+  // ataque com arma (Destruições, Golpe Constritor, Saraivada de Espinhos, Flecha Relampejante —
+  // fase 4).
+  // -------------------------------------------------------------------------
+  11: saveOnly('Amizade Animal', 'WIS'), // 1º
+  68: saveOnly('Comando', 'WIS'), // 1º
+  86: saveOnly('Constrição', 'STR'), // 1º
+  137: saveOnly('Duelo Compelido', 'WIS'), // 1º
+  141: saveOnly('Enfeitiçar Pessoa', 'WIS'), // 1º
+  164: saveOnly('Fogo das Fadas', 'DEX'), // 1º
+  264: saveOnly('Perdição', 'CHA'), // 1º
+  313: saveOnly('Riso Histérico de Tasha', 'WIS'), // 1º
+  316: saveOnly('Santuário', 'WIS'), // 1º
+  21: saveOnly('Área Escorregadia', 'DEX'), // 1º
+  2: saveOnly('Acalmar Emoções', 'CHA'), // 2º
+  32: saveOnly('Aumentar/Reduzir', 'CON'), // 2º
+  54: saveOnly('Cativar', 'WIS'), // 2º
+  56: saveOnly('Cegueira/Surdez', 'CON'), // 2º
+  95: saveOnly('Coroa da Loucura', 'WIS'), // 2º
+  166: saveOnly('Força Fantasmagórica', 'INT'), // 2º
+  184: saveOnly('Imobilizar Pessoa', 'WIS'), // 2º
+  196: saveOnly('Levitação', 'CON'), // 2º
+  203: saveOnly('Lufada de Vento', 'STR'), // 2º
+  289: saveOnly('Raio do Enfraquecimento', 'CON'), // 2º
+  334: saveOnly('Teia', 'DEX'), // 2º
+  362: saveOnly('Zona da Verdade', 'CHA'), // 2º
+  64: saveOnly('Círculo Mágico', 'CHA'), // 3º
+  194: saveOnly('Lentidão', 'WIS'), // 3º
+  214: saveOnly('Medo', 'WIS'), // 3º
+  235: saveOnly('Nevasca', 'DEX'), // 3º
+  236: saveOnly('Névoa Fétida', 'CON'), // 3º
+  248: saveOnly('Padrão Hipnótico', 'WIS'), // 3º
+  314: saveOnly('Rogar Maldição', 'WIS'), // 3º
+  39: saveOnly('Banimento', 'CHA'), // 4º
+  70: saveOnly('Compulsão', 'WIS'), // 4º
+  74: saveOnly('Confusão', 'WIS'), // 4º
+  90: saveOnly('Controlar a Água', 'STR'), // 4º
+  133: saveOnly('Dominar Besta', 'WIS'), // 4º
+  151: saveOnly('Esfera Resiliente de Otiluke', 'DEX'), // 4º
+  175: saveOnly('Guardião da Fé', 'DEX'), // 4º
+  356: saveOnly('Vinha Esmagadora', 'DEX'), // 4º
+  131: saveOnly('Dissipar o Bem e Mal', 'CHA'), // 5º
+  135: saveOnly('Dominar Pessoa', 'WIS'), // 5º
+  183: saveOnly('Imobilizar Monstro', 'WIS'), // 5º
+  221: saveOnly('Missão', 'WIS'), // 5º
+  223: saveOnly('Modificar Memória', 'WIS'), // 5º
+  232: saveOnly('Muralha de Pedra', 'DEX'), // 5º
+  269: saveOnly('Praga', 'CON'), // 5º
+  328: saveOnly('Sonho', 'WIS'), // 5º
+  13: saveOnly('Âncora Planar', 'CHA'), // 5º
+  30: saveOnly('Ataque Visual', 'WIS'), // 6º
+  55: saveOnly('Carne para Pedra', 'CON'), // 6º
+  110: saveOnly('Dança Irresistível de Otto', 'WIS'), // 6º
+  296: saveOnly('Recipiente Arcano', 'CHA'), // 6º
+  331: saveOnly('Sugestão em Massa', 'WIS'), // 6º
+  187: saveOnly('Inverter a Gravidade', 'DEX'), // 7º
+  255: saveOnly('Palavra Divina', 'CHA'), // 7º
+  272: saveOnly('Prisão de Energia', 'CHA'), // 7º
+  295: saveOnly('Rajada Prismática', 'DEX'), // 7º
+  324: saveOnly('Símbolo', 'WIS'), // 7º
+  353: saveOnly('Viagem Planar', 'CHA'), // 7º
+  17: saveOnly('Antipatia/Simpatia', 'WIS'), // 8º
+  37: saveOnly('Aura Sagrada', 'CON'), // 8º
+  134: saveOnly('Dominar Monstro', 'WIS'), // 8º
+  251: saveOnly('Palavra de Poder Atordoar', 'CON'), // 8º
+  343: saveOnly('Terremoto', 'CON'), // 8º
+  19: saveOnly('Aprisionamento', 'WIS'), // 9º
+  219: saveOnly('Metamorfose Verdadeira', 'WIS'), // 9º
+  234: saveOnly('Muralha Prismática', 'CON'), // 9º
+  339: saveOnly('Tempestade da Vingança', 'CON'), // 9º
 };
+
+/** Magia de resistência com dano. */
+function save(
+  name: string,
+  ability: StatKeyEn,
+  onSuccess: 'half' | 'none' | 'full',
+  count: number,
+  sides: number,
+  type: string,
+  extra: Partial<SpellMechanics> = {},
+): SpellMechanics {
+  return {
+    name,
+    kind: 'save',
+    save: {ability, onSuccess},
+    damage: {count, sides, type},
+    ...extra,
+  };
+}
+
+/** Magia de resistência sem dano rolável — só a CD no anúncio. */
+function saveOnly(name: string, ability: StatKeyEn): SpellMechanics {
+  return {name, kind: 'save', save: {ability}};
+}
 
 /** Multiplicador de truque pelo nível do personagem: 1/2/3/4 nos níveis 1/5/11/17. */
 export function cantripTier(characterLevel: number): number {
@@ -198,7 +442,8 @@ export function resolveSpellRollAtSlot(
   slotLevel: number,
   characterLevel: number,
   castingMod: number,
-): SpellRoll['by_slot'][string] {
+): SpellRoll['by_slot'][string] | null {
+  if (!mechanics.damage) return null;
   const above = Math.max(0, slotLevel - spellLevel);
   const tier = cantripTier(characterLevel);
   let diceCount = mechanics.damage.count;
@@ -221,13 +466,14 @@ export function resolveSpellRollAtSlot(
     dice_sides: mechanics.damage.sides,
     modifier:
       (mechanics.addCastingMod ? castingMod : 0) + (mechanics.bonus ?? 0),
+    extra_dice: mechanics.extraDice ? [mechanics.extraDice] : [],
   };
 }
 
 /**
- * Rolagem pronta pra ficha: bônus de ataque do personagem e os dados por círculo em que a magia
- * pode ser lançada (truque: só a chave "0", já escalado pelo nível). `null` se a magia não tem
- * mecânica cadastrada.
+ * Rolagem pronta pra ficha: bônus de ataque / CD do personagem e os dados por círculo em que a
+ * magia pode ser lançada (truque: só a chave "0", já escalado pelo nível; resistência sem dano:
+ * `by_slot` vazio). `null` se a magia não tem mecânica cadastrada.
  */
 export function buildSpellRoll(
   idSpell: number,
@@ -235,6 +481,7 @@ export function buildSpellRoll(
   characterLevel: number,
   castingMod: number,
   spellAttackBonus: number,
+  spellSaveDc: number,
 ): SpellRoll | null {
   const mechanics = SPELL_MECHANICS[idSpell];
   if (!mechanics) return null;
@@ -246,20 +493,23 @@ export function buildSpellRoll(
     kind: mechanics.kind,
     attack_type: mechanics.attack ?? null,
     attack_bonus: mechanics.kind === 'attack' ? spellAttackBonus : null,
-    damage_type: mechanics.damage.type,
+    damage_type: mechanics.damage?.type ?? null,
+    save_ability: mechanics.save?.ability ?? null,
+    save_dc: mechanics.save ? spellSaveDc : null,
+    save_on_success: mechanics.save?.onSuccess ?? null,
     instance_label: mechanics.instances?.label ?? null,
     variant: mechanics.variant ?? null,
     by_slot: Object.fromEntries(
-      slotLevels.map(slot => [
-        String(slot),
-        resolveSpellRollAtSlot(
+      slotLevels.flatMap(slot => {
+        const entry = resolveSpellRollAtSlot(
           mechanics,
           spellLevel,
           slot,
           characterLevel,
           castingMod,
-        ),
-      ]),
+        );
+        return entry ? [[String(slot), entry]] : [];
+      }),
     ),
   };
 }

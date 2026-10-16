@@ -713,6 +713,7 @@ export class CharacterSheetService {
             character.level,
             getMod(stats[spellcastingResult.spellcasting_ability]),
             spellcastingResult.spell_attack_bonus,
+            spellcastingResult.spell_save_dc,
           );
           return roll ? {...s, roll} : s;
         })
