@@ -492,6 +492,24 @@ export class GameSessionController {
     return this.gameSessionService.addRoll(id, body, currentUser.id);
   }
 
+  @post('/api/game-session/{id}/bardic-inspiration')
+  @response(200, {
+    description: 'Bard gives a Bardic Inspiration die to an ally in the session (stored until used)',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async grantBardicInspiration(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      description: 'Bard character and ally player session',
+      required: true,
+      content: {'application/json': {schema: {type: 'object'}}},
+    })
+    body: {id_character: number; id_player_session: string},
+  ): Promise<{sides: number; to: string}> {
+    return this.gameSessionService.grantBardicInspiration(id, body, currentUser.id);
+  }
+
   @post('/api/game-session/{id}/secret-roll-request')
   @response(200, {
     description:

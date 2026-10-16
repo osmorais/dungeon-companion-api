@@ -382,7 +382,7 @@ export class CharacterController {
       required: true,
       content: {'application/json': {schema: {type: 'object'}}},
     })
-    body: {effect?: string; active?: boolean; turn_use?: string; turn_key?: string},
+    body: {effect?: string; active?: boolean; turn_use?: string; turn_key?: string; consume_inspiration?: boolean},
   ): Promise<object> {
     return this.characterSheetService.updateActiveEffects(id, body, currentUser.id);
   }

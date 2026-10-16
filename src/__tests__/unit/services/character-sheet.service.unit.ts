@@ -1039,6 +1039,30 @@ describe('CharacterSheetService', () => {
       });
     });
 
+    it('usar a Inspiração Bárdica guardada apaga o dado', async () => {
+      repository.stubs.findCharacterById.resolves(
+        rawCharacter({
+          character: {
+            active_effects: {
+              active: [],
+              turn_uses: {},
+              bardic_inspiration: {sides: 8, from: 'Lyra'},
+            },
+          },
+        }),
+      );
+      const result = await service.updateActiveEffects(
+        1,
+        {consume_inspiration: true},
+        'owner',
+      );
+      expect(result.active_effects.bardic_inspiration).to.be.null();
+      repository.stubs.findCharacterById.resolves(rawCharacter());
+      await expect(
+        service.updateActiveEffects(1, {consume_inspiration: true}, 'owner'),
+      ).to.be.rejectedWith(/Sem Inspiração/);
+    });
+
     it('valida efeito, soma, vez e permissão', async () => {
       await expect(
         service.updateActiveEffects(1, {effect: 'Voo', active: true}, 'owner'),

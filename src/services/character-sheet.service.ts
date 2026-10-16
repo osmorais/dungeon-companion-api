@@ -873,6 +873,7 @@ export class CharacterSheetService {
           idClass: character.id_class,
           idSubclass: character.id_subclass,
           idRace: character.id_race,
+          subrace: character.subrace ? normalizeKey(character.subrace) : null,
           level: character.level,
           stats,
           profBonus,
@@ -1572,7 +1573,7 @@ export class CharacterSheetService {
    */
   async updateActiveEffects(
     id: number,
-    input: {effect?: string; active?: boolean; turn_use?: string; turn_key?: string},
+    input: {effect?: string; active?: boolean; turn_use?: string; turn_key?: string; consume_inspiration?: boolean},
     userId: string,
   ): Promise<{active_effects: ActiveEffects}> {
     const raw = await this.repository.findCharacterById(id);
@@ -1592,8 +1593,11 @@ export class CharacterSheetService {
       if (!(ONCE_PER_TURN_RIDERS as readonly string[]).includes(input.turn_use) || !turnKey || turnKey.length > 120)
         throw new HttpErrors.UnprocessableEntity('Uso por turno inválido');
       next = {...current, turn_uses: {...current.turn_uses, [input.turn_use]: turnKey}};
+    } else if (input.consume_inspiration === true) {
+      if (!current.bardic_inspiration) throw new HttpErrors.UnprocessableEntity('Sem Inspiração Bárdica guardada');
+      next = {...current, bardic_inspiration: null};
     } else {
-      throw new HttpErrors.UnprocessableEntity('Informe effect/active ou turn_use/turn_key');
+      throw new HttpErrors.UnprocessableEntity('Informe effect/active, turn_use/turn_key ou consume_inspiration');
     }
     await this.repository.updateActiveEffects(id, next);
     return {active_effects: next};

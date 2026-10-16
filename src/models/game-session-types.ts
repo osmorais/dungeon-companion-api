@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {AvatarPreset} from './character-sheet-types';
+import {DamageDefenses} from '../services/character-sheet/combat-features';
 import {CombatEncounterDetail} from './combat-types';
 
 export interface GameSession {
@@ -94,6 +95,9 @@ export interface PlayerCharacterSummary {
   /** Foto de verdade (via Supabase Storage), à parte do avatar_preset — usada como fundo do
    *  toast de rolagem na sessão. */
   image_url: string | null;
+  /** Resistências e reações pra quem aplica dano nele (ver `damageDefensesFor`) — vem no
+   *  detalhe da sessão; ausente nos retornos de adicionar jogador/NPC. */
+  defenses?: DamageDefenses;
 }
 
 export interface PlayerSession {

@@ -135,6 +135,7 @@ describe('ability-mechanics', () => {
       restores_slot: 3,
       activates: null,
       unarmed_attacks: null,
+      targets_ally: false,
     });
   });
 
@@ -145,6 +146,7 @@ describe('ability-mechanics', () => {
       restores_slot: null,
       activates: null,
       unarmed_attacks: null,
+      targets_ally: false,
     });
   });
 

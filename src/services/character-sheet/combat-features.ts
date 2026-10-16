@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import {FinalStats} from '../../models/character-sheet-types';
+import {FinalStats, StatKeyEn} from '../../models/character-sheet-types';
 import {getMod} from './calculator';
 
 /**
@@ -29,6 +29,122 @@ export interface ActiveEffects {
   active: string[];
   /** Soma 1×/turno → chave da vez em que foi usada ("<combate>:<rodada>:<participante>"). */
   turn_uses: Record<string, string>;
+  /** Inspiração Bárdica recebida e ainda não usada (dado e quem deu). */
+  bardic_inspiration?: {sides: number; from: string} | null;
+}
+
+/** Dado de Inspiração Bárdica pelo nível do bardo: d6, d8 (5), d10 (10), d12 (15). */
+export function bardicInspirationSides(level: number): number {
+  if (level >= 15) return 12;
+  if (level >= 10) return 10;
+  if (level >= 5) return 8;
+  return 6;
+}
+
+/** Lembrete de vantagem num d20 (o jogador decide aplicar — o app não sabe a origem do efeito). */
+export interface D20Reminder {
+  applies: 'save' | 'check';
+  /** Atributos em que vale; `null` = qualquer um. */
+  abilities: StatKeyEn[] | null;
+  text: string;
+}
+
+/** Defesas de quem recebe dano (usadas ao "aplicar no alvo" na sessão). */
+export interface DamageDefenses {
+  /** Tipos de dano com resistência (minúsculo, sem variação: "fogo", "veneno", "contundente"…). */
+  resistances: string[];
+  /** Ladino nv5: reação pra receber metade do dano de um ataque. */
+  uncanny_dodge: boolean;
+  /** Ladino/Monge nv7: resistência de DES de metade → nada se passar, metade se falhar. */
+  evasion: boolean;
+}
+
+export function damageDefensesFor(ctx: {
+  idRace: number;
+  subrace: string | null;
+  idClass: number;
+  level: number;
+  activeEffects: ActiveEffects | null;
+}): DamageDefenses {
+  const resistances = new Set<string>();
+  if (ctx.idRace === 1 || ctx.subrace === 'halfling-robusto')
+    resistances.add('veneno');
+  // Tiefling (Resistência Infernal) e Draconato (ancestral fixo de fogo neste app).
+  if (ctx.idRace === 8 || ctx.idRace === 4) resistances.add('fogo');
+  if (ctx.idClass === 1 && ctx.activeEffects?.active.includes('Fúria')) {
+    for (const t of ['contundente', 'cortante', 'perfurante'])
+      resistances.add(t);
+  }
+  return {
+    resistances: [...resistances],
+    uncanny_dodge: ctx.idClass === 8 && ctx.level >= 5,
+    evasion: (ctx.idClass === 8 || ctx.idClass === 10) && ctx.level >= 7,
+  };
+}
+
+function d20RemindersFor(ctx: {
+  idRace: number;
+  subrace: string | null;
+  idClass: number;
+  level: number;
+  active: string[];
+}): D20Reminder[] {
+  const reminders: D20Reminder[] = [];
+  if (ctx.idRace === 1) {
+    reminders.push({
+      applies: 'save',
+      abilities: null,
+      text: 'Vantagem contra veneno (Resistência Anã)',
+    });
+  }
+  if (ctx.subrace === 'halfling-robusto') {
+    reminders.push({
+      applies: 'save',
+      abilities: null,
+      text: 'Vantagem contra veneno (Resistência Robusto)',
+    });
+  }
+  if (ctx.idRace === 2 || ctx.idRace === 6) {
+    reminders.push({
+      applies: 'save',
+      abilities: null,
+      text: 'Vantagem contra ser enfeitiçado (Ancestralidade Feérica)',
+    });
+  }
+  if (ctx.idRace === 3) {
+    reminders.push({
+      applies: 'save',
+      abilities: null,
+      text: 'Vantagem contra medo (Bravura)',
+    });
+  }
+  if (ctx.idRace === 5) {
+    reminders.push({
+      applies: 'save',
+      abilities: ['INT', 'WIS', 'CHA'],
+      text: 'Vantagem contra magia (Esperteza Gnômica)',
+    });
+  }
+  if (ctx.idClass === 1 && ctx.level >= 2) {
+    reminders.push({
+      applies: 'save',
+      abilities: ['DEX'],
+      text: 'Vantagem contra efeitos que você vê, como armadilhas e magias (Sentido de Perigo)',
+    });
+  }
+  if (ctx.active.includes('Fúria')) {
+    reminders.push({
+      applies: 'save',
+      abilities: ['STR'],
+      text: 'Vantagem (Fúria)',
+    });
+    reminders.push({
+      applies: 'check',
+      abilities: ['STR'],
+      text: 'Vantagem (Fúria)',
+    });
+  }
+  return reminders;
 }
 
 export const EMPTY_ACTIVE_EFFECTS: ActiveEffects = {active: [], turn_uses: {}};
@@ -72,6 +188,8 @@ export interface CombatFeatures {
   active_effects: ActiveEffects;
   /** Halfling (Sortudo): 1 natural no d20 pode ser rolado de novo. */
   halfling_lucky: boolean;
+  /** Lembretes de vantagem nos testes de resistência/perícia. */
+  d20_reminders: D20Reminder[];
 }
 
 const GOLPE_DIVINO_TYPE: Record<string, string> = {
@@ -94,6 +212,7 @@ export function buildCombatFeatures(ctx: {
   idClass: number;
   idSubclass: string | null;
   idRace: number;
+  subrace?: string | null;
   level: number;
   stats: FinalStats;
   profBonus: number;
@@ -217,5 +336,12 @@ export function buildCombatFeatures(ctx: {
     unarmed,
     active_effects: ctx.activeEffects ?? EMPTY_ACTIVE_EFFECTS,
     halfling_lucky: ctx.idRace === 3,
+    d20_reminders: d20RemindersFor({
+      idRace: ctx.idRace,
+      subrace: ctx.subrace ?? null,
+      idClass,
+      level,
+      active: ctx.activeEffects?.active ?? [],
+    }),
   };
 }

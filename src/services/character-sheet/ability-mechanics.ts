@@ -29,6 +29,8 @@ export interface AbilityMechanicsResult {
   activates: string | null;
   /** Abre N ataques desarmados em sequência (Rajada de Golpes). */
   unarmed_attacks: number | null;
+  /** Pede pra escolher um aliado da mesa (Inspiração Bárdica). */
+  targets_ally: boolean;
 }
 
 type DcSource = 'spell' | 'ki' | 'con';
@@ -133,6 +135,7 @@ export function abilityMechanicsFor(
   const extras = {
     activates: ABILITY_ACTIVATES[name] ?? null,
     unarmed_attacks: name === 'Rajada de Golpes' ? 2 : null,
+    targets_ally: name === 'Inspiração Bárdica',
   };
   const mechanics = ABILITIES[name];
   if (!mechanics)

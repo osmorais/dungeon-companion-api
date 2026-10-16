@@ -270,6 +270,8 @@ export interface CharacterSheet {
       activates: string | null;
       /** Rajada de Golpes: N ataques desarmados em sequência. */
       unarmed_attacks: number | null;
+      /** Inspiração Bárdica: escolher um aliado da mesa. */
+      targets_ally: boolean;
     }[];
     /** Recursos de classe/subclasse que escalam por nível (ex: "Ataque Furtivo": "2d6") — informativo, `null` se não houver nenhum neste nível. */
     class_resources: Record<string, string> | null;

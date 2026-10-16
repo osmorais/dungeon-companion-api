@@ -743,6 +743,97 @@ describe('GameSessionService', () => {
   });
 
   // -------------------------------------------------------------------------
+  describe('Inspiração Bárdica', () => {
+    const players = [
+      {
+        id_player_session: 'p1',
+        id_game_session: 'gs',
+        id_character: 10,
+        player_name: 'Ana',
+        user_id: 'u1',
+        character: {name: 'Lyra'},
+      },
+      {
+        id_player_session: 'p2',
+        id_game_session: 'gs',
+        id_character: 20,
+        player_name: 'Bia',
+        user_id: 'u2',
+        character: {name: 'Thorin'},
+      },
+    ] as unknown as GameSessionDetail['players'];
+
+    beforeEach(() => {
+      repository.stubs.canPostRollFor.resolves(true);
+      repository.stubs.findById.resolves({...sessionDetail(), players});
+      repository.stubs.findCharacterBasics.resolves({
+        name: 'Lyra',
+        id_class: 2,
+        level: 5,
+      });
+    });
+
+    it('guarda o dado (pelo nível do bardo) no personagem do aliado', async () => {
+      const result = await service.grantBardicInspiration(
+        'gs',
+        {id_character: 10, id_player_session: 'p2'},
+        'u1',
+      );
+      expect(result).to.eql({sides: 8, to: 'Thorin'});
+      expect(
+        repository.stubs.setBardicInspiration.calledOnceWith(20, {
+          sides: 8,
+          from: 'Lyra',
+        }),
+      ).to.be.true();
+    });
+
+    it('só quem age pelo bardo, só bardo, aliado da sessão e não ele mesmo', async () => {
+      repository.stubs.canPostRollFor.resolves(false);
+      await expect(
+        service.grantBardicInspiration(
+          'gs',
+          {id_character: 10, id_player_session: 'p2'},
+          'u2',
+        ),
+      ).to.be.rejectedWith(/não pode agir/);
+      repository.stubs.canPostRollFor.resolves(true);
+      repository.stubs.findCharacterBasics.resolves({
+        name: 'Thorin',
+        id_class: 7,
+        level: 5,
+      });
+      await expect(
+        service.grantBardicInspiration(
+          'gs',
+          {id_character: 10, id_player_session: 'p2'},
+          'u1',
+        ),
+      ).to.be.rejectedWith(/Só bardo/);
+      repository.stubs.findCharacterBasics.resolves({
+        name: 'Lyra',
+        id_class: 2,
+        level: 5,
+      });
+      await expect(
+        service.grantBardicInspiration(
+          'gs',
+          {id_character: 10, id_player_session: 'x'},
+          'u1',
+        ),
+      ).to.be.rejectedWith(/fora da sessão/);
+      await expect(
+        service.grantBardicInspiration(
+          'gs',
+          {id_character: 10, id_player_session: 'p1'},
+          'u1',
+        ),
+      ).to.be.rejectedWith(/outra criatura/);
+      expect(repository.stubs.setBardicInspiration.called).to.be.false();
+    });
+  });
+
+  // -------------------------------------------------------------------------
   describe('announceSpellCast', () => {
     it('só publica (não persiste) e exige permissão', async () => {
       repository.stubs.hasSessionAccess.resolves(true);

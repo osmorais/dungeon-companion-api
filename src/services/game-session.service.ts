@@ -29,6 +29,7 @@ import {
   SecretRollRequestInput,
   SpellCastInput,
 } from '../models/game-session-types';
+import {bardicInspirationSides} from './character-sheet/combat-features';
 import {
   SecretRollRequestStore,
   secretRollRequests,
@@ -768,6 +769,33 @@ export class GameSessionService {
       roll,
     });
     return roll;
+  }
+
+  /**
+   * Bardo dá Inspiração Bárdica a um aliado da mesa: o dado (pelo nível do bardo) fica guardado
+   * no personagem do aliado até ele usar num teste, ataque ou resistência. O recurso do bardo é
+   * gasto pelo "USAR" (endpoint de recursos); aqui só entrega o dado.
+   */
+  async grantBardicInspiration(
+    idGameSession: string,
+    input: {id_character: number; id_player_session: string},
+    userId: string,
+  ): Promise<{sides: number; to: string}> {
+    const canAct = await this.repository.canPostRollFor(idGameSession, input.id_character, userId);
+    if (!canAct)
+      throw new HttpErrors.Forbidden('Você não pode agir por esse personagem');
+    const bard = await this.repository.findCharacterBasics(input.id_character);
+    if (!bard || bard.id_class !== 2)
+      throw new HttpErrors.UnprocessableEntity('Só bardo dá Inspiração Bárdica');
+    const session = await this.repository.findById(idGameSession);
+    const ally = session?.players.find(p => p.id_player_session === input.id_player_session);
+    if (!ally?.character)
+      throw new HttpErrors.UnprocessableEntity('Aliado sem personagem ou fora da sessão');
+    if (ally.id_character === input.id_character)
+      throw new HttpErrors.UnprocessableEntity('A inspiração vai pra outra criatura');
+    const sides = bardicInspirationSides(bard.level);
+    await this.repository.setBardicInspiration(ally.id_character, {sides, from: bard.name});
+    return {sides, to: ally.character.name};
   }
 
   /**

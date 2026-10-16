@@ -1,6 +1,10 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {expect} from '@loopback/testlab';
-import {buildCombatFeatures} from '../../../services/character-sheet/combat-features';
+import {
+  bardicInspirationSides,
+  buildCombatFeatures,
+  damageDefensesFor,
+} from '../../../services/character-sheet/combat-features';
 import {stats} from '../fixtures';
 
 describe('combat-features', () => {
@@ -26,6 +30,7 @@ describe('combat-features', () => {
       unarmed: null,
       active_effects: {active: [], turn_uses: {}},
       halfling_lucky: false,
+      d20_reminders: [],
     });
   });
 
@@ -173,5 +178,82 @@ describe('combat-features', () => {
     expect(
       buildCombatFeatures({...base, activeEffects: effects}).active_effects,
     ).to.eql(effects);
+  });
+
+  it('Inspiração Bárdica: d6, d8 (5), d10 (10), d12 (15)', () => {
+    expect([1, 4, 5, 9, 10, 14, 15, 20].map(bardicInspirationSides)).to.eql([
+      6, 6, 8, 8, 10, 10, 12, 12,
+    ]);
+  });
+
+  it('lembretes de vantagem: raça, Sentido de Perigo e Fúria ativa', () => {
+    const dwarf = buildCombatFeatures({...base, idRace: 1});
+    expect(dwarf.d20_reminders).to.eql([
+      {
+        applies: 'save',
+        abilities: null,
+        text: 'Vantagem contra veneno (Resistência Anã)',
+      },
+    ]);
+    const gnome = buildCombatFeatures({...base, idRace: 5});
+    expect(gnome.d20_reminders[0].abilities).to.eql(['INT', 'WIS', 'CHA']);
+    const raging = buildCombatFeatures({
+      ...base,
+      idClass: 1,
+      level: 2,
+      activeEffects: {active: ['Fúria'], turn_uses: {}},
+    });
+    expect(raging.d20_reminders.map(r => `${r.applies}:${r.text}`)).to.eql([
+      'save:Vantagem contra efeitos que você vê, como armadilhas e magias (Sentido de Perigo)',
+      'save:Vantagem (Fúria)',
+      'check:Vantagem (Fúria)',
+    ]);
+    expect(
+      buildCombatFeatures({
+        ...base,
+        subrace: 'halfling-robusto',
+        idRace: 3,
+      }).d20_reminders.map(r => r.text),
+    ).to.eql([
+      'Vantagem contra veneno (Resistência Robusto)',
+      'Vantagem contra medo (Bravura)',
+    ]);
+  });
+
+  it('defesas ao receber dano: resistências de raça, Fúria, Esquiva Sobrenatural e Evasão', () => {
+    const def = (extra: Partial<Parameters<typeof damageDefensesFor>[0]>) =>
+      damageDefensesFor({
+        idRace: 9,
+        subrace: null,
+        idClass: 7,
+        level: 1,
+        activeEffects: null,
+        ...extra,
+      });
+    expect(def({})).to.eql({
+      resistances: [],
+      uncanny_dodge: false,
+      evasion: false,
+    });
+    expect(def({idRace: 1}).resistances).to.eql(['veneno']);
+    expect(def({idRace: 3, subrace: 'halfling-robusto'}).resistances).to.eql([
+      'veneno',
+    ]);
+    expect(def({idRace: 8}).resistances).to.eql(['fogo']);
+    expect(def({idRace: 4}).resistances).to.eql(['fogo']);
+    expect(def({idClass: 1}).resistances).to.eql([]);
+    expect(
+      def({idClass: 1, activeEffects: {active: ['Fúria'], turn_uses: {}}})
+        .resistances,
+    ).to.eql(['contundente', 'cortante', 'perfurante']);
+    expect(def({idClass: 8, level: 5})).to.containDeep({
+      uncanny_dodge: true,
+      evasion: false,
+    });
+    expect(def({idClass: 8, level: 7})).to.containDeep({evasion: true});
+    expect(def({idClass: 10, level: 7})).to.containDeep({
+      uncanny_dodge: false,
+      evasion: true,
+    });
   });
 });

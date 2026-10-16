@@ -1,6 +1,11 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {inject, injectable, BindingScope} from '@loopback/core';
 import {
+  ActiveEffects,
+  damageDefensesFor,
+} from '../services/character-sheet/combat-features';
+import {normalizeKey} from '../services/character-sheet/calculator';
+import {
   RELENTLESS_ENDURANCE_KEY,
   RELENTLESS_ENDURANCE_RACE_ID,
 } from '../services/character-sheet/rules';
@@ -178,6 +183,10 @@ export class GameSessionRepository {
         xp_points: number | null;
         image_url: string | null;
         avatar_preset: unknown | null;
+        id_race: number | null;
+        subrace: string | null;
+        id_class: number | null;
+        active_effects: ActiveEffects | null;
       }[]
     >`
       SELECT
@@ -195,7 +204,11 @@ export class GameSessionRepository {
         c.temporary_hit_points,
         c.xp_points,
         c.image_url,
-        c.avatar_preset
+        c.avatar_preset,
+        c.id_race,
+        c.subrace,
+        c.id_class,
+        c.active_effects
       FROM player_session ps
       LEFT JOIN character c  ON c.id_character = ps.id_character
       LEFT JOIN class     cl ON cl.id_class    = c.id_class
@@ -223,6 +236,13 @@ export class GameSessionRepository {
               image_url: row.image_url ?? null,
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               avatar_preset: (row.avatar_preset as any) ?? null,
+              defenses: damageDefensesFor({
+                idRace: row.id_race ?? 0,
+                subrace: row.subrace ? normalizeKey(row.subrace) : null,
+                idClass: row.id_class ?? 0,
+                level: row.character_level ?? 0,
+                activeEffects: row.active_effects,
+              }),
             }
           : null,
     }));
@@ -242,6 +262,10 @@ export class GameSessionRepository {
         xp_points: number | null;
         image_url: string | null;
         avatar_preset: unknown | null;
+        id_race: number | null;
+        subrace: string | null;
+        id_class: number | null;
+        active_effects: ActiveEffects | null;
       }[]
     >`
       SELECT
@@ -257,7 +281,11 @@ export class GameSessionRepository {
         c.temporary_hit_points,
         c.xp_points,
         c.image_url,
-        c.avatar_preset
+        c.avatar_preset,
+        c.id_race,
+        c.subrace,
+        c.id_class,
+        c.active_effects
       FROM npc_session ns
       LEFT JOIN character c  ON c.id_character = ns.id_character
       LEFT JOIN class     cl ON cl.id_class    = c.id_class
@@ -283,6 +311,13 @@ export class GameSessionRepository {
               image_url: row.image_url ?? null,
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               avatar_preset: (row.avatar_preset as any) ?? null,
+              defenses: damageDefensesFor({
+                idRace: row.id_race ?? 0,
+                subrace: row.subrace ? normalizeKey(row.subrace) : null,
+                idClass: row.id_class ?? 0,
+                level: row.character_level ?? 0,
+                activeEffects: row.active_effects,
+              }),
             }
           : null,
     }));
@@ -1034,6 +1069,30 @@ export class GameSessionRepository {
           UNION
           SELECT id_character FROM npc_session WHERE id_game_session = ${idGameSession}
         )
+    `;
+  }
+
+  /** Nome, classe e nível do personagem (Inspiração Bárdica: quem dá). */
+  async findCharacterBasics(
+    idCharacter: number,
+  ): Promise<{name: string; id_class: number; level: number} | null> {
+    const [row] = await this.db.sql<{name: string; id_class: number; level: number}[]>`
+      SELECT name, id_class, level FROM character WHERE id_character = ${idCharacter}
+    `;
+    return row ?? null;
+  }
+
+  /** Guarda a Inspiração Bárdica no personagem do aliado (substitui uma anterior não usada). */
+  async setBardicInspiration(
+    idCharacter: number,
+    inspiration: {sides: number; from: string},
+  ): Promise<void> {
+    await this.db.sql`
+      UPDATE character
+      SET active_effects =
+        COALESCE(active_effects, '{"active": [], "turn_uses": {}}'::jsonb)
+        || jsonb_build_object('bardic_inspiration', ${this.db.sql.json(inspiration)}::jsonb)
+      WHERE id_character = ${idCharacter}
     `;
   }
 
