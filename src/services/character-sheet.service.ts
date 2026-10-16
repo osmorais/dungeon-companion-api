@@ -79,6 +79,7 @@ import {
 } from './character-sheet/rules';
 import {FEATS} from './character-sheet/feats';
 import {buildSpellRoll, healingFeaturesFor} from './character-sheet/spell-mechanics';
+import {abilityMechanicsFor} from './character-sheet/ability-mechanics';
 import {CLASS_ARMOUR_RULES} from './character-sheet/armour-rules';
 
 @injectable({scope: BindingScope.TRANSIENT})
@@ -319,7 +320,7 @@ export class CharacterSheetService {
         spells,
         avatar_preset: input.avatar_preset ?? null,
         resource_trackers: this.buildResourceTrackers(classRule, subclassRule, level, {}, stats),
-        class_abilities: getKnownClassAbilities(classKey, level, core_build.id_subclass).map(a => ({name: a.name, description: a.description, cost: a.cost, resource_key: a.resourceKey})),
+        class_abilities: this.buildClassAbilities(classKey, level, core_build.id_subclass, stats, profBonus, spellcastingInfo?.spell_save_dc ?? null),
         class_resources: this.buildClassResources(classRule, subclassRule, level),
       },
     };
@@ -394,6 +395,24 @@ export class CharacterSheetService {
       ),
       userId,
     );
+  }
+
+  /** Habilidades ativáveis com o que o "USAR" faz (rolagem/CD/espaço devolvido) — ver `ability-mechanics.ts`. */
+  private buildClassAbilities(
+    classKey: number,
+    level: number,
+    idSubclass: string | null | undefined,
+    stats: FinalStats,
+    profBonus: number,
+    spellSaveDc: number | null,
+  ): CharacterSheet['character_sheet']['class_abilities'] {
+    return getKnownClassAbilities(classKey, level, idSubclass).map(a => ({
+      name: a.name,
+      description: a.description,
+      cost: a.cost,
+      resource_key: a.resourceKey,
+      ...abilityMechanicsFor(a.name, {level, stats, profBonus, spellSaveDc}),
+    }));
   }
 
   /** Recursos de classe/subclasse que escalam por nível (ex: "Ataque Furtivo": "2d6") — antes só existia no preview de level-up, agora também fica na ficha persistida. */
@@ -816,7 +835,7 @@ export class CharacterSheetService {
           character.resource_uses_expended ?? {},
           stats,
         ),
-        class_abilities: getKnownClassAbilities(character.id_class, character.level, character.id_subclass).map(a => ({name: a.name, description: a.description, cost: a.cost, resource_key: a.resourceKey})),
+        class_abilities: this.buildClassAbilities(character.id_class, character.level, character.id_subclass, stats, profBonus, spellcastingInfo?.spell_save_dc ?? null),
         class_resources: this.buildClassResources(classRule, subclassRule, character.level),
       },
     };

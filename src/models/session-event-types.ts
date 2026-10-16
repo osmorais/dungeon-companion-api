@@ -80,6 +80,7 @@ export interface SessionEventPayloadMap {
     spell_name: string;
     save_dc: number | null;
     save_ability: 'STR' | 'DEX' | 'CON' | 'INT' | 'WIS' | 'CHA' | null;
+    is_ability: boolean;
   };
   combat_started: {combat: CombatEncounterDetail};
   combat_participants_added: {combat: CombatEncounterDetail};

@@ -872,6 +872,7 @@ export class GameSessionService {
       spell_name: input.spell_name,
       save_dc: saveDc,
       save_ability: saveAbility,
+      is_ability: input.is_ability === true,
     });
   }
 

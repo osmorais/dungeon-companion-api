@@ -937,6 +937,51 @@ describe('CharacterSheetService', () => {
   });
 
   // -------------------------------------------------------------------------
+  describe('habilidades ativáveis na ficha', () => {
+    it('Guerreiro: Retomar o Fôlego com a cura pronta; Surto de Ação sem rolagem', async () => {
+      repository.stubs.findCharacterById.resolves(
+        rawCharacter({character: {level: 3, proficiency_bonus: 2}}),
+      );
+      const sheet = (await service.loadCharacter(1, 'owner'))!.character_sheet;
+      const second = sheet.class_abilities.find(
+        a => a.name === 'Retomar o Fôlego',
+      )!;
+      expect(second.roll!.by_slot['0']).to.containDeep({
+        dice_count: 1,
+        dice_sides: 10,
+        modifier: 3,
+      });
+      const surge = sheet.class_abilities.find(
+        a => a.name === 'Surto de Ação',
+      )!;
+      expect(surge).to.containDeep({
+        roll: null,
+        variable_cost: false,
+        restores_slot: null,
+      });
+    });
+
+    it('Monge Mão Aberta nv6 ganha Integridade Corporal (3 × nível)', async () => {
+      repository.stubs.findCharacterById.resolves(
+        rawCharacter({
+          character: {
+            id_class: 10,
+            id_subclass: 'mao-aberta',
+            level: 6,
+            proficiency_bonus: 3,
+            chosen_fighting_style: null,
+          },
+        }),
+      );
+      const sheet = (await service.loadCharacter(1, 'owner'))!.character_sheet;
+      const wholeness = sheet.class_abilities.find(
+        a => a.name === 'Integridade Corporal',
+      )!;
+      expect(wholeness.roll!.by_slot['0'].modifier).to.equal(18);
+    });
+  });
+
+  // -------------------------------------------------------------------------
   describe('equipamento', () => {
     it('recalcula a CA ao trocar armadura/escudo', async () => {
       givenCharacter();

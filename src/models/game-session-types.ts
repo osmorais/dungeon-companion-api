@@ -206,6 +206,8 @@ export interface SpellCastInput {
   /** Magia de resistência: CD e atributo que os alvos rolam — aparece no toast da mesa. */
   save_dc?: number | null;
   save_ability?: 'STR' | 'DEX' | 'CON' | 'INT' | 'WIS' | 'CHA' | null;
+  /** Habilidade de classe (não magia): o toast diz "USOU" em vez de "LANÇOU". */
+  is_ability?: boolean;
 }
 
 export interface GameSessionDetail {

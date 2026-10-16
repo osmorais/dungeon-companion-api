@@ -731,6 +731,7 @@ describe('GameSessionService', () => {
           spell_name: 'Bola de Fogo',
           save_dc: null,
           save_ability: null,
+          is_ability: false,
         },
       ]);
       expect(repository.stubs.addRoll.called).to.be.false();
@@ -743,6 +744,22 @@ describe('GameSessionService', () => {
           'u',
         ),
       ).to.be.rejectedWith(/não pode anunciar/);
+    });
+
+    it('habilidade de classe vai marcada (toast "USOU")', async () => {
+      repository.stubs.hasSessionAccess.resolves(true);
+      repository.stubs.canPostRollFor.resolves(true);
+      await service.announceSpellCast(
+        'gs',
+        {
+          id_character: 1,
+          actor_name: 'Thorin',
+          spell_name: 'Retomar o Fôlego',
+          is_ability: true,
+        },
+        'u',
+      );
+      expect(events[0]).to.containDeep({is_ability: true});
     });
 
     it('magia de resistência leva a CD e o atributo pro toast; valida os dois juntos', async () => {

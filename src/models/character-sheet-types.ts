@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import {Armour, Skill, Spell, WeaponRow} from './character-options-types';
+import {Armour, Skill, Spell, SpellRoll, WeaponRow} from './character-options-types';
 
 export type StatKeyPt = 'FOR' | 'DES' | 'CON' | 'INT' | 'SAB' | 'CAR';
 export type StatKeyEn = 'STR' | 'DEX' | 'CON' | 'INT' | 'WIS' | 'CHA';
@@ -252,7 +252,18 @@ export interface CharacterSheet {
       recharge_on: 'short_rest' | 'long_rest';
     }[];
     /** Características ativáveis gastando um dos `resource_trackers` (Canalizar Divindade, Fúria, Pontos de Chi, Forma Selvagem, etc.) — vazio se não houver nenhuma neste nível. */
-    class_abilities: {name: string; description: string; cost: number; resource_key: string}[];
+    class_abilities: {
+      name: string;
+      description: string;
+      cost: number;
+      resource_key: string;
+      /** O que o "USAR" rola (cura/resistência) — ver `ability-mechanics.ts`. */
+      roll: SpellRoll | null;
+      /** Curar pelo Toque: o jogador escolhe quantos pontos do recurso gastar. */
+      variable_cost: boolean;
+      /** Criar Espaço de Magia: devolve um espaço gasto desse círculo. */
+      restores_slot: number | null;
+    }[];
     /** Recursos de classe/subclasse que escalam por nível (ex: "Ataque Furtivo": "2d6") — informativo, `null` se não houver nenhum neste nível. */
     class_resources: Record<string, string> | null;
   };

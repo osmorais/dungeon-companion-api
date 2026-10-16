@@ -137,6 +137,10 @@ export interface SpellRoll {
   heal: 'hp' | 'temp_hp' | null;
   /** Cura Suprema (Clérigo da Vida nv17): usa o valor máximo dos dados em vez de rolar. */
   maximize: boolean;
+  /** Texto do efeito da resistência quando não é "metade/sem dano/total" (Palma Vibrante). */
+  save_effect_note?: string | null;
+  /** Cura fixa a distribuir entre alvos (Preservar a Vida). */
+  heal_distribute?: boolean;
   /** Só `kind: 'rider'` (soma dano no ataque): só no próximo acerto (gasta o espaço nele) ou em
    *  todo acerto enquanto durar, e em que tipo de ataque vale. */
   rider_trigger: 'next_hit' | 'each_hit' | null;
