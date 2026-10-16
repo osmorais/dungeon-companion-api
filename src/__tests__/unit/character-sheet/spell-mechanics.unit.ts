@@ -3,6 +3,7 @@ import {expect} from '@loopback/testlab';
 import {
   buildSpellRoll,
   cantripTier,
+  healingFeaturesFor,
   resolveSpellRollAtSlot,
   SPELL_MECHANICS,
 } from '../../../services/character-sheet/spell-mechanics';
@@ -35,6 +36,24 @@ describe('spell-mechanics', () => {
 
     it('ataque e automático sempre têm dano; resistência tem atributo, e "passou" só com dano', () => {
       for (const m of Object.values(SPELL_MECHANICS)) {
+        if (m.kind === 'heal') {
+          expect({
+            name: m.name,
+            heal: !!m.heal,
+            damage: !!m.damage,
+            save: !!m.save,
+          }).to.eql({
+            name: m.name,
+            heal: true,
+            damage: false,
+            save: false,
+          });
+          continue;
+        }
+        expect({name: m.name, heal: !!m.heal}).to.eql({
+          name: m.name,
+          heal: false,
+        });
         if (m.kind !== 'save') {
           expect({name: m.name, damage: !!m.damage, save: !!m.save}).to.eql({
             name: m.name,
@@ -226,10 +245,85 @@ describe('spell-mechanics', () => {
         save_ability: 'WIS',
         save_dc: 13,
         save_on_success: null,
+        heal: null,
+        maximize: false,
         instance_label: null,
         variant: null,
         by_slot: {},
       });
+    });
+  });
+
+  describe('cura', () => {
+    it('Curar Ferimentos: 1d8 + modificador, +1d8 por círculo', () => {
+      const roll = buildSpellRoll(108, 1, 3, 3, 5, 13)!;
+      expect(roll).to.containDeep({
+        kind: 'heal',
+        heal: 'hp',
+        maximize: false,
+        damage_type: null,
+      });
+      expect(roll.by_slot['1']).to.containDeep({
+        dice_count: 1,
+        dice_sides: 8,
+        modifier: 3,
+      });
+      expect(roll.by_slot['3']).to.containDeep({dice_count: 3, modifier: 3});
+    });
+
+    it('Vitalidade Falsa: PV temporários 1d4+4, +5 por círculo, sem modificador', () => {
+      const roll = buildSpellRoll(359, 1, 3, 4, 5, 13)!;
+      expect(roll.heal).to.equal('temp_hp');
+      expect(roll.by_slot['1']).to.containDeep({
+        dice_count: 1,
+        dice_sides: 4,
+        modifier: 4,
+      });
+      expect(roll.by_slot['3']).to.containDeep({dice_count: 1, modifier: 14});
+    });
+
+    it('Aura de Vitalidade 2d6 sem modificador; Regeneração 4d8+15', () => {
+      expect(buildSpellRoll(35, 3, 5, 4, 7, 15)!.by_slot['3']).to.containDeep({
+        dice_count: 2,
+        dice_sides: 6,
+        modifier: 0,
+      });
+      expect(buildSpellRoll(300, 7, 13, 4, 9, 17)!.by_slot['7']).to.containDeep(
+        {dice_count: 4, dice_sides: 8, modifier: 15},
+      );
+    });
+
+    it('Clérigo da Vida: Discípulo da Vida soma 2 + círculo; Cura Suprema no nv17', () => {
+      expect(healingFeaturesFor(4, 'vida', 1)).to.eql({
+        discipleOfLife: true,
+        supremeHealing: false,
+      });
+      expect(healingFeaturesFor(4, 'vida', 17)).to.eql({
+        discipleOfLife: true,
+        supremeHealing: true,
+      });
+      expect(healingFeaturesFor(4, 'luz', 17)).to.eql({
+        discipleOfLife: false,
+        supremeHealing: false,
+      });
+      expect(healingFeaturesFor(2, 'vida', 17)).to.eql({
+        discipleOfLife: false,
+        supremeHealing: false,
+      });
+
+      const life = healingFeaturesFor(4, 'vida', 17);
+      const cure = buildSpellRoll(108, 1, 17, 5, 11, 19, life)!;
+      expect(cure.maximize).to.be.true();
+      expect(cure.by_slot['1'].modifier).to.equal(5 + 2 + 1);
+      expect(cure.by_slot['4'].modifier).to.equal(5 + 2 + 4);
+      // PV temporários não são "restaurar pontos de vida": sem bônus nem máximo
+      const falseLife = buildSpellRoll(359, 1, 17, 5, 11, 19, life)!;
+      expect(falseLife.maximize).to.be.false();
+      expect(falseLife.by_slot['1'].modifier).to.equal(4);
+      // dano não ganha o bônus
+      expect(
+        buildSpellRoll(44, 3, 17, 5, 11, 19, life)!.by_slot['3'].modifier,
+      ).to.equal(0);
     });
   });
 
@@ -243,6 +337,8 @@ describe('spell-mechanics', () => {
         save_ability: null,
         save_dc: null,
         save_on_success: null,
+        heal: null,
+        maximize: false,
         instance_label: null,
         variant: null,
         by_slot: {

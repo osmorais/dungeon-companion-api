@@ -531,6 +531,13 @@ describe('GameSessionService', () => {
       ).to.eql([true, false]);
       expect(events.map(e => e.type)).to.eql(['roll_added', 'roll_added']);
     });
+
+    it('aceita rolagem de cura (magias de cura)', async () => {
+      await service.addRoll('gs', {...ROLL, roll_type: 'heal'}, 'u');
+      expect(repository.stubs.addRoll.firstCall.args[1].roll_type).to.equal(
+        'heal',
+      );
+    });
   });
 
   // -------------------------------------------------------------------------

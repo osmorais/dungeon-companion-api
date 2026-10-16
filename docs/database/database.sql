@@ -356,7 +356,7 @@ CREATE TABLE IF NOT EXISTS session_roll_log (
     id_character INT REFERENCES Character(id_character) ON DELETE SET NULL,
 
     actor_name VARCHAR(255) NOT NULL,
-    roll_type VARCHAR(20) NOT NULL,       -- 'dice' | 'attack' | 'skill' | 'save' | 'spell'
+    roll_type VARCHAR(20) NOT NULL,       -- 'dice' | 'attack' | 'damage' | 'skill' | 'save' | 'spell' | 'initiative' | 'heal'
     label VARCHAR(255) NOT NULL,
     dice_notation VARCHAR(20) NOT NULL,   -- ex: '1d20'
     rolls INTEGER[] NOT NULL,             -- resultados brutos (2 valores se vantagem/desvantagem)

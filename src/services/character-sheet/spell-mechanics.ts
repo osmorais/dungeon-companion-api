@@ -9,6 +9,8 @@ import {StatKeyEn} from '../../models/character-sheet-types';
  *
  * Fase 1: magias de **ataque mágico** e de **acerto automático**. Fase 2: magias de
  * **resistência** — com dano (o modal mostra a CD e rola o dano) e sem dano (só a CD no anúncio).
+ * Fase 3: **cura** (dado + modificador de conjuração; PV temporários na Vitalidade Falsa), com o
+ * Discípulo da Vida e a Cura Suprema do Clérigo do Domínio da Vida.
  * Efeitos além do dano imediato (ex.: metade do dano ao errar na Flecha Ácida, cura do Toque
  * Vampírico, dano repetido do Raio de Bruxa, condições) continuam só na descrição — o mestre
  * aplica. Os números seguem o livro (`docs/magias.txt`).
@@ -16,7 +18,7 @@ import {StatKeyEn} from '../../models/character-sheet-types';
 export interface SpellMechanics {
   /** Nome como está na tabela `spell` — só pra leitura e pros testes; a chave é o `id_spell`. */
   name: string;
-  kind: 'attack' | 'auto' | 'save';
+  kind: 'attack' | 'auto' | 'save' | 'heal';
   /** Só `kind: 'attack'`. */
   attack?: 'melee' | 'ranged';
   /** Só `kind: 'save'`. `onSuccess`: metade do dano, nenhum dano, ou dano total sempre (a
@@ -25,6 +27,10 @@ export interface SpellMechanics {
   /** Dano no círculo base (truque: no nível 1 do personagem), por raio/dardo. Ausente só em
    *  magia de resistência sem dano. */
   damage?: {count: number; sides: number; type: string};
+  /** Só `kind: 'heal'`: dados de cura no círculo base; `tempHp` = PV temporários (Vitalidade Falsa). */
+  heal?: {count: number; sides: number; tempHp?: boolean};
+  /** Bônus fixo a mais por círculo acima do base (Vitalidade Falsa: +5 PV temporários). */
+  bonusPerSlotAbove?: number;
   /** Segundo grupo de dados que não escala (Tempestade de Gelo: 2d8 concussão + 4d6 frio). */
   extraDice?: {count: number; sides: number};
   /** Soma o modificador do atributo de conjuração ao dano (ex.: Arma Espiritual). */
@@ -329,6 +335,32 @@ export const SPELL_MECHANICS: Record<number, SpellMechanics> = {
   138: save('Encarnação Fantasmagórica', 'WIS', 'none', 4, 10, 'psíquico'),
 
   // -------------------------------------------------------------------------
+  // Cura (fase 3). Fora: as de valor fixo, sem dado (Cura Completa, Palavra de Poder Curar,
+  // Cura Completa em Massa, Armadura de Agathys) e a cura do Toque Vampírico (metade do dano).
+  // -------------------------------------------------------------------------
+  108: heal('Curar Ferimentos', 1, 8, {upcast: {count: 1}}),
+  249: heal('Palavra Curativa', 1, 4, {upcast: {count: 1}}),
+  359: {
+    name: 'Vitalidade Falsa',
+    kind: 'heal',
+    heal: {count: 1, sides: 4, tempHp: true},
+    bonus: 4,
+    bonusPerSlotAbove: 5,
+  },
+  245: heal('Oração Curativa', 2, 8, {upcast: {count: 1}}),
+  250: heal('Palavra Curativa em Massa', 1, 4, {upcast: {count: 1}}),
+  // Ação bônus a cada turno: 2d6, sem modificador.
+  35: {name: 'Aura de Vitalidade', kind: 'heal', heal: {count: 2, sides: 6}},
+  109: heal('Curar Ferimentos em Massa', 3, 8, {upcast: {count: 1}}),
+  // Cura imediata; depois 1 PV no começo de cada turno do alvo (o mestre aplica).
+  300: {
+    name: 'Regeneração',
+    kind: 'heal',
+    heal: {count: 4, sides: 8},
+    bonus: 15,
+  },
+
+  // -------------------------------------------------------------------------
   // Resistência sem dano rolável (fase 2): o anúncio mostra a CD. Inclui magias com dano
   // condicional/especial demais pra um botão de rolar (Símbolo, Terremoto, Muralha Prismática…).
   // Fora: Contato Extraplanar (CD fixa 15, não a do conjurador) e as que somam dano no próximo
@@ -422,6 +454,22 @@ function save(
   };
 }
 
+/** Magia de cura com dado + modificador de conjuração. */
+function heal(
+  name: string,
+  count: number,
+  sides: number,
+  extra: Partial<SpellMechanics> = {},
+): SpellMechanics {
+  return {
+    name,
+    kind: 'heal',
+    heal: {count, sides},
+    addCastingMod: true,
+    ...extra,
+  };
+}
+
 /** Magia de resistência sem dano rolável — só a CD no anúncio. */
 function saveOnly(name: string, ability: StatKeyEn): SpellMechanics {
   return {name, kind: 'save', save: {ability}};
@@ -442,11 +490,13 @@ export function resolveSpellRollAtSlot(
   slotLevel: number,
   characterLevel: number,
   castingMod: number,
+  healing: HealingFeatures = NO_HEALING_FEATURES,
 ): SpellRoll['by_slot'][string] | null {
-  if (!mechanics.damage) return null;
+  const dice = mechanics.damage ?? mechanics.heal;
+  if (!dice) return null;
   const above = Math.max(0, slotLevel - spellLevel);
   const tier = cantripTier(characterLevel);
-  let diceCount = mechanics.damage.count;
+  let diceCount = dice.count;
   if (mechanics.upcast)
     diceCount +=
       mechanics.upcast.count *
@@ -463,11 +513,44 @@ export function resolveSpellRollAtSlot(
   return {
     instances,
     dice_count: diceCount,
-    dice_sides: mechanics.damage.sides,
+    dice_sides: dice.sides,
     modifier:
-      (mechanics.addCastingMod ? castingMod : 0) + (mechanics.bonus ?? 0),
+      (mechanics.addCastingMod ? castingMod : 0) +
+      (mechanics.bonus ?? 0) +
+      (mechanics.bonusPerSlotAbove ?? 0) * above +
+      (restoresHp(mechanics) && healing.discipleOfLife && slotLevel >= 1
+        ? 2 + slotLevel
+        : 0),
     extra_dice: mechanics.extraDice ? [mechanics.extraDice] : [],
   };
+}
+
+/** Características que mexem na cura das magias do personagem (Clérigo do Domínio da Vida). */
+export interface HealingFeatures {
+  /** Discípulo da Vida (nv1): +2 + círculo do espaço em magia de 1º círculo ou maior. */
+  discipleOfLife: boolean;
+  /** Cura Suprema (nv17): usa o valor máximo dos dados em vez de rolar. */
+  supremeHealing: boolean;
+}
+
+const NO_HEALING_FEATURES: HealingFeatures = {
+  discipleOfLife: false,
+  supremeHealing: false,
+};
+
+/** Cura de verdade (PV), não PV temporários. */
+function restoresHp(mechanics: SpellMechanics): boolean {
+  return mechanics.kind === 'heal' && !mechanics.heal?.tempHp;
+}
+
+/** Domínio da Vida: Discípulo da Vida desde o nv1 e Cura Suprema a partir do nv17. */
+export function healingFeaturesFor(
+  idClass: number,
+  idSubclass: string | null | undefined,
+  level: number,
+): HealingFeatures {
+  const life = idClass === 4 && idSubclass === 'vida';
+  return {discipleOfLife: life, supremeHealing: life && level >= 17};
 }
 
 /**
@@ -482,6 +565,7 @@ export function buildSpellRoll(
   castingMod: number,
   spellAttackBonus: number,
   spellSaveDc: number,
+  healing: HealingFeatures = NO_HEALING_FEATURES,
 ): SpellRoll | null {
   const mechanics = SPELL_MECHANICS[idSpell];
   if (!mechanics) return null;
@@ -494,6 +578,8 @@ export function buildSpellRoll(
     attack_type: mechanics.attack ?? null,
     attack_bonus: mechanics.kind === 'attack' ? spellAttackBonus : null,
     damage_type: mechanics.damage?.type ?? null,
+    heal: mechanics.heal ? (mechanics.heal.tempHp ? 'temp_hp' : 'hp') : null,
+    maximize: restoresHp(mechanics) && healing.supremeHealing,
     save_ability: mechanics.save?.ability ?? null,
     save_dc: mechanics.save ? spellSaveDc : null,
     save_on_success: mechanics.save?.onSuccess ?? null,
@@ -507,6 +593,7 @@ export function buildSpellRoll(
           slot,
           characterLevel,
           castingMod,
+          healing,
         );
         return entry ? [[String(slot), entry]] : [];
       }),

@@ -37,6 +37,7 @@ const ROLL_TYPES: RollType[] = [
   'save',
   'spell',
   'initiative',
+  'heal',
 ];
 const ADVANTAGE_STATES: AdvantageState[] = [
   'normal',

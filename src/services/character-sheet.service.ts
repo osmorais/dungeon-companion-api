@@ -78,7 +78,7 @@ import {
   hasArcaneSecretsChoice,
 } from './character-sheet/rules';
 import {FEATS} from './character-sheet/feats';
-import {buildSpellRoll} from './character-sheet/spell-mechanics';
+import {buildSpellRoll, healingFeaturesFor} from './character-sheet/spell-mechanics';
 import {CLASS_ARMOUR_RULES} from './character-sheet/armour-rules';
 
 @injectable({scope: BindingScope.TRANSIENT})
@@ -705,6 +705,7 @@ export class CharacterSheetService {
       : undefined;
     // Rolagem pronta (ataque/dano por círculo) pras magias com mecânica cadastrada — só pra quem
     // conjura (truque racial de classe não conjuradora fica sem, não há bônus de ataque de magia).
+    const healingFeatures = healingFeaturesFor(character.id_class, character.id_subclass, character.level);
     const spellsWithRolls: Spell[] = spellcastingResult.is_spellcaster
       ? spellList.map(s => {
           const roll = buildSpellRoll(
@@ -714,6 +715,7 @@ export class CharacterSheetService {
             getMod(stats[spellcastingResult.spellcasting_ability]),
             spellcastingResult.spell_attack_bonus,
             spellcastingResult.spell_save_dc,
+            healingFeatures,
           );
           return roll ? {...s, roll} : s;
         })

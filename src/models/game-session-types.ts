@@ -147,7 +147,8 @@ export type RollType =
   | 'skill'
   | 'save'
   | 'spell'
-  | 'initiative';
+  | 'initiative'
+  | 'heal';
 export type AdvantageState = 'normal' | 'advantage' | 'disadvantage';
 
 export interface RollLogEntry {
