@@ -974,6 +974,20 @@ export class GameSessionRepository {
   }
 
   /** Esconde todos os monstros revelados da sessão — chamado ao encerrar o combate. Devolve os ids afetados. */
+  /** Fim do combate: os efeitos ativos (Fúria, Arma Sagrada) dos personagens da sessão acabam. */
+  async clearActiveEffectsInSession(idGameSession: string): Promise<void> {
+    await this.db.sql`
+      UPDATE character
+      SET active_effects = NULL
+      WHERE active_effects IS NOT NULL
+        AND id_character IN (
+          SELECT id_character FROM player_session WHERE id_game_session = ${idGameSession}
+          UNION
+          SELECT id_character FROM npc_session WHERE id_game_session = ${idGameSession}
+        )
+    `;
+  }
+
   async hideAllMonsters(idGameSession: string): Promise<string[]> {
     const rows = await this.db.sql<{id_monster_session: string}[]>`
       UPDATE monster_session SET is_revealed = false

@@ -825,6 +825,16 @@ describe('CharacterSheetService', () => {
       ).to.eql({});
     });
 
+    it('descanso longo encerra os efeitos ativos (Fúria, Arma Sagrada)', async () => {
+      givenCharacter({
+        character: {active_effects: {active: ['Fúria'], turn_uses: {}}},
+      });
+      await service.longRest(1, 'owner');
+      expect(
+        repository.stubs.updateActiveEffects.calledOnceWith(1, null),
+      ).to.be.true();
+    });
+
     it('descanso longo recupera no mínimo 1 dado e exige PV > 0', async () => {
       givenCharacter({character: {hit_dice_spent: 1, current_hit_points: 3}});
       expect((await service.longRest(1, 'owner')).hit_dice_spent).to.equal(0);
@@ -978,6 +988,114 @@ describe('CharacterSheetService', () => {
         a => a.name === 'Integridade Corporal',
       )!;
       expect(wholeness.roll!.by_slot['0'].modifier).to.equal(18);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('efeitos ativos e usos por turno', () => {
+    beforeEach(() => {
+      repository.stubs.findCharacterById.resolves(
+        rawCharacter({character: {id_class: 1, chosen_fighting_style: null}}),
+      );
+    });
+
+    it('liga e desliga um efeito (Fúria) e guarda no personagem', async () => {
+      const on = await service.updateActiveEffects(
+        1,
+        {effect: 'Fúria', active: true},
+        'owner',
+      );
+      expect(on.active_effects).to.eql({active: ['Fúria'], turn_uses: {}});
+      expect(repository.stubs.updateActiveEffects.firstCall.args).to.eql([
+        1,
+        on.active_effects,
+      ]);
+
+      repository.stubs.findCharacterById.resolves(
+        rawCharacter({
+          character: {
+            id_class: 1,
+            chosen_fighting_style: null,
+            active_effects: {active: ['Fúria'], turn_uses: {}},
+          },
+        }),
+      );
+      const off = await service.updateActiveEffects(
+        1,
+        {effect: 'Fúria', active: false},
+        'owner',
+      );
+      expect(off.active_effects.active).to.eql([]);
+    });
+
+    it('marca uma soma 1×/turno na vez do combate', async () => {
+      const result = await service.updateActiveEffects(
+        1,
+        {turn_use: 'Ataque Furtivo', turn_key: 'enc:2:p1'},
+        'owner',
+      );
+      expect(result.active_effects.turn_uses).to.eql({
+        'Ataque Furtivo': 'enc:2:p1',
+      });
+    });
+
+    it('valida efeito, soma, vez e permissão', async () => {
+      await expect(
+        service.updateActiveEffects(1, {effect: 'Voo', active: true}, 'owner'),
+      ).to.be.rejectedWith(/Efeito inválido/);
+      await expect(
+        service.updateActiveEffects(1, {effect: 'Fúria'}, 'owner'),
+      ).to.be.rejectedWith(/Efeito inválido/);
+      await expect(
+        service.updateActiveEffects(
+          1,
+          {turn_use: 'Surto de Ação', turn_key: 'x'},
+          'owner',
+        ),
+      ).to.be.rejectedWith(/Uso por turno inválido/);
+      await expect(
+        service.updateActiveEffects(
+          1,
+          {turn_use: 'Ataque Furtivo', turn_key: ' '},
+          'owner',
+        ),
+      ).to.be.rejectedWith(/Uso por turno inválido/);
+      await expect(
+        service.updateActiveEffects(1, {}, 'owner'),
+      ).to.be.rejectedWith(/Informe/);
+      await expect(
+        service.updateActiveEffects(
+          1,
+          {effect: 'Fúria', active: true},
+          'outro',
+        ),
+      ).to.be.rejected();
+      expect(repository.stubs.updateActiveEffects.called).to.be.false();
+    });
+
+    it('a ficha traz os traços de ataque com os efeitos ativos', async () => {
+      repository.stubs.findCharacterById.resolves(
+        rawCharacter({
+          character: {
+            id_class: 1,
+            level: 9,
+            chosen_fighting_style: null,
+            active_effects: {active: ['Fúria'], turn_uses: {}},
+          },
+        }),
+      );
+      const sheet = (await service.loadCharacter(1, 'owner'))!.character_sheet;
+      expect(sheet.combat_features).to.containDeep({
+        melee_crit_extra_dice: 1,
+        active_effects: {active: ['Fúria']},
+      });
+      expect(sheet.combat_features!.riders[0]).to.containDeep({
+        key: 'Fúria',
+        flat: 3,
+      });
+      expect(
+        sheet.class_abilities.find(a => a.name === 'Fúria')!.activates,
+      ).to.equal('Fúria');
     });
   });
 

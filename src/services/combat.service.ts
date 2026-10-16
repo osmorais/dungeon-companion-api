@@ -702,6 +702,9 @@ export class CombatService {
     }
 
     await this.repository.finishEncounter(idCombatEncounter);
+    await this.gameSessionRepository.clearActiveEffectsInSession(
+      context.id_game_session,
+    );
     const hiddenMonsterIds = await this.gameSessionRepository.hideAllMonsters(
       context.id_game_session,
     );

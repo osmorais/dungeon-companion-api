@@ -2,6 +2,7 @@
 import {SpellRoll} from '../../models/character-options-types';
 import {FinalStats, StatKeyEn} from '../../models/character-sheet-types';
 import {getMod} from './calculator';
+import {ABILITY_ACTIVATES} from './combat-features';
 
 /**
  * O que acontece ao "USAR" uma habilidade de classe (as de `getKnownClassAbilities`), no mesmo
@@ -24,6 +25,10 @@ export interface AbilityMechanicsResult {
   variable_cost: boolean;
   /** Devolve um espaço gasto desse círculo (Criar Espaço de Magia). */
   restores_slot: number | null;
+  /** Liga um efeito guardado no personagem até acabar (Fúria, Arma Sagrada). */
+  activates: string | null;
+  /** Abre N ataques desarmados em sequência (Rajada de Golpes). */
+  unarmed_attacks: number | null;
 }
 
 type DcSource = 'spell' | 'ki';
@@ -115,9 +120,18 @@ export function abilityMechanicsFor(
   ctx: AbilityContext,
 ): AbilityMechanicsResult {
   const restores = createdSlotLevel(name);
+  const extras = {
+    activates: ABILITY_ACTIVATES[name] ?? null,
+    unarmed_attacks: name === 'Rajada de Golpes' ? 2 : null,
+  };
   const mechanics = ABILITIES[name];
   if (!mechanics)
-    return {roll: null, variable_cost: false, restores_slot: restores};
+    return {
+      roll: null,
+      variable_cost: false,
+      restores_slot: restores,
+      ...extras,
+    };
 
   const dc = !mechanics.save
     ? null
@@ -160,6 +174,7 @@ export function abilityMechanicsFor(
     roll,
     variable_cost: !!mechanics.variableCost,
     restores_slot: restores,
+    ...extras,
   };
 }
 

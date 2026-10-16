@@ -368,6 +368,25 @@ export class CharacterController {
     return this.characterSheetService.expendResourceUse(id, body.resource_key, body.delta, currentUser.id);
   }
 
+  @patch('/api/character-sheet/{id}/active-effects')
+  @response(200, {
+    description:
+      'Liga/desliga um efeito ativo (Fúria, Arma Sagrada) ou marca uma soma 1×/turno (Ataque Furtivo, Golpe Divino, Matador de Inimigos) como usada na vez atual do combate',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async updateActiveEffects(
+    @param.path.number('id') id: number,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      description: '{effect, active} ou {turn_use, turn_key}',
+      required: true,
+      content: {'application/json': {schema: {type: 'object'}}},
+    })
+    body: {effect?: string; active?: boolean; turn_use?: string; turn_key?: string},
+  ): Promise<object> {
+    return this.characterSheetService.updateActiveEffects(id, body, currentUser.id);
+  }
+
   @post('/api/character-sheet/{id}/short-rest/hit-die')
   @response(200, {
     description: 'Spends one Hit Die to recover HP during a short rest',

@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/naming-convention */
+import {ActiveEffects, CombatFeatures} from '../services/character-sheet/combat-features';
 import {Armour, Skill, Spell, SpellRoll, WeaponRow} from './character-options-types';
 
 export type StatKeyPt = 'FOR' | 'DES' | 'CON' | 'INT' | 'SAB' | 'CAR';
@@ -156,6 +157,8 @@ export interface CharacterRawData {
     spell_attack_bonus: number | null;
     spell_slots_expended: Record<string, number> | null;
     resource_uses_expended: Record<string, number> | null;
+    /** Efeitos ativos (Fúria, Arma Sagrada) e somas 1×/turno já usadas — ver combat-features.ts. */
+    active_effects: ActiveEffects | null;
     chosen_tool_proficiency: string | null;
     chosen_fighting_style: string | null;
     hit_dice_spent: number;
@@ -263,8 +266,14 @@ export interface CharacterSheet {
       variable_cost: boolean;
       /** Criar Espaço de Magia: devolve um espaço gasto desse círculo. */
       restores_slot: number | null;
+      /** Liga um efeito guardado no personagem (Fúria, Arma Sagrada). */
+      activates: string | null;
+      /** Rajada de Golpes: N ataques desarmados em sequência. */
+      unarmed_attacks: number | null;
     }[];
     /** Recursos de classe/subclasse que escalam por nível (ex: "Ataque Furtivo": "2d6") — informativo, `null` se não houver nenhum neste nível. */
     class_resources: Record<string, string> | null;
+    /** Traços que mexem no ataque (crítico, somas, ataque poderoso, desarmado) — só na ficha carregada. */
+    combat_features?: CombatFeatures;
   };
 }

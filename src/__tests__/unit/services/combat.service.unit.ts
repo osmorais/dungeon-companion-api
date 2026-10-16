@@ -704,6 +704,12 @@ describe('CombatService', () => {
       expect(
         repository.stubs.finishEncounter.calledOnceWith('enc'),
       ).to.be.true();
+      // Fúria/Arma Sagrada dos personagens da sessão acabam com o combate
+      expect(
+        gameSessionRepository.stubs.clearActiveEffectsInSession.calledOnceWith(
+          'gs',
+        ),
+      ).to.be.true();
       expect(events).to.eql([
         {
           type: 'combat_ended',

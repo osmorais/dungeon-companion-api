@@ -80,6 +80,13 @@ import {
 import {FEATS} from './character-sheet/feats';
 import {buildSpellRoll, healingFeaturesFor} from './character-sheet/spell-mechanics';
 import {abilityMechanicsFor} from './character-sheet/ability-mechanics';
+import {
+  ACTIVATABLE_EFFECTS,
+  ActiveEffects,
+  EMPTY_ACTIVE_EFFECTS,
+  ONCE_PER_TURN_RIDERS,
+  buildCombatFeatures,
+} from './character-sheet/combat-features';
 import {CLASS_ARMOUR_RULES} from './character-sheet/armour-rules';
 
 @injectable({scope: BindingScope.TRANSIENT})
@@ -724,6 +731,7 @@ export class CharacterSheetService {
       : undefined;
     // Rolagem pronta (ataque/dano por círculo) pras magias com mecânica cadastrada — só pra quem
     // conjura (truque racial de classe não conjuradora fica sem, não há bônus de ataque de magia).
+    const classResources = this.buildClassResources(classRule, subclassRule, character.level);
     const healingFeatures = healingFeaturesFor(character.id_class, character.id_subclass, character.level);
     const spellsWithRolls: Spell[] = spellcastingResult.is_spellcaster
       ? spellList.map(s => {
@@ -836,7 +844,18 @@ export class CharacterSheetService {
           stats,
         ),
         class_abilities: this.buildClassAbilities(character.id_class, character.level, character.id_subclass, stats, profBonus, spellcastingInfo?.spell_save_dc ?? null),
-        class_resources: this.buildClassResources(classRule, subclassRule, character.level),
+        class_resources: classResources,
+        combat_features: buildCombatFeatures({
+          idClass: character.id_class,
+          idSubclass: character.id_subclass,
+          idRace: character.id_race,
+          level: character.level,
+          stats,
+          profBonus,
+          classResources,
+          featIds: chosenFeats.map(f => f.feat_id),
+          activeEffects: character.active_effects,
+        }),
       },
     };
   }
@@ -1516,6 +1535,39 @@ export class CharacterSheetService {
     return {resource_trackers: this.buildResourceTrackers(classRule, subclassRule, raw.character.level, expended, stats)};
   }
 
+  /**
+   * Liga/desliga um efeito ativo (Fúria, Arma Sagrada) ou marca uma soma 1×/turno como usada na
+   * vez atual do combate (`turn_key`). Fica guardado no personagem (coluna `active_effects`).
+   */
+  async updateActiveEffects(
+    id: number,
+    input: {effect?: string; active?: boolean; turn_use?: string; turn_key?: string},
+    userId: string,
+  ): Promise<{active_effects: ActiveEffects}> {
+    const raw = await this.repository.findCharacterById(id);
+    if (!raw) throw new HttpErrors.NotFound(`Character with id ${id} not found`);
+    if (!(await this.userCanManageCharacter(raw.character.user_id, id, userId)))
+      throw new HttpErrors.Forbidden();
+
+    const current = raw.character.active_effects ?? EMPTY_ACTIVE_EFFECTS;
+    let next: ActiveEffects;
+    if (input.effect !== undefined) {
+      if (!(ACTIVATABLE_EFFECTS as readonly string[]).includes(input.effect) || typeof input.active !== 'boolean')
+        throw new HttpErrors.UnprocessableEntity('Efeito inválido');
+      const others = current.active.filter(e => e !== input.effect);
+      next = {...current, active: input.active ? [...others, input.effect] : others};
+    } else if (input.turn_use !== undefined) {
+      const turnKey = typeof input.turn_key === 'string' ? input.turn_key.trim() : '';
+      if (!(ONCE_PER_TURN_RIDERS as readonly string[]).includes(input.turn_use) || !turnKey || turnKey.length > 120)
+        throw new HttpErrors.UnprocessableEntity('Uso por turno inválido');
+      next = {...current, turn_uses: {...current.turn_uses, [input.turn_use]: turnKey}};
+    } else {
+      throw new HttpErrors.UnprocessableEntity('Informe effect/active ou turn_use/turn_key');
+    }
+    await this.repository.updateActiveEffects(id, next);
+    return {active_effects: next};
+  }
+
   async rollHitDie(
     id: number,
     userId: string,
@@ -1629,6 +1681,8 @@ export class CharacterSheetService {
       raw.character.max_hit_points,
     );
     await this.repository.updateSpellSlotsExpended(id, {});
+    // Fúria/Arma Sagrada acabam no descanso longo (e no fim do combate).
+    if (raw.character.active_effects) await this.repository.updateActiveEffects(id, null);
     const expendedAfterLongRest = await this.rechargeResourceOnRest(id, raw.character, 'long_rest');
     const classRule = resolveClass(raw.character.id_class);
     const subclassRule = resolveSubclass(raw.character.id_class, raw.character.id_subclass);

@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/naming-convention */
+import {ActiveEffects} from '../services/character-sheet/combat-features';
 import {inject, injectable, BindingScope} from '@loopback/core';
 import {PostgresDatasource} from '../datasources';
 import {AvatarPreset, CharacterInput, CharacterRawData, CharacterSheet, CharacterSkillInsert, StatKeyEn} from '../models/character-sheet-types';
@@ -198,6 +199,14 @@ export class CharacterRepository {
     await this.db.sql`
       UPDATE character
       SET resource_uses_expended = ${this.db.sql.json(expended)}
+      WHERE id_character = ${id}
+    `;
+  }
+
+  async updateActiveEffects(id: number, effects: ActiveEffects | null): Promise<void> {
+    await this.db.sql`
+      UPDATE character
+      SET active_effects = ${effects ? this.db.sql.json(effects as never) : null}
       WHERE id_character = ${id}
     `;
   }
@@ -467,7 +476,7 @@ export class CharacterRepository {
         c.current_hit_points, c.max_hit_points, c.hit_dice, c.passive_perception,
         c.xp_points, c.total_po,
         c.spellcasting_ability, c.spell_save_dc, c.spell_attack_bonus, c.spell_slots_expended,
-        c.resource_uses_expended,
+        c.resource_uses_expended, c.active_effects,
         c.chosen_tool_proficiency, c.chosen_fighting_style,
         c.hit_dice_spent, c.user_id,
         c.avatar_preset, c.image_url,

@@ -564,6 +564,11 @@ ALTER TABLE character_skill ADD COLUMN IF NOT EXISTS is_expert BOOLEAN NOT NULL 
 -- `TRACKABLE_RESOURCES` em rules.ts) e no descanso longo sempre (superset do curto).
 ALTER TABLE character ADD COLUMN IF NOT EXISTS resource_uses_expended JSONB NOT NULL DEFAULT '{}';
 
+-- Efeitos ativos guardados no personagem (Fúria, Arma Sagrada) e somas 1×/turno já usadas na vez
+-- atual do combate (Ataque Furtivo, Golpe Divino, Matador de Inimigos) — ver combat-features.ts.
+-- Zera no descanso longo e no fim do combate.
+ALTER TABLE character ADD COLUMN IF NOT EXISTS active_effects JSONB NULL;
+
 -- ==========================================
 -- BÔNUS/ESCOLHAS DE RAÇA E CLASSE PENDENTES (auditoria 2026-09-11)
 -- ==========================================

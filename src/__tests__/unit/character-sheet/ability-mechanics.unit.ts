@@ -108,6 +108,8 @@ describe('ability-mechanics', () => {
       roll: null,
       variable_cost: false,
       restores_slot: 3,
+      activates: null,
+      unarmed_attacks: null,
     });
   });
 
@@ -116,6 +118,19 @@ describe('ability-mechanics', () => {
       roll: null,
       variable_cost: false,
       restores_slot: null,
+      activates: null,
+      unarmed_attacks: null,
     });
+  });
+
+  it('Fúria e Arma Sagrada ligam o efeito; Rajada de Golpes abre 2 ataques desarmados', () => {
+    expect(abilityMechanicsFor('Fúria', ctx(3)).activates).to.equal('Fúria');
+    expect(
+      abilityMechanicsFor('Canalizar Divindade: Arma Sagrada', ctx(3))
+        .activates,
+    ).to.equal('Arma Sagrada');
+    expect(
+      abilityMechanicsFor('Rajada de Golpes', ctx(3)).unarmed_attacks,
+    ).to.equal(2);
   });
 });
