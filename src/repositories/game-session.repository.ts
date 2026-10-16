@@ -1,5 +1,9 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {inject, injectable, BindingScope} from '@loopback/core';
+import {
+  RELENTLESS_ENDURANCE_KEY,
+  RELENTLESS_ENDURANCE_RACE_ID,
+} from '../services/character-sheet/rules';
 import {Sql, TransactionSql} from 'postgres';
 import {PostgresDatasource} from '../datasources';
 import {
@@ -715,6 +719,10 @@ export class GameSessionRepository {
   ): Promise<{
     status: 'not_found' | 'unauthorized' | 'ok';
     idGameSession?: string;
+    /** PV gravado — pode ser 1 em vez de 0 (Resistência Implacável). */
+    currentHitPoints?: number;
+    /** Nome do personagem quando a Resistência Implacável foi usada agora. */
+    relentlessEndurance?: {idCharacter: number; name: string} | null;
   }> {
     const rows = await this.db.sql<
       {
@@ -737,12 +745,53 @@ export class GameSessionRepository {
     if (player_user_id !== userId && session_owner_id !== userId)
       return {status: 'unauthorized'};
 
+    // Meio-Orc — Resistência Implacável: dano que zeraria o PV deixa com 1, uma vez por descanso
+    // longo (o uso fica no mesmo `resource_uses_expended` dos outros recursos).
+    let finalHp = currentHitPoints;
+    let relentlessEndurance: {idCharacter: number; name: string} | null = null;
+    if (currentHitPoints <= 0) {
+      const [character] = await this.db.sql<
+        {
+          name: string;
+          id_race: number;
+          current_hit_points: number;
+          resource_uses_expended: Record<string, number> | null;
+        }[]
+      >`
+        SELECT name, id_race, current_hit_points, resource_uses_expended
+        FROM character WHERE id_character = ${id_character}
+      `;
+      const used = character?.resource_uses_expended?.[RELENTLESS_ENDURANCE_KEY] ?? 0;
+      if (
+        character &&
+        character.id_race === RELENTLESS_ENDURANCE_RACE_ID &&
+        character.current_hit_points > 0 &&
+        used < 1
+      ) {
+        finalHp = 1;
+        relentlessEndurance = {idCharacter: id_character, name: character.name};
+        await this.db.sql`
+          UPDATE character
+          SET resource_uses_expended = ${this.db.sql.json({
+            ...(character.resource_uses_expended ?? {}),
+            [RELENTLESS_ENDURANCE_KEY]: 1,
+          })}
+          WHERE id_character = ${id_character}
+        `;
+      }
+    }
+
     await this.db.sql`
       UPDATE character
-      SET current_hit_points = ${currentHitPoints}, temporary_hit_points = ${temporaryHitPoints}
+      SET current_hit_points = ${finalHp}, temporary_hit_points = ${temporaryHitPoints}
       WHERE id_character = ${id_character}
     `;
-    return {status: 'ok', idGameSession: id_game_session};
+    return {
+      status: 'ok',
+      idGameSession: id_game_session,
+      currentHitPoints: finalHp,
+      relentlessEndurance,
+    };
   }
 
   /** Só o mestre da sessão pode alterar o PV atual de um NPC. */

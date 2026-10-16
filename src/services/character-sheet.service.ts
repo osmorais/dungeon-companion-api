@@ -70,6 +70,10 @@ import {
   ClassRule,
   SubclassRule,
   TRACKABLE_RESOURCES,
+  RACE_TRACKABLE_RESOURCES,
+  FEAT_TRACKABLE_RESOURCES,
+  FixedTrackableResource,
+  getKnownRaceAbilities,
   maxTrackableResourceUses,
   RestType,
   XP_THRESHOLDS,
@@ -326,8 +330,8 @@ export class CharacterSheetService {
         spellcasting_info: spellcastingInfo,
         spells,
         avatar_preset: input.avatar_preset ?? null,
-        resource_trackers: this.buildResourceTrackers(classRule, subclassRule, level, {}, stats),
-        class_abilities: this.buildClassAbilities(classKey, level, core_build.id_subclass, stats, profBonus, spellcastingInfo?.spell_save_dc ?? null),
+        resource_trackers: this.buildResourceTrackers(classRule, subclassRule, level, {}, stats, {idRace: core_build.id_race, featIds: []}),
+        class_abilities: this.buildClassAbilities(classKey, level, core_build.id_subclass, core_build.id_race, stats, profBonus, spellcastingInfo?.spell_save_dc ?? null),
         class_resources: this.buildClassResources(classRule, subclassRule, level),
       },
     };
@@ -409,11 +413,12 @@ export class CharacterSheetService {
     classKey: number,
     level: number,
     idSubclass: string | null | undefined,
+    idRace: number,
     stats: FinalStats,
     profBonus: number,
     spellSaveDc: number | null,
   ): CharacterSheet['character_sheet']['class_abilities'] {
-    return getKnownClassAbilities(classKey, level, idSubclass).map(a => ({
+    return [...getKnownClassAbilities(classKey, level, idSubclass), ...getKnownRaceAbilities(idRace)].map(a => ({
       name: a.name,
       description: a.description,
       cost: a.cost,
@@ -448,6 +453,7 @@ export class CharacterSheetService {
     level: number,
     resourceUsesExpended: Record<string, number>,
     stats?: Partial<Record<StatKeyEn, number>>,
+    extra: {idRace: number; featIds: string[]} = {idRace: 0, featIds: []},
   ): CharacterSheet['character_sheet']['resource_trackers'] {
     const resources = TRACKABLE_RESOURCES[classRule.id_class] ?? [];
     const mergedResourceData = {
@@ -466,7 +472,24 @@ export class CharacterSheetService {
         recharge_on: resource.rechargeOn,
       });
     }
+    // Recursos de raça (Arma de Sopro, Resistência Implacável) e de talento (Pontos de Sorte).
+    for (const resource of this.fixedTrackables(extra.idRace, extra.featIds)) {
+      trackers.push({
+        name: resource.key,
+        max: resource.max,
+        used: Math.min(resourceUsesExpended[resource.key] ?? 0, resource.max),
+        recharge_on: resource.rechargeOn,
+      });
+    }
     return trackers;
+  }
+
+  /** Recursos de raça e de talento — máximo fixo, não dependem do nível. */
+  private fixedTrackables(idRace: number, featIds: string[]): FixedTrackableResource[] {
+    return [
+      ...(RACE_TRACKABLE_RESOURCES[idRace] ?? []),
+      ...featIds.flatMap(id => FEAT_TRACKABLE_RESOURCES[id] ?? []),
+    ];
   }
 
   private computeSkills(
@@ -842,8 +865,9 @@ export class CharacterSheetService {
           character.level,
           character.resource_uses_expended ?? {},
           stats,
+          {idRace: character.id_race, featIds: chosenFeats.map(f => f.feat_id)},
         ),
-        class_abilities: this.buildClassAbilities(character.id_class, character.level, character.id_subclass, stats, profBonus, spellcastingInfo?.spell_save_dc ?? null),
+        class_abilities: this.buildClassAbilities(character.id_class, character.level, character.id_subclass, character.id_race, stats, profBonus, spellcastingInfo?.spell_save_dc ?? null),
         class_resources: classResources,
         combat_features: buildCombatFeatures({
           idClass: character.id_class,
@@ -1518,8 +1542,10 @@ export class CharacterSheetService {
       ...classRule.featuresByLevel?.[raw.character.level]?.resources,
       ...subclassRule?.featuresByLevel[raw.character.level]?.resources,
     };
-    const hasResource = (TRACKABLE_RESOURCES[raw.character.id_class] ?? []).some(r => r.key === resourceKey);
-    const max = hasResource ? maxTrackableResourceUses(mergedResourceData, resourceKey, stats) : null;
+    const featIds = (await this.repository.findChosenFeats(id)).map(f => f.feat_id);
+    const fixed = this.fixedTrackables(raw.character.id_race, featIds).find(r => r.key === resourceKey);
+    const hasResource = !!fixed || (TRACKABLE_RESOURCES[raw.character.id_class] ?? []).some(r => r.key === resourceKey);
+    const max = fixed ? fixed.max : hasResource ? maxTrackableResourceUses(mergedResourceData, resourceKey, stats) : null;
     if (!hasResource || max === null) {
       throw new HttpErrors.UnprocessableEntity('Este personagem não possui esse recurso consumível rastreável');
     }
@@ -1532,7 +1558,12 @@ export class CharacterSheetService {
     };
 
     await this.repository.updateResourceUsesExpended(id, expended);
-    return {resource_trackers: this.buildResourceTrackers(classRule, subclassRule, raw.character.level, expended, stats)};
+    return {
+      resource_trackers: this.buildResourceTrackers(classRule, subclassRule, raw.character.level, expended, stats, {
+        idRace: raw.character.id_race,
+        featIds,
+      }),
+    };
   }
 
   /**
@@ -1613,7 +1644,8 @@ export class CharacterSheetService {
     const nextSpent = spent + 1;
 
     await this.repository.updateHitDiceAndHp(id, nextSpent, nextHp);
-    const expendedAfterShortRest = await this.rechargeResourceOnRest(id, raw.character, 'short_rest');
+    const restFeatIds = (await this.repository.findChosenFeats(id)).map(f => f.feat_id);
+    const expendedAfterShortRest = await this.rechargeResourceOnRest(id, raw.character, 'short_rest', restFeatIds);
 
     return {
       roll,
@@ -1623,7 +1655,10 @@ export class CharacterSheetService {
       hit_dice_spent: nextSpent,
       hit_dice_total: hitDiceTotal,
       die_size: classRule.hitDie,
-      resource_trackers: this.buildResourceTrackers(classRule, subclassRule, raw.character.level, expendedAfterShortRest, stats),
+      resource_trackers: this.buildResourceTrackers(classRule, subclassRule, raw.character.level, expendedAfterShortRest, stats, {
+        idRace: raw.character.id_race,
+        featIds: restFeatIds,
+      }),
     };
   }
 
@@ -1634,10 +1669,14 @@ export class CharacterSheetService {
    */
   private async rechargeResourceOnRest(
     id: number,
-    character: {id_class: number; resource_uses_expended: Record<string, number> | null},
+    character: {id_class: number; id_race: number; resource_uses_expended: Record<string, number> | null},
     restType: RestType,
+    featIds: string[] = [],
   ): Promise<Record<string, number>> {
-    const resources = TRACKABLE_RESOURCES[character.id_class] ?? [];
+    const resources = [
+      ...(TRACKABLE_RESOURCES[character.id_class] ?? []),
+      ...this.fixedTrackables(character.id_race, featIds),
+    ];
     const expended = {...(character.resource_uses_expended ?? {})};
     if (!resources.length) return expended;
     for (const resource of resources) {
@@ -1683,7 +1722,8 @@ export class CharacterSheetService {
     await this.repository.updateSpellSlotsExpended(id, {});
     // Fúria/Arma Sagrada acabam no descanso longo (e no fim do combate).
     if (raw.character.active_effects) await this.repository.updateActiveEffects(id, null);
-    const expendedAfterLongRest = await this.rechargeResourceOnRest(id, raw.character, 'long_rest');
+    const restFeatIds = (await this.repository.findChosenFeats(id)).map(f => f.feat_id);
+    const expendedAfterLongRest = await this.rechargeResourceOnRest(id, raw.character, 'long_rest', restFeatIds);
     const classRule = resolveClass(raw.character.id_class);
     const subclassRule = resolveSubclass(raw.character.id_class, raw.character.id_subclass);
     const stats = this.statsFromRaw(raw.attributes);
@@ -1692,7 +1732,10 @@ export class CharacterSheetService {
       slots_expended: {},
       current_hit_points: raw.character.max_hit_points,
       hit_dice_spent: nextSpent,
-      resource_trackers: this.buildResourceTrackers(classRule, subclassRule, raw.character.level, expendedAfterLongRest, stats),
+      resource_trackers: this.buildResourceTrackers(classRule, subclassRule, raw.character.level, expendedAfterLongRest, stats, {
+        idRace: raw.character.id_race,
+        featIds: restFeatIds,
+      }),
     };
   }
 

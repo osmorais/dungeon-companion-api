@@ -186,6 +186,26 @@ export const TRACKABLE_RESOURCES: Record<number, TrackableResource[]> = {
   ],
 };
 
+/** Recurso de raça ou talento: o máximo é fixo (não vem de `resources` por nível). */
+export interface FixedTrackableResource extends TrackableResource {
+  max: number;
+}
+
+/** Recursos de raça (fase 3 dos traços mecânicos). */
+export const RACE_TRACKABLE_RESOURCES: Record<number, FixedTrackableResource[]> = {
+  4: [{key: 'Arma de Sopro', rechargeOn: 'short_rest', max: 1}], // Draconato
+  7: [{key: 'Resistência Implacável', rechargeOn: 'long_rest', max: 1}], // Meio-Orc
+};
+
+/** Recursos de talento, pelo `id_feat`. */
+export const FEAT_TRACKABLE_RESOURCES: Record<string, FixedTrackableResource[]> = {
+  sortudo: [{key: 'Pontos de Sorte', rechargeOn: 'long_rest', max: 3}],
+};
+
+/** Meio-Orc — Resistência Implacável (aplicada sozinha quando o dano zeraria o PV). */
+export const RELENTLESS_ENDURANCE_RACE_ID = 7;
+export const RELENTLESS_ENDURANCE_KEY = 'Resistência Implacável';
+
 /**
  * `null` = nem classe nem subclasse têm esse recurso nesse nível; `'unlimited'` = usos
  * ilimitados (ex: Fúria do Bárbaro no nível 20). O valor em `resources` normalmente é um número
@@ -613,6 +633,24 @@ const CLASS_ABILITY_TABLES: Record<number, ClassAbility[]> = {
   10: MONK_CHI_ABILITIES, // Monge
   11: PALADIN_ABILITIES, // Paladino
 };
+
+/** Habilidades ativáveis de raça (gastam um recurso de `RACE_TRACKABLE_RESOURCES`). */
+const RACE_ABILITIES: Record<number, ClassAbility[]> = {
+  4: [
+    {
+      name: 'Arma de Sopro',
+      description:
+        'Você usa sua ação para exalar energia destrutiva (fogo). Cada criatura na área faz um teste de resistência de Destreza (CD 8 + seu modificador de Constituição + seu bônus de proficiência): sofre 2d6 de dano de fogo se falhar, ou metade se passar. O dano aumenta para 3d6 no 6º nível, 4d6 no 11º e 5d6 no 16º. Depois de usar, só volta após um descanso curto ou longo.',
+      cost: 1,
+      levelLearned: 1,
+      resourceKey: 'Arma de Sopro',
+    },
+  ],
+};
+
+export function getKnownRaceAbilities(idRace: number): ClassAbility[] {
+  return RACE_ABILITIES[idRace] ?? [];
+}
 
 export function getKnownClassAbilities(classKey: number, level: number, idSubclass?: string | null): ClassAbility[] {
   const table = CLASS_ABILITY_TABLES[classKey] ?? [];

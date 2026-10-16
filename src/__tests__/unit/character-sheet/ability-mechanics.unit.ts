@@ -6,8 +6,10 @@ import {
 } from '../../../services/character-sheet/ability-mechanics';
 import {
   CLASSES,
+  RACES,
   SUBCLASSES,
   getKnownClassAbilities,
+  getKnownRaceAbilities,
 } from '../../../services/character-sheet/rules';
 import {stats} from '../fixtures';
 
@@ -20,7 +22,7 @@ describe('ability-mechanics', () => {
     ...overrides,
   });
 
-  it('toda habilidade com mecânica existe na tabela de alguma classe/subclasse', () => {
+  it('toda habilidade com mecânica existe na tabela de alguma classe/subclasse/raça', () => {
     const known = new Set<string>();
     for (const c of Object.values(CLASSES)) {
       for (const sub of [
@@ -30,6 +32,9 @@ describe('ability-mechanics', () => {
         for (const a of getKnownClassAbilities(c.id_class, 20, sub))
           known.add(a.name);
       }
+    }
+    for (const r of Object.values(RACES)) {
+      for (const a of getKnownRaceAbilities(r.id_race)) known.add(a.name);
     }
     for (const name of ABILITY_MECHANICS_NAMES) {
       expect({name, known: known.has(name)}).to.eql({name, known: true});
@@ -99,6 +104,26 @@ describe('ability-mechanics', () => {
     ).roll!;
     expect(palm.save_effect_note).to.match(/cai a 0 PV/);
     expect(palm.by_slot['0']).to.containDeep({dice_count: 10, dice_sides: 10});
+  });
+
+  it('Arma de Sopro: DES, CD 8 + CON + proficiência, fogo, metade, 2d6→5d6 pelo nível', () => {
+    const breath = (level: number) =>
+      abilityMechanicsFor('Arma de Sopro', {
+        level,
+        stats: stats({CON: 16}),
+        profBonus: 2,
+        spellSaveDc: null,
+      }).roll!;
+    expect(breath(1)).to.containDeep({
+      kind: 'save',
+      save_ability: 'DEX',
+      save_dc: 8 + 2 + 3,
+      save_on_success: 'half',
+      damage_type: 'fogo',
+    });
+    expect([1, 6, 11, 16].map(l => breath(l).by_slot['0'].dice_count)).to.eql([
+      2, 3, 4, 5,
+    ]);
   });
 
   it('Criar Espaço de Magia devolve o espaço do círculo', () => {

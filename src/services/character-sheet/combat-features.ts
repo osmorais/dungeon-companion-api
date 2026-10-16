@@ -70,6 +70,8 @@ export interface CombatFeatures {
     damage_modifier: number;
   } | null;
   active_effects: ActiveEffects;
+  /** Halfling (Sortudo): 1 natural no d20 pode ser rolado de novo. */
+  halfling_lucky: boolean;
 }
 
 const GOLPE_DIVINO_TYPE: Record<string, string> = {
@@ -214,5 +216,6 @@ export function buildCombatFeatures(ctx: {
     power_attack: powerAttack,
     unarmed,
     active_effects: ctx.activeEffects ?? EMPTY_ACTIVE_EFFECTS,
+    halfling_lucky: ctx.idRace === 3,
   };
 }

@@ -25,7 +25,14 @@ describe('combat-features', () => {
       power_attack: [],
       unarmed: null,
       active_effects: {active: [], turn_uses: {}},
+      halfling_lucky: false,
     });
+  });
+
+  it('Halfling: Sortudo', () => {
+    expect(
+      buildCombatFeatures({...base, idRace: 3}).halfling_lucky,
+    ).to.be.true();
   });
 
   it('Ladino: Ataque Furtivo com o dado do nível, acuidade ou distância, 1×/turno', () => {

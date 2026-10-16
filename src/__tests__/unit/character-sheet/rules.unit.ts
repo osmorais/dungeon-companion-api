@@ -3,6 +3,10 @@ import {expect} from '@loopback/testlab';
 import {
   CLASSES,
   CLASS_SPELLS,
+  FEAT_TRACKABLE_RESOURCES,
+  RACES,
+  RACE_TRACKABLE_RESOURCES,
+  getKnownRaceAbilities,
   FULL_LIST_PREPARED_CASTER_CLASS_IDS,
   KNOWN_CASTER_CLASS_IDS,
   SPELL_SLOTS,
@@ -278,5 +282,36 @@ describe('rules', () => {
       expect(FEATS.alerta.initiativeBonus).to.equal(5);
       expect(FEATS.observador.passivePerceptionBonus).to.equal(5);
     });
+  });
+});
+
+describe('recursos e habilidades de raça e talento', () => {
+  it('toda habilidade de raça gasta um recurso de raça existente', () => {
+    for (const race of Object.values(RACES)) {
+      const keys = (RACE_TRACKABLE_RESOURCES[race.id_race] ?? []).map(
+        r => r.key,
+      );
+      for (const ability of getKnownRaceAbilities(race.id_race)) {
+        expect(keys).to.containEql(ability.resourceKey);
+      }
+    }
+  });
+
+  it('Arma de Sopro recarrega no descanso curto; Resistência Implacável e Sortudo, no longo', () => {
+    expect(RACE_TRACKABLE_RESOURCES[4]).to.eql([
+      {key: 'Arma de Sopro', rechargeOn: 'short_rest', max: 1},
+    ]);
+    expect(RACE_TRACKABLE_RESOURCES[7]).to.eql([
+      {key: 'Resistência Implacável', rechargeOn: 'long_rest', max: 1},
+    ]);
+    expect(FEAT_TRACKABLE_RESOURCES.sortudo).to.eql([
+      {key: 'Pontos de Sorte', rechargeOn: 'long_rest', max: 3},
+    ]);
+  });
+
+  it('talento com recurso existe no catálogo', () => {
+    for (const id of Object.keys(FEAT_TRACKABLE_RESOURCES)) {
+      expect(FEATS[id]).to.not.be.undefined();
+    }
   });
 });

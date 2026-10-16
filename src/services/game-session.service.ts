@@ -321,7 +321,7 @@ export class GameSessionService {
     currentHitPoints: number,
     temporaryHitPoints: number,
     userId: string,
-  ): Promise<void> {
+  ): Promise<{current_hit_points: number}> {
     if (
       typeof currentHitPoints !== 'number' ||
       !Number.isInteger(currentHitPoints)
@@ -355,9 +355,23 @@ export class GameSessionService {
       type: 'player_hp_updated',
       id_game_session: result.idGameSession!,
       id_player_session: idPlayerSession,
-      current_hit_points: currentHitPoints,
+      current_hit_points: result.currentHitPoints ?? currentHitPoints,
       temporary_hit_points: temporaryHitPoints,
     });
+    // Resistência Implacável (Meio-Orc) entrou sozinha: avisa a mesa ("USOU").
+    if (result.relentlessEndurance) {
+      this.events.publish({
+        type: 'spell_cast',
+        id_game_session: result.idGameSession!,
+        id_character: result.relentlessEndurance.idCharacter,
+        actor_name: result.relentlessEndurance.name,
+        spell_name: 'Resistência Implacável',
+        save_dc: null,
+        save_ability: null,
+        is_ability: true,
+      });
+    }
+    return {current_hit_points: result.currentHitPoints ?? currentHitPoints};
   }
 
   /** Só o mestre concede XP; cada jogador selecionado recebe o valor cheio informado (não dividido). */

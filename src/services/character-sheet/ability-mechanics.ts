@@ -31,7 +31,7 @@ export interface AbilityMechanicsResult {
   unarmed_attacks: number | null;
 }
 
-type DcSource = 'spell' | 'ki';
+type DcSource = 'spell' | 'ki' | 'con';
 
 interface AbilityMechanics {
   kind: 'heal' | 'save';
@@ -71,6 +71,16 @@ const ABILITIES: Record<string, AbilityMechanics> = {
       onSuccess: 'full',
       effectNote: 'se falhar, cai a 0 PV; se passar, sofre o dano',
     },
+  },
+  // Draconato (raça)
+  'Arma de Sopro': {
+    kind: 'save',
+    dice: level => ({
+      count: level >= 16 ? 5 : level >= 11 ? 4 : level >= 6 ? 3 : 2,
+      sides: 6,
+    }),
+    damageType: 'fogo',
+    save: {ability: 'DEX', dc: 'con', onSuccess: 'half'},
   },
   // Paladino
   'Curar pelo Toque (1 PV)': {kind: 'heal', variableCost: true},
@@ -137,7 +147,9 @@ export function abilityMechanicsFor(
     ? null
     : mechanics.save.dc === 'ki'
       ? 8 + ctx.profBonus + getMod(ctx.stats.WIS)
-      : ctx.spellSaveDc;
+      : mechanics.save.dc === 'con'
+        ? 8 + ctx.profBonus + getMod(ctx.stats.CON)
+        : ctx.spellSaveDc;
   const dice = mechanics.dice?.(ctx.level) ?? {count: 0, sides: 0};
   const bonus = mechanics.bonus?.(ctx.level) ?? 0;
   const hasRoll = !mechanics.variableCost && (dice.count > 0 || bonus > 0);

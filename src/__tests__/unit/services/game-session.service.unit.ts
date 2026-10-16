@@ -183,6 +183,36 @@ describe('GameSessionService', () => {
       ]);
     });
 
+    it('Resistência Implacável: grava 1 em vez de 0, devolve o PV final e avisa a mesa', async () => {
+      repository.stubs.updateCharacterHp.resolves({
+        status: 'ok',
+        idGameSession: 'gs',
+        currentHitPoints: 1,
+        relentlessEndurance: {idCharacter: 9, name: 'Grom'},
+      });
+      const result = await service.updateCharacterHp('ps', 0, 0, 'u');
+      expect(result).to.eql({current_hit_points: 1});
+      expect(events).to.eql([
+        {
+          type: 'player_hp_updated',
+          id_game_session: 'gs',
+          id_player_session: 'ps',
+          current_hit_points: 1,
+          temporary_hit_points: 0,
+        },
+        {
+          type: 'spell_cast',
+          id_game_session: 'gs',
+          id_character: 9,
+          actor_name: 'Grom',
+          spell_name: 'Resistência Implacável',
+          save_dc: null,
+          save_ability: null,
+          is_ability: true,
+        },
+      ]);
+    });
+
     it('NPC e monstro: só o mestre', async () => {
       repository.stubs.updateNpcHp.resolves({status: 'unauthorized'});
       await expect(service.updateNpcHp('n', 5, 'player')).to.be.rejectedWith(

@@ -1100,6 +1100,105 @@ describe('CharacterSheetService', () => {
   });
 
   // -------------------------------------------------------------------------
+  describe('recursos de raça e de talento', () => {
+    it('Draconato: Arma de Sopro como recurso e habilidade; Meio-Orc: Resistência Implacável', async () => {
+      repository.stubs.findCharacterById.resolves(
+        rawCharacter({
+          character: {id_race: 4, level: 6, proficiency_bonus: 3},
+          scores: {CON: 14},
+        }),
+      );
+      const sheet = (await service.loadCharacter(1, 'owner'))!.character_sheet;
+      expect(sheet.resource_trackers).to.containDeep([
+        {name: 'Arma de Sopro', max: 1, used: 0, recharge_on: 'short_rest'},
+      ]);
+      const breath = sheet.class_abilities.find(
+        a => a.name === 'Arma de Sopro',
+      )!;
+      // CD 8 + CON 2 + prof 3; nv6 → 3d6
+      expect(breath.roll).to.containDeep({
+        save_dc: 13,
+        by_slot: {'0': {dice_count: 3}},
+      });
+
+      repository.stubs.findCharacterById.resolves(
+        rawCharacter({character: {id_race: 7}}),
+      );
+      const orc = (await service.loadCharacter(1, 'owner'))!.character_sheet;
+      expect(orc.resource_trackers.map(r => r.name)).to.containEql(
+        'Resistência Implacável',
+      );
+    });
+
+    it('talento Sortudo: 3 Pontos de Sorte, gastos pelo mesmo endpoint dos recursos', async () => {
+      repository.stubs.findChosenFeats.resolves([
+        {feat_id: 'sortudo', level: 4},
+      ]);
+      repository.stubs.findCharacterById.resolves(
+        rawCharacter({character: {level: 4}}),
+      );
+      const result = await service.expendResourceUse(
+        1,
+        'Pontos de Sorte',
+        1,
+        'owner',
+      );
+      expect(result.resource_trackers).to.containDeep([
+        {name: 'Pontos de Sorte', max: 3, used: 1, recharge_on: 'long_rest'},
+      ]);
+      // não passa do máximo
+      repository.stubs.findCharacterById.resolves(
+        rawCharacter({
+          character: {level: 4, resource_uses_expended: {'Pontos de Sorte': 3}},
+        }),
+      );
+      const capped = await service.expendResourceUse(
+        1,
+        'Pontos de Sorte',
+        1,
+        'owner',
+      );
+      expect(
+        capped.resource_trackers.find(r => r.name === 'Pontos de Sorte')!.used,
+      ).to.equal(3);
+    });
+
+    it('recurso de raça que o personagem não tem é recusado', async () => {
+      repository.stubs.findCharacterById.resolves(rawCharacter());
+      await expect(
+        service.expendResourceUse(1, 'Arma de Sopro', 1, 'owner'),
+      ).to.be.rejectedWith(/não possui/);
+    });
+
+    it('descanso curto recarrega a Arma de Sopro; o longo, Sortudo e Resistência Implacável', async () => {
+      repository.stubs.findChosenFeats.resolves([
+        {feat_id: 'sortudo', level: 4},
+      ]);
+      repository.stubs.findCharacterById.resolves(
+        rawCharacter({
+          character: {
+            id_race: 4,
+            level: 4,
+            hit_dice_spent: 0,
+            current_hit_points: 5,
+            resource_uses_expended: {'Arma de Sopro': 1, 'Pontos de Sorte': 2},
+          },
+        }),
+      );
+      await service.rollHitDie(1, 'owner');
+      expect(
+        repository.stubs.updateResourceUsesExpended.firstCall.args[1],
+      ).to.eql({
+        'Pontos de Sorte': 2,
+      });
+      await service.longRest(1, 'owner');
+      expect(
+        repository.stubs.updateResourceUsesExpended.secondCall.args[1],
+      ).to.eql({});
+    });
+  });
+
+  // -------------------------------------------------------------------------
   describe('equipamento', () => {
     it('recalcula a CA ao trocar armadura/escudo', async () => {
       givenCharacter();

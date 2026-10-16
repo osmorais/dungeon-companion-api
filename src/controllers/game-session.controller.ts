@@ -344,7 +344,11 @@ export class GameSessionController {
   }
 
   @patch('/api/game-session/player/{idPlayerSession}/hp')
-  @response(204, {description: 'Current HP updated'})
+  @response(200, {
+    description:
+      'Current HP updated — returns the HP actually stored (1 instead of 0 when Relentless Endurance kicks in)',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
   async updateCharacterHp(
     @param.path.string('idPlayerSession') idPlayerSession: string,
     @inject(SecurityBindings.USER) currentUser: UserProfile,
@@ -365,7 +369,7 @@ export class GameSessionController {
       },
     })
     body: {current_hit_points: number; temporary_hit_points: number},
-  ): Promise<void> {
+  ): Promise<{current_hit_points: number}> {
     return this.gameSessionService.updateCharacterHp(
       idPlayerSession,
       body.current_hit_points,
