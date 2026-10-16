@@ -54,6 +54,23 @@ describe('spell-mechanics', () => {
           name: m.name,
           heal: false,
         });
+        expect({name: m.name, rider: !!m.rider}).to.eql({
+          name: m.name,
+          rider: m.kind === 'rider',
+        });
+        if (m.kind === 'rider') {
+          // soma dados no ataque; resistência (se houver) não muda o dano extra
+          expect({
+            name: m.name,
+            damage: !!m.damage,
+            onSuccess: m.save?.onSuccess,
+          }).to.eql({
+            name: m.name,
+            damage: true,
+            onSuccess: undefined,
+          });
+          continue;
+        }
         if (m.kind !== 'save') {
           expect({name: m.name, damage: !!m.damage, save: !!m.save}).to.eql({
             name: m.name,
@@ -72,8 +89,9 @@ describe('spell-mechanics', () => {
       }
     });
 
-    it('fora do catálogo: Contato Extraplanar (CD fixa) e as que somam dano no ataque com arma', () => {
-      for (const id of [87, 118, 119, 120, 121, 122, 163, 174, 318]) {
+    it('fora do catálogo: Contato Extraplanar (CD fixa) e as de dano por turno/em área', () => {
+      // Golpe Constritor, Saraivada de Espinhos, Flecha Relampejante
+      for (const id of [87, 163, 174, 318]) {
         expect(SPELL_MECHANICS[id]).to.be.undefined();
       }
     });
@@ -247,6 +265,8 @@ describe('spell-mechanics', () => {
         save_on_success: null,
         heal: null,
         maximize: false,
+        rider_trigger: null,
+        rider_attack: null,
         instance_label: null,
         variant: null,
         by_slot: {},
@@ -327,6 +347,61 @@ describe('spell-mechanics', () => {
     });
   });
 
+  describe('somam dano no ataque', () => {
+    it('Destruições: só no próximo acerto, com a resistência do alvo e a CD', () => {
+      const wrathful = buildSpellRoll(119, 1, 5, 3, 6, 14)!;
+      expect(wrathful).to.containDeep({
+        kind: 'rider',
+        rider_trigger: 'next_hit',
+        rider_attack: 'melee_weapon',
+        damage_type: 'psíquico',
+        save_ability: 'WIS',
+        save_dc: 14,
+        save_on_success: null,
+      });
+      expect(wrathful.by_slot['1']).to.containDeep({
+        dice_count: 1,
+        dice_sides: 6,
+      });
+      // Lancinante: +1d6 por círculo; Cegante vale pra qualquer arma
+      expect(
+        buildSpellRoll(121, 1, 5, 3, 6, 14)!.by_slot['3'].dice_count,
+      ).to.equal(3);
+      expect(buildSpellRoll(118, 3, 9, 3, 7, 15)!.rider_attack).to.equal(
+        'weapon',
+      );
+      // Banidora: 5d6 como no livro traduzido, sem resistência
+      expect(buildSpellRoll(117, 5, 9, 3, 7, 15)!).to.containDeep({
+        save_ability: null,
+      });
+      expect(buildSpellRoll(117, 5, 9, 3, 7, 15)!.by_slot['5']).to.containDeep({
+        dice_count: 5,
+        dice_sides: 6,
+      });
+    });
+
+    it('Bruxaria (qualquer ataque) e Marca do Caçador (arma): todo acerto, 1d6 em qualquer círculo', () => {
+      const hex = buildSpellRoll(49, 1, 5, 3, 6, 14)!;
+      expect(hex).to.containDeep({
+        rider_trigger: 'each_hit',
+        rider_attack: 'any',
+      });
+      expect(hex.by_slot['5'].dice_count).to.equal(1);
+      expect(buildSpellRoll(213, 1, 5, 3, 6, 14)!).to.containDeep({
+        rider_trigger: 'each_hit',
+        rider_attack: 'weapon',
+      });
+    });
+
+    it('Lâmina Flamejante é ataque mágico: 3d6, +1d6 a cada 2 círculos', () => {
+      const blade = buildSpellRoll(193, 2, 5, 3, 6, 14)!;
+      expect(blade).to.containDeep({kind: 'attack', attack_type: 'melee'});
+      expect(
+        [2, 3, 4, 6].map(slot => blade.by_slot[String(slot)].dice_count),
+      ).to.eql([3, 3, 4, 5]);
+    });
+  });
+
   describe('buildSpellRoll', () => {
     it('truque: só a chave "0", com o bônus de ataque do personagem', () => {
       expect(buildSpellRoll(346, 0, 5, 3, 6, 14)).to.eql({
@@ -339,6 +414,8 @@ describe('spell-mechanics', () => {
         save_on_success: null,
         heal: null,
         maximize: false,
+        rider_trigger: null,
+        rider_attack: null,
         instance_label: null,
         variant: null,
         by_slot: {

@@ -11,6 +11,9 @@ import {StatKeyEn} from '../../models/character-sheet-types';
  * **resistência** — com dano (o modal mostra a CD e rola o dano) e sem dano (só a CD no anúncio).
  * Fase 3: **cura** (dado + modificador de conjuração; PV temporários na Vitalidade Falsa), com o
  * Discípulo da Vida e a Cura Suprema do Clérigo do Domínio da Vida.
+ * Fase 4: magias que **somam dano no ataque** (`kind: 'rider'`) — as Destruições (gastam o espaço
+ * no acerto, como a Destruição Divina) e Bruxaria/Marca do Caçador/Manto do Cruzado (lançadas
+ * antes; o jogador marca no acerto).
  * Efeitos além do dano imediato (ex.: metade do dano ao errar na Flecha Ácida, cura do Toque
  * Vampírico, dano repetido do Raio de Bruxa, condições) continuam só na descrição — o mestre
  * aplica. Os números seguem o livro (`docs/magias.txt`).
@@ -18,7 +21,15 @@ import {StatKeyEn} from '../../models/character-sheet-types';
 export interface SpellMechanics {
   /** Nome como está na tabela `spell` — só pra leitura e pros testes; a chave é o `id_spell`. */
   name: string;
-  kind: 'attack' | 'auto' | 'save' | 'heal';
+  kind: 'attack' | 'auto' | 'save' | 'heal' | 'rider';
+  /** Só `kind: 'rider'`: quando soma (`next_hit`: só no próximo acerto, gasta o espaço nesse
+   *  momento; `each_hit`: em todo acerto enquanto durar) e em que ataque (corpo a corpo com arma,
+   *  qualquer arma, ou qualquer ataque — Bruxaria vale também pra ataque mágico). A resistência
+   *  do alvo (se houver) usa `save`, sem `onSuccess` (o dano extra não muda). */
+  rider?: {
+    trigger: 'next_hit' | 'each_hit';
+    attack: 'melee_weapon' | 'weapon' | 'any';
+  };
   /** Só `kind: 'attack'`. */
   attack?: 'melee' | 'ranged';
   /** Só `kind: 'save'`. `onSuccess`: metade do dano, nenhum dano, ou dano total sempre (a
@@ -172,6 +183,14 @@ export const SPELL_MECHANICS: Record<number, SpellMechanics> = {
     attack: 'ranged',
     damage: {count: 2, sides: 6, type: 'fogo'},
     instances: {base: 3, perSlotAbove: 1, label: 'raio'},
+  },
+
+  193: {
+    name: 'Lâmina Flamejante',
+    kind: 'attack',
+    attack: 'melee',
+    damage: {count: 3, sides: 6, type: 'fogo'},
+    upcast: {count: 1, every: 2},
   },
 
   // 3º círculo em diante
@@ -335,6 +354,56 @@ export const SPELL_MECHANICS: Record<number, SpellMechanics> = {
   138: save('Encarnação Fantasmagórica', 'WIS', 'none', 4, 10, 'psíquico'),
 
   // -------------------------------------------------------------------------
+  // Somam dano no ataque (fase 4). Fora: Golpe Constritor, Saraivada de Espinhos e Flecha
+  // Relampejante (dano por turno/em área, não um dado a mais no acerto) e Arma Elemental (mexe
+  // também no bônus de ataque).
+  // -------------------------------------------------------------------------
+  119: rider(
+    'Destruição Colérica',
+    'next_hit',
+    'melee_weapon',
+    1,
+    6,
+    'psíquico',
+    {save: {ability: 'WIS'}},
+  ),
+  121: rider(
+    'Destruição Lancinante',
+    'next_hit',
+    'melee_weapon',
+    1,
+    6,
+    'fogo',
+    {save: {ability: 'CON'}, upcast: {count: 1}},
+  ),
+  122: rider(
+    'Destruição Troveante',
+    'next_hit',
+    'melee_weapon',
+    2,
+    6,
+    'trovejante',
+    {save: {ability: 'STR'}},
+  ),
+  118: rider('Destruição Cegante', 'next_hit', 'weapon', 3, 8, 'radiante', {
+    save: {ability: 'CON'},
+  }),
+  120: rider(
+    'Destruição Estonteante',
+    'next_hit',
+    'melee_weapon',
+    4,
+    6,
+    'psíquico',
+    {save: {ability: 'WIS'}},
+  ),
+  // O livro traduzido traz 5d6 (o original em inglês é 5d10) — segue o livro.
+  117: rider('Destruição Banidora', 'next_hit', 'weapon', 5, 6, 'energia'),
+  49: rider('Bruxaria', 'each_hit', 'any', 1, 6, 'necrótico'),
+  213: rider('Marca do Caçador', 'each_hit', 'weapon', 1, 6, 'da arma'),
+  208: rider('Manto do Cruzado', 'each_hit', 'weapon', 1, 4, 'radiante'),
+
+  // -------------------------------------------------------------------------
   // Cura (fase 3). Fora: as de valor fixo, sem dado (Cura Completa, Palavra de Poder Curar,
   // Cura Completa em Massa, Armadura de Agathys) e a cura do Toque Vampírico (metade do dano).
   // -------------------------------------------------------------------------
@@ -449,6 +518,25 @@ function save(
     name,
     kind: 'save',
     save: {ability, onSuccess},
+    damage: {count, sides, type},
+    ...extra,
+  };
+}
+
+/** Magia que soma dados ao dano de um ataque. */
+function rider(
+  name: string,
+  trigger: 'next_hit' | 'each_hit',
+  attack: 'melee_weapon' | 'weapon' | 'any',
+  count: number,
+  sides: number,
+  type: string,
+  extra: Partial<SpellMechanics> = {},
+): SpellMechanics {
+  return {
+    name,
+    kind: 'rider',
+    rider: {trigger, attack},
     damage: {count, sides, type},
     ...extra,
   };
@@ -579,6 +667,8 @@ export function buildSpellRoll(
     attack_bonus: mechanics.kind === 'attack' ? spellAttackBonus : null,
     damage_type: mechanics.damage?.type ?? null,
     heal: mechanics.heal ? (mechanics.heal.tempHp ? 'temp_hp' : 'hp') : null,
+    rider_trigger: mechanics.rider?.trigger ?? null,
+    rider_attack: mechanics.rider?.attack ?? null,
     maximize: restoresHp(mechanics) && healing.supremeHealing,
     save_ability: mechanics.save?.ability ?? null,
     save_dc: mechanics.save ? spellSaveDc : null,

@@ -119,7 +119,7 @@ export interface Spell {
 
 /** Rolagem de uma magia pro personagem — ver `buildSpellRoll`. */
 export interface SpellRoll {
-  kind: 'attack' | 'auto' | 'save' | 'heal';
+  kind: 'attack' | 'auto' | 'save' | 'heal' | 'rider';
   attack_type: 'melee' | 'ranged' | null;
   /** Bônus de ataque de magia do personagem (só `kind: 'attack'`). */
   attack_bonus: number | null;
@@ -134,6 +134,10 @@ export interface SpellRoll {
   heal: 'hp' | 'temp_hp' | null;
   /** Cura Suprema (Clérigo da Vida nv17): usa o valor máximo dos dados em vez de rolar. */
   maximize: boolean;
+  /** Só `kind: 'rider'` (soma dano no ataque): só no próximo acerto (gasta o espaço nele) ou em
+   *  todo acerto enquanto durar, e em que tipo de ataque vale. */
+  rider_trigger: 'next_hit' | 'each_hit' | null;
+  rider_attack: 'melee_weapon' | 'weapon' | 'any' | null;
   /** Nome de cada rolagem quando há mais de uma (raio, feixe, dardo). */
   instance_label: string | null;
   /** Opção rolada quando a magia tem várias (ex.: "Punho Cerrado"). */
