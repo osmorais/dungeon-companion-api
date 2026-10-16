@@ -79,6 +79,7 @@ export function normalizeSkill(skillName: string): string {
     persuasao: 'persuasion',
     religiao: 'religion',
     prestidigitacao: 'sleight_of_hand',
+    atuacao: 'performance',
     furtividade: 'stealth',
     sobrevivencia: 'survival',
   };

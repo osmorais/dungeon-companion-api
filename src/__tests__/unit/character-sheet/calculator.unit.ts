@@ -50,6 +50,50 @@ describe('calculator', () => {
       expect(normalizeSkill('Prestidigitação')).to.equal('sleight_of_hand');
       expect(normalizeSkill('Pericia Nova')).to.equal('pericia_nova');
     });
+
+    // Regressão: "Atuação" (nome no banco) não era reconhecida e virava "atuação".
+    it('normalizeSkill reconhece todas as perícias do banco', () => {
+      const names = [
+        'Atletismo',
+        'Acrobacia',
+        'Furtividade',
+        'Prestidigitação',
+        'Arcanismo',
+        'História',
+        'Investigação',
+        'Natureza',
+        'Religião',
+        'Adestrar Animais',
+        'Intuição',
+        'Medicina',
+        'Percepção',
+        'Sobrevivência',
+        'Atuação',
+        'Enganação',
+        'Intimidação',
+        'Persuasão',
+      ];
+      expect(names.map(normalizeSkill)).to.eql([
+        'athletics',
+        'acrobatics',
+        'stealth',
+        'sleight_of_hand',
+        'arcana',
+        'history',
+        'investigation',
+        'nature',
+        'religion',
+        'animal_handling',
+        'insight',
+        'medicine',
+        'perception',
+        'survival',
+        'performance',
+        'deception',
+        'intimidation',
+        'persuasion',
+      ]);
+    });
   });
 
   describe('resolve*', () => {

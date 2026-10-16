@@ -469,9 +469,17 @@ export class CharacterSheetService {
       if (ptName) ptToModifier[ptName] = block.modifier;
     }
 
-    const trainedIds = new Set(
-      (input.choices.skills ?? []).map(s => s.id_skill),
-    );
+    // Perícias do antecedente (e as fixas da raça) contam como treinadas mesmo que o wizard não
+    // as mande em `choices.skills` — antes só o que vinha ali era gravado, e a ficha perdia a
+    // proficiência do antecedente.
+    const grantedSkillKeys = new Set([
+      ...resolveBackground(input.core_build.id_background).skills,
+      ...(resolveRace(input.core_build.id_race).skillProficiencies ?? []),
+    ]);
+    const trainedIds = new Set([
+      ...(input.choices.skills ?? []).map(s => s.id_skill),
+      ...allSkills.filter(s => grantedSkillKeys.has(normalizeSkill(s.name))).map(s => s.id_skill),
+    ]);
     const profBonus = sheet.character_sheet.combat_stats.proficiency_bonus;
     const level = input.core_build.level;
 
