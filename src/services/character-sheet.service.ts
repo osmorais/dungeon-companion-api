@@ -58,6 +58,15 @@ import {
   normalizeSkill,
 } from './character-sheet/calculator';
 import {
+  RACE_ABILITY_BONUS_CHOICE,
+  armorProficiency,
+  creationSpellLimits,
+  validateAbilityBonusChoice,
+  validateArmourChoice,
+  validateSkillChoices,
+  validateSpellChoices,
+} from './character-sheet/creation-rules';
+import {
   SPELL_SLOTS,
   KNOWN_CASTER_CLASS_IDS,
   WIZARD_CLASS_ID,
@@ -164,6 +173,13 @@ export class CharacterSheetService {
       throw new Error('Tool proficiency choice not allowed for this race');
     }
 
+    const abilityBonusChoices = validateAbilityBonusChoice(core_build.id_race, choices.ability_bonus_choices);
+    validateArmourChoice(
+      armorProficiency(classRule, subraceRule, subclassRule?.id_subclass),
+      equipment.armour?.armour_type,
+      equipment.has_shield,
+    );
+
     const fightingStyleAvailable = classRule.fightingStyleChoice && level >= classRule.fightingStyleChoice.level;
     if (fightingStyleAvailable) {
       if (!choices.fighting_style || !classRule.fightingStyleChoice!.options.includes(choices.fighting_style)) {
@@ -173,12 +189,15 @@ export class CharacterSheetService {
       throw new Error('Fighting style choice not allowed for this class yet');
     }
 
+    const racialStats = applyRacialBonuses(
+      attributes.base_values,
+      raceRule,
+      subraceRule,
+    );
+    const abilityBonus = RACE_ABILITY_BONUS_CHOICE[core_build.id_race]?.amount ?? 0;
+    for (const stat of abilityBonusChoices) racialStats[stat] += abilityBonus;
     const stats = applyLevelBasedAttributeBonuses(
-      applyRacialBonuses(
-        attributes.base_values,
-        raceRule,
-        subraceRule,
-      ),
+      racialStats,
       classKey,
       level,
     );
@@ -394,9 +413,18 @@ export class CharacterSheetService {
         'Sub-raça inválida para a raça selecionada',
       );
     }
-    const sheet = this.build(input);
-    const allSkills = await this.repository.findAllSkills();
-    const computedSkills = this.computeSkills(allSkills, input, sheet);
+    let sheet: CharacterSheet;
+    let computedSkills: CharacterSkillInsert[];
+    try {
+      sheet = this.build(input);
+      const allSkills = await this.repository.findAllSkills();
+      computedSkills = this.computeSkills(allSkills, input, sheet);
+      await this.validateCreationSpells(input);
+    } catch (e: unknown) {
+      // Escolha inválida no payload é erro de validação (422), não erro do servidor.
+      if (e instanceof HttpErrors.HttpError) throw e;
+      throw new HttpErrors.UnprocessableEntity(e instanceof Error ? e.message : String(e));
+    }
     return this.loadCharacter(
       await this.repository.createCharacter(
         input,
@@ -406,6 +434,18 @@ export class CharacterSheetService {
       ),
       userId,
     );
+  }
+
+  /** Truques e magias escolhidos na criação: existem, até o 1º círculo e dentro da cota da classe + truque racial. */
+  private async validateCreationSpells(input: CharacterInput): Promise<void> {
+    const ids = (input.choices.spells ?? []).map(s => s.id_spell);
+    const limits = creationSpellLimits(
+      resolveClass(input.core_build.id_class),
+      input.core_build.id_race,
+      input.core_build.subrace ? normalizeKey(input.core_build.subrace) : null,
+    );
+    const spells = ids.length ? await this.optionsRepository.findSpellLevelsByIds(ids) : [];
+    validateSpellChoices(limits, spells, ids);
   }
 
   /** Habilidades ativáveis com o que o "USAR" faz (rolagem/CD/espaço devolvido) — ver `ability-mechanics.ts`. */
@@ -530,6 +570,17 @@ export class CharacterSheetService {
       ...(input.choices.skills ?? []).map(s => s.id_skill),
       ...allSkills.filter(s => grantedSkillKeys.has(normalizeSkill(s.name))).map(s => s.id_skill),
     ]);
+    const skillKeyById = new Map(allSkills.map(s => [s.id_skill, normalizeSkill(s.name)]));
+    const chosenKeys = (input.choices.skills ?? []).map(s => {
+      const key = skillKeyById.get(s.id_skill);
+      if (!key) throw new Error(`Perícia inexistente: ${s.id_skill}`);
+      return key;
+    });
+    validateSkillChoices(
+      input.core_build.id_class,
+      input.core_build.id_race,
+      chosenKeys.filter(k => !grantedSkillKeys.has(k)),
+    );
     const profBonus = sheet.character_sheet.combat_stats.proficiency_bonus;
     const level = input.core_build.level;
 

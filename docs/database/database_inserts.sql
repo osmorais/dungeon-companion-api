@@ -256,7 +256,30 @@ INSERT INTO Item (id_item, name, description, price_value, weight) VALUES
 (97, 'Vara (3 metros)', 'Uma vara de madeira usada para testar armadilhas ou profundidade.', 0.05, 3.5),
 (98, 'Vela', 'Emite luz plena em um raio de 1,5 metros por 1 hora.', 0.01, 0),
 (99, 'Veneno básico (frasco)', 'Pode ser aplicado em uma arma; a criatura atingida deve passar em um teste de Constituição CD 10.', 100, 0),
-(100, 'Kit para Refeição', 'Este recipiente de lata contém uma caneca e talheres simples. O recipiente e a tampa se fecham com um encaixe, sendo possível usar um lado como panela para cozinhar e o outro como prato ou tigela rasa.', 0.2, 0.5);
+(100, 'Kit para Refeição', 'Este recipiente de lata contém uma caneca e talheres simples. O recipiente e a tampa se fecham com um encaixe, sendo possível usar um lado como panela para cozinhar e o outro como prato ou tigela rasa.', 0.2, 0.5),
+(101, 'Ferramentas de ladrão', 'Lima pequena, gazuas, espelho de cabo longo, tesoura e alicate. A proficiência permite somar o bônus em testes para abrir fechaduras e desarmar armadilhas.', 25, 0.5),
+(102, 'Kit de disfarce', 'Cosméticos, tintura de cabelo, pequenos adereços e algumas peças de roupa para mudar a aparência.', 25, 1.5),
+(103, 'Ferramentas de trapaça', 'Frascos com líquidos coloridos, dados viciados, cartas marcadas ou um anel de sinete falso, usados em golpes.', NULL, 1),
+(104, 'Kit de herbalismo', 'Bolsas, tesoura, almofariz e pilão, usados para identificar ervas e preparar remédios e antídotos.', 5, 1.5),
+(105, 'Ferramentas de artesão', 'Ferramentas de um ofício (carpinteiro, ferreiro, oleiro, tecelão etc.), escolhido com o mestre.', NULL, 2.5),
+(106, 'Instrumento musical', 'Um instrumento à escolha do jogador (alaúde, flauta, tambor, lira, gaita de foles etc.).', NULL, 1.5),
+(107, 'Livro de orações', 'Livro com preces e hinos da divindade do personagem.', 25, 2.5),
+(108, 'Incenso (vareta)', 'Vareta aromática queimada em ritos e orações.', NULL, 0),
+(109, 'Incensário', 'Recipiente de metal para queimar incenso durante cerimônias.', NULL, 0.5),
+(110, 'Caixa de esmolas', 'Pequena caixa para recolher doações dos fiéis.', NULL, 0.5),
+(111, 'Carta de apresentação', 'Carta da guilda que apresenta o personagem como membro.', NULL, 0),
+(112, 'Presente de admirador', 'Lembrança dada por um fã: carta de amor, mecha de cabelo ou bijuteria.', NULL, 0),
+(113, 'Troféu de animal', 'Parte de um animal abatido pelo personagem (dente, garra, pele).', NULL, 0.5),
+(114, 'Pergaminho de linhagem', 'Documento que comprova a ascendência nobre do personagem.', NULL, 0),
+(115, 'Mapa da cidade natal', 'Mapa da cidade onde o personagem cresceu.', NULL, 0),
+(116, 'Rato de estimação', 'Um rato amigo que acompanha o personagem.', NULL, 0),
+(117, 'Insígnia de patente', 'Insígnia da patente que o personagem teve no exército.', NULL, 0),
+(118, 'Troféu de inimigo', 'Lembrança tirada de um inimigo caído (adaga, lâmina quebrada, estandarte).', NULL, 0.5),
+(119, 'Jogo de dados ou baralho', 'Dados de osso ou baralho para passar o tempo e apostar.', NULL, 0),
+(120, 'Amuleto da sorte', 'Pequeno objeto que o personagem acredita dar sorte.', NULL, 0),
+(121, 'Faca pequena', 'Faca de uso cotidiano, sem uso como arma.', NULL, 0.25),
+(122, 'Saquinho de areia', 'Areia fina para secar a tinta de cartas e pergaminhos.', NULL, 0.5),
+(123, 'Carta de um colega', 'Carta de um colega de estudos com uma pergunta ainda sem resposta.', NULL, 0);
 
 -- Sincronizar a sequência do SERIAL após a inserção manual
 SELECT setval(pg_get_serial_sequence('Item', 'id_item'), (SELECT MAX(id_item) FROM Item));

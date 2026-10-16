@@ -79,6 +79,14 @@ export class CharacterOptionsRepository {
     `;
   }
 
+  /** Círculo de cada magia (truque = 0) — validação das magias escolhidas na criação. */
+  async findSpellLevelsByIds(ids: number[]): Promise<{id_spell: number; spell_level: number | null}[]> {
+    if (ids.length === 0) return [];
+    return this.db.sql<{id_spell: number; spell_level: number | null}[]>`
+      SELECT id_spell, spelllevel AS spell_level FROM spell WHERE id_spell = ANY(${ids})
+    `;
+  }
+
   /** Usado pra montar a lista completa de magias de um conjurador "de lista cheia"
    *  (Clérigo/Druida/Paladino) — filtra por círculo pra só trazer o que o nível atual permite. */
   async findSpellsByIdsUpToLevel(ids: number[], maxSpellLevel: number): Promise<Spell[]> {

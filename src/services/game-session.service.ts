@@ -30,6 +30,7 @@ import {
   SpellCastInput,
 } from '../models/game-session-types';
 import {bardicInspirationSides} from './character-sheet/combat-features';
+import {startingInventory} from './character-sheet/starting-items';
 import {
   SecretRollRequestStore,
   secretRollRequests,
@@ -140,9 +141,11 @@ export class GameSessionService {
       );
     }
 
+    const kit = await this.repository.findStartingKit(input.id_character);
     const player = await this.repository.addPlayer(
       {...input, user_id: userId},
       session.id_game_session,
+      kit ? startingInventory(kit.id_class, kit.id_background) : [],
     );
     this.events.publish({
       type: 'player_added',

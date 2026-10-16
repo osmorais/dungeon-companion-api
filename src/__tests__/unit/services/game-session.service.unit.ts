@@ -106,6 +106,43 @@ describe('GameSessionService', () => {
   afterEach(() => sinon.restore());
 
   // -------------------------------------------------------------------------
+  describe('addPlayer — itens iniciais no inventário da sessão', () => {
+    const input = {session_code: 'ABC', player_name: 'Ana', id_character: 7};
+    beforeEach(() => {
+      repository.stubs.findSessionByCode.resolves({
+        id_game_session: 'gs',
+        max_player_quantity: 5,
+      } as never);
+      repository.stubs.isUserInSession.resolves(false);
+      repository.stubs.countPlayers.resolves(0);
+      repository.stubs.addPlayer.resolves({id_player_session: 'ps'} as never);
+    });
+
+    it('entra com o equipamento inicial da classe e do antecedente do personagem', async () => {
+      repository.stubs.findStartingKit.resolves({
+        id_class: 7,
+        id_background: 13,
+      });
+      await service.addPlayer(input, 'u1');
+      const [, idGameSession, items] =
+        repository.stubs.addPlayer.firstCall.args;
+      expect(idGameSession).to.equal('gs');
+      expect(items).to.containDeep([
+        {item: 'Mochila', qty: 1},
+        {item: 'Tocha', qty: 10},
+        {item: 'Insígnia de patente', qty: 1},
+      ]);
+      expect(repository.stubs.findStartingKit.calledWith(7)).to.be.true();
+    });
+
+    it('personagem não encontrado: entra sem itens', async () => {
+      repository.stubs.findStartingKit.resolves(null);
+      await service.addPlayer(input, 'u1');
+      expect(repository.stubs.addPlayer.firstCall.args[2]).to.eql([]);
+    });
+  });
+
+  // -------------------------------------------------------------------------
   describe('getSession', () => {
     beforeEach(() => {
       repository.stubs.findById.resolves(sessionDetail());

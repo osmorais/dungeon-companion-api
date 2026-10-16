@@ -61,6 +61,8 @@ export interface CharacterInput {
     tool_proficiency?: string;
     /** Só relevante se `classRule.fightingStyleChoice` existir (hoje só o Guerreiro). */
     fighting_style?: string;
+    /** Aumento de atributo à escolha da raça (Meio-Elfo: dois atributos diferentes, +1 cada, menos CAR). */
+    ability_bonus_choices?: StatKeyEn[];
   };
   equipment: {
     armour: Armour | null;

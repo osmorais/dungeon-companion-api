@@ -51,12 +51,16 @@ export function weapon(name: string, properties: string | null): WeaponRow {
   };
 }
 
+/** Círculo de cada magia criada por `spell()` — o stub de `findSpellLevelsByIds` lê daqui. */
+export const SPELL_LEVELS = new Map<number, number>();
+
 export function spell(
   id: number,
   name: string,
   level: number,
   isPrepared?: boolean,
 ): Spell {
+  SPELL_LEVELS.set(id, level);
   return {
     id_spell: id,
     name,

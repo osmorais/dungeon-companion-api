@@ -39,6 +39,7 @@ import {
   dbSkill,
   persistedFromCreation,
   spell,
+  SPELL_LEVELS,
   weapon,
 } from '../fixtures';
 
@@ -71,6 +72,9 @@ describe('Criação de personagem → ficha gravada', () => {
       },
     );
     optionsRepository.stubs.findSpellsByIdsUpToLevel.resolves([]);
+    optionsRepository.stubs.findSpellLevelsByIds.callsFake(async ids =>
+      ids.map(id => ({id_spell: id, spell_level: SPELL_LEVELS.get(id) ?? 0})),
+    );
     combatRepository.stubs.isCharacterInActiveCombat.resolves(false);
     service = new CharacterSheetService(
       repository,
@@ -217,6 +221,7 @@ describe('Criação de personagem → ficha gravada', () => {
         expertise_skill_ids: expertise,
         tool_proficiency: race.toolProficiencyChoice?.options[0],
         fighting_style: opts.id_class === 7 ? 'Defesa' : undefined,
+        ability_bonus_choices: opts.id_race === 6 ? ['STR', 'DEX'] : undefined,
       },
       equipment: {
         armour: null,
@@ -339,7 +344,8 @@ describe('Criação de personagem → ficha gravada', () => {
         const expected =
           base[stat] +
           (raceRule.bonuses[stat] ?? 0) +
-          (subraceRule?.bonuses[stat] ?? 0);
+          (subraceRule?.bonuses[stat] ?? 0) +
+          (choices.ability_bonus_choices?.includes(stat) ? 1 : 0);
         const block = loaded.attributes_and_saves[stat];
         check(
           block.score === expected,
@@ -956,6 +962,109 @@ describe('Criação de personagem → ficha gravada', () => {
         'dono-da-ficha',
       );
       expect(persistedSkills).to.have.length(DB_SKILLS.length);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('validação das escolhas (payload fora das regras → 422)', () => {
+    const rejects = async (input: CharacterInput, msg: RegExp) => {
+      repository.stubs.createCharacter.resetHistory();
+      const err = await service.createCharacter(input, 'owner').then(
+        () => null,
+        (e: {statusCode?: number; message: string}) => e,
+      );
+      expect(err?.statusCode).to.equal(422);
+      expect(err!.message).to.match(msg);
+      expect(repository.stubs.createCharacter.called).to.be.false();
+    };
+
+    it('Meio-Elfo: +1 nos dois atributos escolhidos; sem escolha é recusado', async () => {
+      const halfElf = (ability_bonus_choices?: StatKeyEn[]) =>
+        characterInput({
+          core_build: {id_race: 6, race: 'Meio-Elfo'},
+          choices: {ability_bonus_choices},
+        });
+      const {loaded} = await createAndLoad(halfElf(['STR', 'CON']));
+      expect(loaded.attributes_and_saves.STR.score).to.equal(16);
+      expect(loaded.attributes_and_saves.CON.score).to.equal(14);
+      expect(loaded.attributes_and_saves.CHA.score).to.equal(10);
+      await rejects(halfElf(undefined), /2 atributos diferentes/);
+      await rejects(halfElf(['STR', 'CHA']), /inválido/);
+    });
+
+    it('perícias demais ou fora da lista da classe', async () => {
+      // Guerreiro (2 da lista) com antecedente Soldado (Atletismo, Intimidação já concedidas)
+      await rejects(
+        characterInput({choices: {skills: [2, 6, 13].map(dbSkill)}}),
+        /Perícias demais/,
+      );
+      await rejects(
+        characterInput({choices: {skills: [5, 2].map(dbSkill)}}),
+        /fora da lista/,
+      );
+      // As do antecedente não contam na cota
+      await createAndLoad(
+        characterInput({choices: {skills: [1, 17, 2, 6].map(dbSkill)}}),
+      );
+    });
+
+    it('magias além da cota, acima do 1º círculo ou de classe que não conjura', async () => {
+      const wizard = (spells: Spell[]) =>
+        characterInput({
+          core_build: {id_class: 9, class: 'Mago'},
+          choices: {
+            skills: [5, 6].map(dbSkill),
+            spells,
+            fighting_style: undefined,
+          },
+        });
+      const cantrips = [1, 2, 3, 4].map(i => spell(950 + i, `Truque ${i}`, 0));
+      await rejects(wizard(cantrips), /Truques demais/);
+      await rejects(wizard([spell(960, 'Bola de Fogo', 3)]), /círculo/);
+      await rejects(
+        characterInput({choices: {spells: [spell(961, 'Raio de Fogo', 0)]}}),
+        /Truques demais/,
+      );
+    });
+
+    it('armadura/escudo sem proficiência; Anão da Montanha mago pode usar média', async () => {
+      const wizard = (
+        core: Partial<CharacterInput['core_build']>,
+        equipment: Partial<CharacterInput['equipment']>,
+        tool_proficiency?: string,
+      ) =>
+        characterInput({
+          core_build: {id_class: 9, class: 'Mago', ...core},
+          choices: {
+            skills: [5, 6].map(dbSkill),
+            fighting_style: undefined,
+            tool_proficiency,
+          },
+          equipment,
+        });
+      await rejects(
+        wizard({}, {armour: armour('Armadura Leve', 11)}),
+        /Sem proficiência em Armadura Leve/,
+      );
+      await rejects(wizard({}, {has_shield: true}), /escudo/);
+      await createAndLoad(
+        wizard(
+          {id_race: 1, race: 'Anão', subrace: 'anao-da-montanha'},
+          {armour: armour('Armadura Média', 14, 2)},
+          RACES[1].toolProficiencyChoice!.options[0],
+        ),
+      );
+    });
+
+    it('Clérigo da Vida pode usar armadura pesada; da Luz não', async () => {
+      const cleric = (id_subclass: string) =>
+        characterInput({
+          core_build: {id_class: 4, class: 'Clérigo', id_subclass},
+          choices: {skills: [11, 12].map(dbSkill), fighting_style: undefined},
+          equipment: {armour: armour('Armadura Pesada', 16)},
+        });
+      await createAndLoad(cleric('vida'));
+      await rejects(cleric('luz'), /Armadura Pesada/);
     });
   });
 });

@@ -5,6 +5,7 @@ import {
   damageDefensesFor,
 } from '../services/character-sheet/combat-features';
 import {normalizeKey} from '../services/character-sheet/calculator';
+import {StartingItem} from '../services/character-sheet/starting-items';
 import {
   RELENTLESS_ENDURANCE_KEY,
   RELENTLESS_ENDURANCE_RACE_ID,
@@ -550,12 +551,18 @@ export class GameSessionRepository {
   async addPlayer(
     input: AddPlayerInput,
     idGameSession: string,
+    startingItems: StartingItem[] = [],
   ): Promise<PlayerSession> {
-    const [inserted] = await this.db.sql<{id_player_session: string}[]>`
-      INSERT INTO player_session (id_game_session, id_character, player_name, user_id)
-      VALUES (${idGameSession}, ${input.id_character}, ${input.player_name}, ${input.user_id ?? null})
-      RETURNING id_player_session
-    `;
+    // Jogador e itens iniciais no inventário da sessão entram juntos (ou nenhum dos dois).
+    const inserted = await this.db.sql.begin(async sql => {
+      const [row] = await sql<{id_player_session: string}[]>`
+        INSERT INTO player_session (id_game_session, id_character, player_name, user_id)
+        VALUES (${idGameSession}, ${input.id_character}, ${input.player_name}, ${input.user_id ?? null})
+        RETURNING id_player_session
+      `;
+      await this.insertStartingItems(sql, row.id_player_session, startingItems);
+      return row;
+    });
 
     const rows = await this.db.sql<
       {
@@ -1080,6 +1087,44 @@ export class GameSessionRepository {
       SELECT name, id_class, level FROM character WHERE id_character = ${idCharacter}
     `;
     return row ?? null;
+  }
+
+  /** Classe e antecedente do personagem — base do equipamento inicial (`startingInventory`). */
+  async findStartingKit(
+    idCharacter: number,
+  ): Promise<{id_class: number; id_background: number | null} | null> {
+    const [row] = await this.db.sql<{id_class: number; id_background: number | null}[]>`
+      SELECT c.id_class, cb.id_background
+      FROM character c
+      LEFT JOIN character_background cb ON cb.id_character = c.id_character
+      WHERE c.id_character = ${idCharacter}
+      LIMIT 1
+    `;
+    return row ?? null;
+  }
+
+  /**
+   * Coloca os itens iniciais no inventário da sessão, copiando nome/descrição/preço/peso do
+   * catálogo `item` (mesmo formato de `PlayerInventoryRepository.addItem`). Item que já existe no
+   * inventário soma a quantidade. Nome que não está no catálogo é ignorado (o teste de
+   * integridade de `starting-items.ts` garante que não acontece).
+   */
+  private async insertStartingItems(
+    sql: Sql | TransactionSql,
+    idPlayerSession: string,
+    items: StartingItem[],
+  ): Promise<void> {
+    if (!items.length) return;
+    const names = items.map(i => i.item);
+    const quantities = items.map(i => i.qty);
+    await sql`
+      INSERT INTO player_inventory_item (id_player_session, id_item, name, description, price_value, weight, quantity)
+      SELECT ${idPlayerSession}, i.id_item, i.name, i.description, i.price_value, i.weight, x.qty
+      FROM unnest(${names}::text[], ${quantities}::int[]) AS x(name, qty)
+      JOIN item i ON i.name = x.name
+      ON CONFLICT (id_player_session, id_item)
+      DO UPDATE SET quantity = player_inventory_item.quantity + EXCLUDED.quantity
+    `;
   }
 
   /** Guarda a Inspiração Bárdica no personagem do aliado (substitui uma anterior não usada). */
