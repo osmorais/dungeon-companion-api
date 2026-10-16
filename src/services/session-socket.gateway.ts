@@ -3,19 +3,25 @@ import {Server as SocketIOServer, Socket} from 'socket.io';
 import http from 'http';
 import {GameSessionService} from './game-session.service';
 import {SessionEventsService} from './session-events.service';
-import {SessionEvent, isDmOnlyEvent} from '../models/session-event-types';
+import {
+  SessionEvent,
+  eventTargetUserId,
+  isDmOnlyEvent,
+} from '../models/session-event-types';
 import {createSocketAuthMiddleware} from '../strategies/socket-auth.middleware';
 
 const sessionRoom = (id: string) => `session:${id}`;
 const dmRoom = (id: string) => `session:${id}:dm`;
+const userRoom = (id: string, userId: string) => `session:${id}:user:${userId}`;
 
 /**
  * Único ponto do backend que sabe que existe socket.io — GameSessionService e CombatService
  * só conhecem o SessionEventsService (eventos de domínio), sem saber como são transportados.
  *
- * Uma sessão vira duas rooms: `session:{id}` (todos os autorizados) e `session:{id}:dm` (só
- * o mestre) — necessário porque alguns eventos carregam dado que o REST já esconde de
- * jogadores (ver DM_ONLY_EVENT_TYPES).
+ * Uma sessão vira as rooms `session:{id}` (todos os autorizados), `session:{id}:dm` (só o
+ * mestre) — necessário porque alguns eventos carregam dado que o REST já esconde de jogadores
+ * (ver DM_ONLY_EVENT_TYPES) — e `session:{id}:user:{userId}` (um usuário só, ex.: pedido de
+ * teste secreto, ver `eventTargetUserId`).
  */
 @injectable({scope: BindingScope.SINGLETON})
 export class SessionSocketGateway {
@@ -64,12 +70,20 @@ export class SessionSocketGateway {
     }
 
     await socket.join(sessionRoom(idGameSession));
+    await socket.join(userRoom(idGameSession, userId));
     if (await this.gameSessionService.isSessionOwner(idGameSession, userId)) {
       await socket.join(dmRoom(idGameSession));
     }
   }
 
   private broadcast(event: SessionEvent): void {
+    const targetUserId = eventTargetUserId(event);
+    if (targetUserId) {
+      this.io
+        ?.to(userRoom(event.id_game_session, targetUserId))
+        .emit('session:event', event);
+      return;
+    }
     const room = isDmOnlyEvent(event)
       ? dmRoom(event.id_game_session)
       : sessionRoom(event.id_game_session);

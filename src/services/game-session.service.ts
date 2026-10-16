@@ -26,8 +26,13 @@ import {
   RollLogEntry,
   RollLogInput,
   RollType,
+  SecretRollRequestInput,
   SpellCastInput,
 } from '../models/game-session-types';
+import {
+  SecretRollRequestStore,
+  secretRollRequests,
+} from './secret-roll-requests';
 
 const ROLL_TYPES: RollType[] = [
   'dice',
@@ -45,8 +50,14 @@ const ADVANTAGE_STATES: AdvantageState[] = [
   'disadvantage',
 ];
 
+const SKILL_IDS_MAX = 18;
+const SAVE_ABILITIES = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
+
 @injectable({scope: BindingScope.TRANSIENT})
 export class GameSessionService {
+  /** Pedidos de teste secreto pendentes (processo inteiro); substituível nos testes. */
+  secretRequests: SecretRollRequestStore = secretRollRequests;
+
   constructor(
     @service(GameSessionRepository)
     private repository: GameSessionRepository,
@@ -708,16 +719,34 @@ export class GameSessionService {
         'Você não pode registrar uma rolagem para esse personagem',
       );
 
-    // Só o mestre pode ocultar uma rolagem dos jogadores — ignora silenciosamente o campo
-    // pra quem não é dono da sessão, em vez de rejeitar a rolagem inteira por causa disso.
+    // Resposta a um teste secreto: só vale uma vez, do jogador/personagem pra quem o mestre
+    // pediu, e a rolagem fica oculta (só o mestre recebe).
+    let answersSecretRequest = false;
+    if (input.secret_request_id !== undefined) {
+      const request = this.secretRequests.consume(String(input.secret_request_id), {
+        id_game_session: idGameSession,
+        id_character: idCharacter,
+        user_id: userId,
+      });
+      if (!request)
+        throw new HttpErrors.Conflict(
+          'Pedido de teste secreto inválido ou expirado',
+        );
+      answersSecretRequest = true;
+    }
+
+    // Fora isso, só o mestre pode ocultar uma rolagem dos jogadores — ignora silenciosamente
+    // o campo pra quem não é dono da sessão, em vez de rejeitar a rolagem inteira por causa disso.
     const isDm = input.is_hidden
       ? await this.repository.isSessionOwner(idGameSession, userId)
       : false;
 
+    const rollInput = {...input};
+    delete rollInput.secret_request_id;
     const roll = await this.repository.addRoll(idGameSession, {
-      ...input,
+      ...rollInput,
       id_character: idCharacter,
-      is_hidden: isDm && !!input.is_hidden,
+      is_hidden: answersSecretRequest || (isDm && !!input.is_hidden),
     });
     this.events.publish({
       type: 'roll_added',
@@ -725,6 +754,69 @@ export class GameSessionService {
       roll,
     });
     return roll;
+  }
+
+  /**
+   * Mestre pede um teste secreto (perícia ou resistência) a um ou mais jogadores: cada um recebe
+   * o pedido só na própria tela, rola com o bônus da ficha, e o resultado vai oculto pro mestre.
+   */
+  async requestSecretRoll(
+    idGameSession: string,
+    input: SecretRollRequestInput,
+    userId: string,
+  ): Promise<{id_player_session: string; request_id: string}[]> {
+    const isOwner = await this.repository.isSessionOwner(idGameSession, userId);
+    if (!isOwner)
+      throw new HttpErrors.Forbidden('Só o mestre pede teste secreto');
+
+    const ids = Array.isArray(input.id_player_sessions)
+      ? [...new Set(input.id_player_sessions)]
+      : [];
+    if (ids.length === 0)
+      throw new HttpErrors.UnprocessableEntity('Escolha ao menos um jogador');
+    const label = typeof input.label === 'string' ? input.label.trim() : '';
+    if (!label || label.length > 60)
+      throw new HttpErrors.UnprocessableEntity('label inválido');
+    const check = input.check;
+    const validCheck =
+      (check?.kind === 'skill' &&
+        Number.isInteger(check.id_skill) &&
+        check.id_skill >= 1 &&
+        check.id_skill <= SKILL_IDS_MAX) ||
+      (check?.kind === 'save' && SAVE_ABILITIES.includes(check.ability));
+    if (!validCheck) throw new HttpErrors.UnprocessableEntity('check inválido');
+
+    const session = await this.repository.findById(idGameSession);
+    if (!session) throw new HttpErrors.NotFound('Sessão não encontrada');
+    const targets = ids.map(id => {
+      const player = session.players.find(p => p.id_player_session === id);
+      if (!player?.user_id || !player.character)
+        throw new HttpErrors.UnprocessableEntity(
+          'Jogador sem personagem ou fora da sessão',
+        );
+      return player;
+    });
+
+    return targets.map(player => {
+      const request = this.secretRequests.create({
+        id_game_session: idGameSession,
+        id_player_session: player.id_player_session,
+        id_character: player.id_character,
+        user_id: player.user_id!,
+        label,
+      });
+      this.events.publish({
+        type: 'secret_roll_requested',
+        id_game_session: idGameSession,
+        target_user_id: player.user_id!,
+        request_id: request.id,
+        id_player_session: player.id_player_session,
+        id_character: player.id_character,
+        label,
+        check: input.check,
+      });
+      return {id_player_session: player.id_player_session, request_id: request.id};
+    });
   }
 
   /** Só anuncia (broadcast via socket) — ao contrário de addRoll, não persiste nada, é puramente

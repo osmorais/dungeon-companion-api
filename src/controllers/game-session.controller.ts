@@ -32,6 +32,7 @@ import {
   PlayerSession,
   RollLogEntry,
   RollLogInput,
+  SecretRollRequestInput,
   SpellCastInput,
 } from '../models/game-session-types';
 
@@ -485,6 +486,25 @@ export class GameSessionController {
     body: RollLogInput,
   ): Promise<RollLogEntry> {
     return this.gameSessionService.addRoll(id, body, currentUser.id);
+  }
+
+  @post('/api/game-session/{id}/secret-roll-request')
+  @response(200, {
+    description:
+      'DM asks one or more players for a secret check — each player rolls and only the DM receives the result',
+    content: {'application/json': {schema: {type: 'array', items: {type: 'object'}}}},
+  })
+  async requestSecretRoll(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      description: 'Players and check to request',
+      required: true,
+      content: {'application/json': {schema: {type: 'object'}}},
+    })
+    body: SecretRollRequestInput,
+  ): Promise<{id_player_session: string; request_id: string}[]> {
+    return this.gameSessionService.requestSecretRoll(id, body, currentUser.id);
   }
 
   @post('/api/game-session/{id}/spell-cast')

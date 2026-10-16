@@ -6,6 +6,7 @@ import {
   NpcSession,
   PlayerSession,
   RollLogEntry,
+  SecretRollCheck,
 } from './game-session-types';
 
 /**
@@ -64,6 +65,15 @@ export interface SessionEventPayloadMap {
   };
   monster_hidden: {id_monster_session: string};
   roll_added: {roll: RollLogEntry};
+  /** Teste secreto pedido pelo mestre — vai só pro jogador alvo (ver `eventTargetUserId`). */
+  secret_roll_requested: {
+    target_user_id: string;
+    request_id: string;
+    id_player_session: string;
+    id_character: number;
+    label: string;
+    check: SecretRollCheck;
+  };
   spell_cast: {
     id_character: number;
     actor_name: string;
@@ -105,6 +115,11 @@ export const DM_ONLY_EVENT_TYPES: ReadonlySet<SessionEventType> = new Set([
  * quando a própria rolagem foi marcada como oculta (roll.is_hidden) — daí precisar checar o
  * payload, não só o `type`.
  */
+/** Evento pra um único usuário (sala própria dele na sessão), em vez da sala de todos. */
+export function eventTargetUserId(event: SessionEvent): string | null {
+  return event.type === 'secret_roll_requested' ? event.target_user_id : null;
+}
+
 export function isDmOnlyEvent(event: SessionEvent): boolean {
   if (DM_ONLY_EVENT_TYPES.has(event.type)) return true;
   return event.type === 'roll_added' && event.roll.is_hidden;

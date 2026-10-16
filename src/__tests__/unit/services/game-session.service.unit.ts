@@ -18,7 +18,12 @@ import {
   RollLogEntry,
   RollLogInput,
 } from '../../../models/game-session-types';
-import {SessionEvent} from '../../../models/session-event-types';
+import {
+  SessionEvent,
+  eventTargetUserId,
+  isDmOnlyEvent,
+} from '../../../models/session-event-types';
+import {SecretRollRequestStore} from '../../../services/secret-roll-requests';
 
 function monster(
   id: string,
@@ -537,6 +542,173 @@ describe('GameSessionService', () => {
       expect(repository.stubs.addRoll.firstCall.args[1].roll_type).to.equal(
         'heal',
       );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('teste secreto', () => {
+    const players = [
+      {
+        id_player_session: 'p1',
+        id_game_session: 'gs',
+        id_character: 10,
+        player_name: 'Ana',
+        user_id: 'u1',
+        character: {name: 'Lyra'},
+      },
+      {
+        id_player_session: 'p2',
+        id_game_session: 'gs',
+        id_character: 20,
+        player_name: 'Bia',
+        user_id: 'u2',
+        character: {name: 'Thorin'},
+      },
+      {
+        id_player_session: 'p3',
+        id_game_session: 'gs',
+        id_character: 30,
+        player_name: 'Sem ficha',
+        user_id: 'u3',
+        character: null,
+      },
+    ] as unknown as GameSessionDetail['players'];
+    const perception = {
+      id_player_sessions: ['p1'],
+      check: {kind: 'skill' as const, id_skill: 13},
+      label: 'Percepção',
+    };
+
+    beforeEach(() => {
+      service.secretRequests = new SecretRollRequestStore();
+      repository.stubs.isSessionOwner.callsFake(
+        async (_gs, user) => user === 'dm',
+      );
+      repository.stubs.findById.resolves({...sessionDetail(), players});
+      repository.stubs.hasSessionAccess.resolves(true);
+      repository.stubs.canPostRollFor.resolves(true);
+      repository.stubs.addRoll.callsFake(
+        async (_gs, input) => ({...input}) as unknown as RollLogEntry,
+      );
+    });
+
+    it('só o mestre pede', async () => {
+      await expect(
+        service.requestSecretRoll('gs', perception, 'u1'),
+      ).to.be.rejectedWith(/Só o mestre/);
+    });
+
+    it('valida jogadores, teste e rótulo', async () => {
+      const bad = [
+        {...perception, id_player_sessions: []},
+        {...perception, label: ' '},
+        {...perception, label: 'x'.repeat(61)},
+        {...perception, check: {kind: 'skill' as const, id_skill: 99}},
+        {
+          ...perception,
+          check: {kind: 'save' as const, ability: 'XYZ' as 'STR'},
+        },
+        {...perception, id_player_sessions: ['p3']},
+        {...perception, id_player_sessions: ['nao-existe']},
+      ];
+      for (const input of bad) {
+        await expect(
+          service.requestSecretRoll('gs', input, 'dm'),
+        ).to.be.rejected();
+      }
+      expect(events).to.eql([]);
+    });
+
+    it('cada jogador escolhido recebe o pedido só na própria sala', async () => {
+      const result = await service.requestSecretRoll(
+        'gs',
+        {
+          id_player_sessions: ['p1', 'p2', 'p1'],
+          check: {kind: 'save', ability: 'WIS'},
+          label: 'Resistência: Sabedoria',
+        },
+        'dm',
+      );
+      expect(result.map(r => r.id_player_session)).to.eql(['p1', 'p2']);
+      expect(events.map(e => e.type)).to.eql([
+        'secret_roll_requested',
+        'secret_roll_requested',
+      ]);
+      expect(events[0]).to.containDeep({
+        target_user_id: 'u1',
+        id_player_session: 'p1',
+        id_character: 10,
+        label: 'Resistência: Sabedoria',
+        check: {kind: 'save', ability: 'WIS'},
+        request_id: result[0].request_id,
+      });
+      // roteamento: sala do usuário alvo, nunca a de todos
+      expect(eventTargetUserId(events[0])).to.equal('u1');
+      expect(eventTargetUserId(events[1])).to.equal('u2');
+    });
+
+    it('resposta do jogador fica oculta (só o mestre recebe) e o pedido vale uma vez', async () => {
+      const [{request_id}] = await service.requestSecretRoll(
+        'gs',
+        perception,
+        'dm',
+      );
+      events.length = 0;
+      const answer = {
+        ...ROLL,
+        id_character: 10,
+        roll_type: 'skill' as const,
+        label: 'Teste secreto: Percepção',
+        secret_request_id: request_id,
+      };
+      const roll = await service.addRoll('gs', answer, 'u1');
+      expect(roll.is_hidden).to.be.true();
+      expect(repository.stubs.addRoll.firstCall.args[1]).to.not.have.property(
+        'secret_request_id',
+      );
+      expect(isDmOnlyEvent(events[0])).to.be.true();
+
+      await expect(service.addRoll('gs', answer, 'u1')).to.be.rejectedWith(
+        /inválido ou expirado/,
+      );
+    });
+
+    it('pedido de outro jogador/personagem não serve', async () => {
+      const [{request_id}] = await service.requestSecretRoll(
+        'gs',
+        perception,
+        'dm',
+      );
+      await expect(
+        service.addRoll(
+          'gs',
+          {...ROLL, id_character: 10, secret_request_id: request_id},
+          'u2',
+        ),
+      ).to.be.rejectedWith(/inválido ou expirado/);
+      await expect(
+        service.addRoll(
+          'gs',
+          {...ROLL, id_character: 20, secret_request_id: request_id},
+          'u1',
+        ),
+      ).to.be.rejectedWith(/inválido ou expirado/);
+      // ainda vale pro dono certo
+      const roll = await service.addRoll(
+        'gs',
+        {...ROLL, id_character: 10, secret_request_id: request_id},
+        'u1',
+      );
+      expect(roll.is_hidden).to.be.true();
+    });
+
+    it('jogador sem pedido continua sem poder ocultar rolagem', async () => {
+      const roll = await service.addRoll(
+        'gs',
+        {...ROLL, is_hidden: true},
+        'u1',
+      );
+      expect(roll.is_hidden).to.be.false();
     });
   });
 

@@ -180,6 +180,21 @@ export interface RollLogInput {
   total: number;
   /** Só o mestre pode marcar como oculta — o service ignora esse campo pra quem não é dono da sessão. */
   is_hidden?: boolean;
+  /** Resposta do jogador a um teste secreto pedido pelo mestre: a rolagem fica oculta (só o
+   *  mestre recebe; o jogador vê o resultado no próprio modal). */
+  secret_request_id?: string;
+}
+
+/** O que o mestre pede no teste secreto — o jogador rola com o bônus da própria ficha. */
+export type SecretRollCheck =
+  | {kind: 'skill'; id_skill: number}
+  | {kind: 'save'; ability: 'STR' | 'DEX' | 'CON' | 'INT' | 'WIS' | 'CHA'};
+
+export interface SecretRollRequestInput {
+  id_player_sessions: string[];
+  check: SecretRollCheck;
+  /** Nome do teste exibido pro jogador e no log do mestre (ex.: "Percepção"). */
+  label: string;
 }
 
 /** Anúncio de "jogador lançou uma magia" — só informativo, não persiste (ao contrário da
