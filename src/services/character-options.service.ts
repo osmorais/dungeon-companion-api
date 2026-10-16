@@ -2,6 +2,7 @@ import {injectable, BindingScope, service} from '@loopback/core';
 import {CharacterOptionsRepository} from '../repositories/character-options.repository';
 import {Alignment, Armour, Background, CharacterClass, CharacterOptions, Race, Spell, WeaponOption} from '../models/character-options-types';
 import {RACES, SUBRACES, CLASSES, BACKGROUNDS} from './character-sheet/rules';
+import {normalizeSkill} from './character-sheet/calculator';
 
 /** Mesmo mapeamento de `character.repository.ts` (STAT_TO_PT), duplicado aqui só pra formatar texto de exibição. */
 const STAT_TO_PT: Record<string, string> = {
@@ -71,11 +72,19 @@ export class CharacterOptionsService {
       };
     });
 
+    // As perícias do antecedente ficam em `rules.ts` como chave em inglês ("insight"); o wizard
+    // precisa do nome e do id da tabela `skill` pra exibir e marcar como concedidas.
+    const skillByKey = new Map(skills.map(s => [normalizeSkill(s.name), s]));
     const backgrounds: Background[] = rawBackgrounds.map(b => {
       const rule = BACKGROUNDS[b.id_background];
+      const bgSkills = (rule?.skills ?? []).flatMap(key => {
+        const skill = skillByKey.get(key);
+        return skill ? [skill] : [];
+      });
       return {
         ...b,
-        skills: rule?.skills ?? [],
+        skills: bgSkills.map(s => s.name),
+        skill_ids: bgSkills.map(s => s.id_skill),
         tools: rule?.tools ?? [],
         feature: rule ? {name: rule.feature.name, description: rule.feature.description} : {name: '', description: ''},
       };

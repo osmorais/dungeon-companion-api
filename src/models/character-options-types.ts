@@ -87,7 +87,10 @@ export interface Background {
   name: string;
   starting_gold_po: number;
   languages_number: number;
+  /** Nomes das perícias do antecedente como estão na tabela `skill` (ex.: "Intuição"). */
   skills: string[];
+  /** `id_skill` das mesmas perícias — o wizard marca como concedidas (sempre treinadas). */
+  skill_ids: number[];
   tools: string[];
   feature: TraitInfo;
 }
