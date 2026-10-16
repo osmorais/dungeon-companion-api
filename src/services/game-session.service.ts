@@ -109,6 +109,18 @@ export class GameSessionService {
     }
   }
 
+  /**
+   * Só o dono leva o personagem pra uma sessão (como jogador ou como NPC do mestre) — sem isso,
+   * qualquer usuário entrava com o id de um personagem alheio e passava a ver e agir por ele.
+   */
+  private async assertOwnsCharacter(idCharacter: number, userId: string): Promise<void> {
+    const ownerId = await this.repository.findCharacterOwnerId(idCharacter);
+    if (ownerId === undefined)
+      throw new HttpErrors.NotFound('Personagem não encontrado');
+    if (ownerId !== userId)
+      throw new HttpErrors.Forbidden('Esse personagem não é seu');
+  }
+
   async addPlayer(
     input: AddPlayerInput,
     userId: string,
@@ -124,6 +136,8 @@ export class GameSessionService {
 
     const session = await this.repository.findSessionByCode(input.session_code);
     if (!session) throw new HttpErrors.NotFound('Sessão não encontrada');
+
+    await this.assertOwnsCharacter(input.id_character, userId);
 
     const alreadyIn = await this.repository.isUserInSession(
       session.id_game_session,
@@ -180,6 +194,7 @@ export class GameSessionService {
       );
     if (session.game_session.user_id !== userId)
       throw new HttpErrors.Forbidden('Apenas o mestre pode adicionar NPCs');
+    await this.assertOwnsCharacter(idCharacter, userId);
     const npc = await this.repository.addNpc(idGameSession, idCharacter);
     this.events.publish({
       type: 'npc_added',

@@ -1089,6 +1089,14 @@ export class GameSessionRepository {
     return row ?? null;
   }
 
+  /** Dono do personagem (`undefined` se o personagem não existe). */
+  async findCharacterOwnerId(idCharacter: number): Promise<string | null | undefined> {
+    const [row] = await this.db.sql<{user_id: string | null}[]>`
+      SELECT user_id FROM character WHERE id_character = ${idCharacter}
+    `;
+    return row ? row.user_id : undefined;
+  }
+
   /** Classe e antecedente do personagem — base do equipamento inicial (`startingInventory`). */
   async findStartingKit(
     idCharacter: number,

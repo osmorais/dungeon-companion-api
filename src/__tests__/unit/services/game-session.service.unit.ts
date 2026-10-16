@@ -116,6 +116,24 @@ describe('GameSessionService', () => {
       repository.stubs.isUserInSession.resolves(false);
       repository.stubs.countPlayers.resolves(0);
       repository.stubs.addPlayer.resolves({id_player_session: 'ps'} as never);
+      repository.stubs.findCharacterOwnerId.resolves('u1');
+    });
+
+    it('personagem de outro usuário: 403 e não entra', async () => {
+      repository.stubs.findCharacterOwnerId.resolves('outro');
+      await expect(service.addPlayer(input, 'u1')).to.be.rejectedWith({
+        statusCode: 403,
+      });
+      expect(repository.stubs.addPlayer.called).to.be.false();
+      expect(events).to.eql([]);
+    });
+
+    it('personagem inexistente: 404', async () => {
+      repository.stubs.findCharacterOwnerId.resolves(undefined);
+      await expect(service.addPlayer(input, 'u1')).to.be.rejectedWith({
+        statusCode: 404,
+      });
+      expect(repository.stubs.addPlayer.called).to.be.false();
     });
 
     it('entra com o equipamento inicial da classe e do antecedente do personagem', async () => {
@@ -139,6 +157,40 @@ describe('GameSessionService', () => {
       repository.stubs.findStartingKit.resolves(null);
       await service.addPlayer(input, 'u1');
       expect(repository.stubs.addPlayer.firstCall.args[2]).to.eql([]);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('addNpc — só personagem do próprio mestre', () => {
+    beforeEach(() => {
+      const detail = sessionDetail();
+      repository.stubs.findById.resolves(detail);
+      repository.stubs.addNpc.resolves({
+        id_npc_session: 'n1',
+        id_game_session: 'gs',
+        id_character: 9,
+      } as never);
+    });
+
+    it('mestre com personagem dele: adiciona', async () => {
+      repository.stubs.findCharacterOwnerId.resolves('dm');
+      await service.addNpc('gs', 9, 'dm');
+      expect(repository.stubs.addNpc.calledWith('gs', 9)).to.be.true();
+    });
+
+    it('mestre com personagem de outro usuário: 403', async () => {
+      repository.stubs.findCharacterOwnerId.resolves('jogador');
+      await expect(service.addNpc('gs', 9, 'dm')).to.be.rejectedWith({
+        statusCode: 403,
+      });
+      expect(repository.stubs.addNpc.called).to.be.false();
+    });
+
+    it('quem não é o mestre continua recebendo 403 antes de tudo', async () => {
+      await expect(service.addNpc('gs', 9, 'jogador')).to.be.rejectedWith({
+        statusCode: 403,
+      });
+      expect(repository.stubs.findCharacterOwnerId.called).to.be.false();
     });
   });
 
