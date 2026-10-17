@@ -83,6 +83,15 @@ export interface SessionEventPayloadMap {
     save_ability: 'STR' | 'DEX' | 'CON' | 'INT' | 'WIS' | 'CHA' | null;
     is_ability: boolean;
   };
+  /** Alguém aplicou dano/cura de uma rolagem num alvo — só o aviso pra mesa (o PV vai no evento
+   *  de PV de cada tipo; o de monstro continua só pro mestre). */
+  amount_applied: {
+    id_character: number;
+    actor_name: string;
+    target_label: string;
+    amount: number;
+    kind: 'damage' | 'heal' | 'temp_hp';
+  };
   /** Mestre mostra uma imagem de referência em tela cheia pra todos da sessão. */
   reference_image_shown: {image: ShownReferenceImage};
   /** Imagem fechada pra todos: o mestre fechou ou apagou a imagem que estava em exibição. */

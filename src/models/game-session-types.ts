@@ -214,6 +214,19 @@ export interface SpellCastInput {
   is_ability?: boolean;
 }
 
+/**
+ * Aplicar no alvo o resultado de uma rolagem de dano/cura feita por `id_character`. O servidor
+ * calcula o PV (o cliente manda só a quantidade), então o jogador pode aplicar em aliados e em
+ * monstros revelados sem conseguir gravar um PV qualquer.
+ */
+export interface ApplyAmountInput {
+  id_character: number;
+  target_kind: 'player' | 'npc' | 'monster';
+  target_id: string;
+  amount: number;
+  kind: 'damage' | 'heal' | 'temp_hp';
+}
+
 export interface GameSessionDetail {
   game_session: GameSession;
   players: PlayerSession[];

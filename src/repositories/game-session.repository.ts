@@ -873,41 +873,10 @@ export class GameSessionRepository {
     if (player_user_id !== userId && session_owner_id !== userId)
       return {status: 'unauthorized'};
 
-    // Meio-Orc — Resistência Implacável: dano que zeraria o PV deixa com 1, uma vez por descanso
-    // longo (o uso fica no mesmo `resource_uses_expended` dos outros recursos).
-    let finalHp = currentHitPoints;
-    let relentlessEndurance: {idCharacter: number; name: string} | null = null;
-    if (currentHitPoints <= 0) {
-      const [character] = await this.db.sql<
-        {
-          name: string;
-          id_race: number;
-          current_hit_points: number;
-          resource_uses_expended: Record<string, number> | null;
-        }[]
-      >`
-        SELECT name, id_race, current_hit_points, resource_uses_expended
-        FROM character WHERE id_character = ${id_character}
-      `;
-      const used = character?.resource_uses_expended?.[RELENTLESS_ENDURANCE_KEY] ?? 0;
-      if (
-        character &&
-        character.id_race === RELENTLESS_ENDURANCE_RACE_ID &&
-        character.current_hit_points > 0 &&
-        used < 1
-      ) {
-        finalHp = 1;
-        relentlessEndurance = {idCharacter: id_character, name: character.name};
-        await this.db.sql`
-          UPDATE character
-          SET resource_uses_expended = ${this.db.sql.json({
-            ...(character.resource_uses_expended ?? {}),
-            [RELENTLESS_ENDURANCE_KEY]: 1,
-          })}
-          WHERE id_character = ${id_character}
-        `;
-      }
-    }
+    const {finalHp, relentlessEndurance} = await this.resolveRelentlessEndurance(
+      id_character,
+      currentHitPoints,
+    );
 
     await this.db.sql`
       UPDATE character
@@ -920,6 +889,130 @@ export class GameSessionRepository {
       currentHitPoints: finalHp,
       relentlessEndurance,
     };
+  }
+
+  /**
+   * Meio-Orc — Resistência Implacável: dano que zeraria o PV deixa com 1, uma vez por descanso
+   * longo (o uso fica no mesmo `resource_uses_expended` dos outros recursos). Só personagem de
+   * jogador; devolve o PV a gravar e, se a habilidade entrou agora, o nome pro aviso da mesa.
+   */
+  async resolveRelentlessEndurance(
+    idCharacter: number,
+    newHp: number,
+  ): Promise<{
+    finalHp: number;
+    relentlessEndurance: {idCharacter: number; name: string} | null;
+  }> {
+    if (newHp > 0) return {finalHp: newHp, relentlessEndurance: null};
+    const [character] = await this.db.sql<
+      {
+        name: string;
+        id_race: number;
+        current_hit_points: number;
+        resource_uses_expended: Record<string, number> | null;
+      }[]
+    >`
+      SELECT name, id_race, current_hit_points, resource_uses_expended
+      FROM character WHERE id_character = ${idCharacter}
+    `;
+    const used = character?.resource_uses_expended?.[RELENTLESS_ENDURANCE_KEY] ?? 0;
+    if (
+      !character ||
+      character.id_race !== RELENTLESS_ENDURANCE_RACE_ID ||
+      character.current_hit_points <= 0 ||
+      used >= 1
+    ) {
+      return {finalHp: newHp, relentlessEndurance: null};
+    }
+    await this.db.sql`
+      UPDATE character
+      SET resource_uses_expended = ${this.db.sql.json({
+        ...(character.resource_uses_expended ?? {}),
+        [RELENTLESS_ENDURANCE_KEY]: 1,
+      })}
+      WHERE id_character = ${idCharacter}
+    `;
+    return {finalHp: 1, relentlessEndurance: {idCharacter, name: character.name}};
+  }
+
+  /**
+   * Alvo de "aplicar dano/cura" dentro da sessão (jogador, NPC ou monstro), com o PV atual —
+   * `null` se não existe nessa sessão. Monstro traz o nome que a mesa vê e se está revelado.
+   */
+  async findApplyTarget(
+    idGameSession: string,
+    kind: 'player' | 'npc' | 'monster',
+    id: string,
+  ): Promise<{
+    id_character: number | null;
+    label: string;
+    current: number;
+    max: number;
+    temp: number;
+    is_revealed: boolean;
+  } | null> {
+    if (kind === 'monster') {
+      const [row] = await this.db.sql<
+        {hp_current: number; hp_max: number; is_revealed: boolean; custom_name: string | null; snapshot_name: string | null}[]
+      >`
+        SELECT hp_current, hp_max, is_revealed, custom_name, data_snapshot->>'name' AS snapshot_name
+        FROM monster_session
+        WHERE id_monster_session = ${id} AND id_game_session = ${idGameSession}
+      `;
+      if (!row) return null;
+      return {
+        id_character: null,
+        label: row.custom_name ?? row.snapshot_name ?? 'Monstro',
+        current: row.hp_current,
+        max: row.hp_max,
+        temp: 0,
+        is_revealed: row.is_revealed,
+      };
+    }
+    const rows =
+      kind === 'player'
+        ? await this.db.sql<{id_character: number; name: string; current_hit_points: number; max_hit_points: number; temporary_hit_points: number | null}[]>`
+            SELECT c.id_character, c.name, c.current_hit_points, c.max_hit_points, c.temporary_hit_points
+            FROM player_session ps JOIN character c ON c.id_character = ps.id_character
+            WHERE ps.id_player_session = ${id} AND ps.id_game_session = ${idGameSession}
+          `
+        : await this.db.sql<{id_character: number; name: string; current_hit_points: number; max_hit_points: number; temporary_hit_points: number | null}[]>`
+            SELECT c.id_character, c.name, c.current_hit_points, c.max_hit_points, c.temporary_hit_points
+            FROM npc_session ns JOIN character c ON c.id_character = ns.id_character
+            WHERE ns.id_npc_session = ${id} AND ns.id_game_session = ${idGameSession}
+          `;
+    const [row] = rows;
+    if (!row) return null;
+    return {
+      id_character: row.id_character,
+      label: row.name,
+      current: row.current_hit_points,
+      max: row.max_hit_points,
+      temp: row.temporary_hit_points ?? 0,
+      is_revealed: true,
+    };
+  }
+
+  /** Grava o PV calculado no servidor (a permissão já foi conferida no service). */
+  async writeCharacterHp(idCharacter: number, hp: number, temp: number): Promise<void> {
+    await this.db.sql`
+      UPDATE character SET current_hit_points = ${hp}, temporary_hit_points = ${temp}
+      WHERE id_character = ${idCharacter}
+    `;
+  }
+
+  async writeMonsterHp(idMonsterSession: string, hp: number): Promise<void> {
+    await this.db.sql`
+      UPDATE monster_session SET hp_current = ${hp} WHERE id_monster_session = ${idMonsterSession}
+    `;
+  }
+
+  /** Nome do personagem que fez a rolagem (pro aviso "aplicou"). */
+  async findCharacterName(idCharacter: number): Promise<string | null> {
+    const [row] = await this.db.sql<{name: string}[]>`
+      SELECT name FROM character WHERE id_character = ${idCharacter}
+    `;
+    return row?.name ?? null;
   }
 
   /** Só o mestre da sessão pode alterar o PV atual de um NPC. */

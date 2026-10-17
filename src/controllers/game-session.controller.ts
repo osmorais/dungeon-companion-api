@@ -20,6 +20,7 @@ import {GameSessionService} from '../services/game-session.service';
 import {
   AddMonsterToSessionInput,
   AddPlayerInput,
+  ApplyAmountInput,
   CreateGameSessionInput,
   GameSessionCreated,
   GameSessionDetail,
@@ -611,6 +612,25 @@ export class GameSessionController {
     body: SpellCastInput,
   ): Promise<void> {
     return this.gameSessionService.announceSpellCast(id, body, currentUser.id);
+  }
+
+  @post('/api/game-session/{id}/apply-amount')
+  @response(200, {
+    description:
+      'Applies rolled damage/healing to a player, NPC or revealed monster; the server computes the HP',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async applyAmount(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      description: 'Who rolled, target, amount and kind (damage | heal | temp_hp)',
+      required: true,
+      content: {'application/json': {schema: {type: 'object'}}},
+    })
+    body: ApplyAmountInput,
+  ): Promise<{current_hit_points?: number; temporary_hit_points?: number}> {
+    return this.gameSessionService.applyAmount(id, body, currentUser.id);
   }
 
   @post('/api/game-session/{id}/grant-xp')

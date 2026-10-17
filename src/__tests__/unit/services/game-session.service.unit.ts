@@ -196,6 +196,169 @@ describe('GameSessionService', () => {
   });
 
   // -------------------------------------------------------------------------
+  describe('aplicar dano/cura de uma rolagem (applyAmount)', () => {
+    const goblin = {
+      id_character: null,
+      label: 'Goblin',
+      current: 7,
+      max: 7,
+      temp: 0,
+      is_revealed: true,
+    };
+    const ally = {
+      id_character: 20,
+      label: 'Thorin',
+      current: 10,
+      max: 30,
+      temp: 3,
+      is_revealed: true,
+    };
+    const input = (overrides = {}) => ({
+      id_character: 7,
+      target_kind: 'player' as const,
+      target_id: 'p2',
+      amount: 5,
+      kind: 'heal' as const,
+      ...overrides,
+    });
+
+    beforeEach(() => {
+      repository.stubs.canPostRollFor.resolves(true);
+      repository.stubs.isSessionOwner.resolves(false);
+      repository.stubs.findCharacterName.resolves('Ana');
+      repository.stubs.findApplyTarget.resolves(ally);
+      repository.stubs.resolveRelentlessEndurance.callsFake(
+        async (_id, hp) => ({
+          finalHp: hp,
+          relentlessEndurance: null,
+        }),
+      );
+    });
+
+    it('jogador cura um aliado: o servidor calcula o PV, avisa a mesa', async () => {
+      const result = await service.applyAmount('gs', input(), 'u1');
+      expect(result).to.eql({current_hit_points: 15, temporary_hit_points: 3});
+      expect(
+        repository.stubs.writeCharacterHp.calledWith(20, 15, 3),
+      ).to.be.true();
+      expect(events.map(e => e.type)).to.eql([
+        'player_hp_updated',
+        'amount_applied',
+      ]);
+      expect(events[1]).to.containDeep({
+        actor_name: 'Ana',
+        target_label: 'Thorin',
+        amount: 5,
+        kind: 'heal',
+      });
+    });
+
+    it('dano em aliado passa pela Resistência Implacável e avisa o uso', async () => {
+      repository.stubs.resolveRelentlessEndurance.resolves({
+        finalHp: 1,
+        relentlessEndurance: {idCharacter: 20, name: 'Thorin'},
+      });
+      const result = await service.applyAmount(
+        'gs',
+        input({kind: 'damage', amount: 50}),
+        'u1',
+      );
+      expect(result.current_hit_points).to.equal(1);
+      expect(events.map(e => e.type)).to.eql([
+        'player_hp_updated',
+        'spell_cast',
+        'amount_applied',
+      ]);
+    });
+
+    it('jogador dá dano em monstro revelado; o PV do monstro não volta pra ele', async () => {
+      repository.stubs.findApplyTarget.resolves(goblin);
+      const result = await service.applyAmount(
+        'gs',
+        input({
+          target_kind: 'monster',
+          target_id: 'm1',
+          kind: 'damage',
+          amount: 4,
+        }),
+        'u1',
+      );
+      expect(result).to.eql({});
+      expect(repository.stubs.writeMonsterHp.calledWith('m1', 3)).to.be.true();
+      const hpEvent = events.find(e => e.type === 'monster_hp_updated')!;
+      expect(isDmOnlyEvent(hpEvent)).to.be.true();
+      expect(
+        isDmOnlyEvent(events.find(e => e.type === 'amount_applied')!),
+      ).to.be.false();
+    });
+
+    it('monstro escondido: 404 pro jogador, mas o mestre aplica', async () => {
+      repository.stubs.findApplyTarget.resolves({
+        ...goblin,
+        is_revealed: false,
+      });
+      const monsterDamage = input({
+        target_kind: 'monster',
+        target_id: 'm1',
+        kind: 'damage',
+      });
+      await expect(
+        service.applyAmount('gs', monsterDamage, 'u1'),
+      ).to.be.rejectedWith({statusCode: 404});
+      repository.stubs.isSessionOwner.resolves(true);
+      await service.applyAmount('gs', monsterDamage, 'dm');
+      expect(repository.stubs.writeMonsterHp.called).to.be.true();
+    });
+
+    it('jogador não cura monstro; PV temporário só em jogador', async () => {
+      repository.stubs.findApplyTarget.resolves(goblin);
+      await expect(
+        service.applyAmount(
+          'gs',
+          input({target_kind: 'monster', target_id: 'm1'}),
+          'u1',
+        ),
+      ).to.be.rejectedWith({statusCode: 422});
+      repository.stubs.findApplyTarget.resolves(ally);
+      await expect(
+        service.applyAmount(
+          'gs',
+          input({target_kind: 'npc', target_id: 'n1', kind: 'temp_hp'}),
+          'u1',
+        ),
+      ).to.be.rejectedWith({statusCode: 422});
+    });
+
+    it('quem não controla o personagem da rolagem: 403, nada gravado', async () => {
+      repository.stubs.canPostRollFor.resolves(false);
+      await expect(
+        service.applyAmount('gs', input(), 'outro'),
+      ).to.be.rejectedWith({
+        statusCode: 403,
+      });
+      expect(repository.stubs.writeCharacterHp.called).to.be.false();
+      expect(events).to.eql([]);
+    });
+
+    it('validação: quantidade inteira de 1 a 9999, tipos conhecidos, alvo da sessão', async () => {
+      for (const bad of [0, -2, 1.5, 10000]) {
+        await expect(
+          service.applyAmount('gs', input({amount: bad}), 'u1'),
+        ).to.be.rejectedWith({statusCode: 422});
+      }
+      await expect(
+        service.applyAmount('gs', input({kind: 'set'}), 'u1'),
+      ).to.be.rejectedWith({statusCode: 422});
+      repository.stubs.findApplyTarget.resolves(null);
+      await expect(service.applyAmount('gs', input(), 'u1')).to.be.rejectedWith(
+        {
+          statusCode: 404,
+        },
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
   describe('imagens de referência', () => {
     const image = (overrides = {}) => ({
       id_reference_image: 'img1',

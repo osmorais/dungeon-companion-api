@@ -11,6 +11,7 @@ import {xpNeededForLevel} from './character-sheet/rules';
 import {
   AddMonsterToSessionInput,
   AddPlayerInput,
+  ApplyAmountInput,
   AdvantageState,
   CreateGameSessionInput,
   GameSessionCreated,
@@ -33,6 +34,7 @@ import {
 } from '../models/game-session-types';
 import {bardicInspirationSides} from './character-sheet/combat-features';
 import {startingInventory} from './character-sheet/starting-items';
+import {applyHpAmount} from './hp-math';
 import {
   SecretRollRequestStore,
   secretRollRequests,
@@ -56,6 +58,9 @@ const ADVANTAGE_STATES: AdvantageState[] = [
 
 const SKILL_IDS_MAX = 18;
 const SAVE_ABILITIES = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
+
+/** Maior quantidade aceita ao aplicar dano/cura de uma rolagem. */
+const APPLY_AMOUNT_MAX = 9999;
 
 /** Imagens de referência por sessão (cada uma até 10 MB, igual aos outros uploads). */
 const REFERENCE_IMAGE_LIMIT = 30;
@@ -494,6 +499,123 @@ export class GameSessionService {
         : session.recent_rolls.filter(r => !r.is_hidden),
       combat,
     };
+  }
+
+  /**
+   * Aplica no alvo o dano/cura de uma rolagem feita por `id_character` (mestre ou dono do
+   * personagem). O jogador alcança qualquer jogador e NPC da sessão e dá dano em monstro já
+   * revelado; o mestre, tudo. O PV é calculado aqui (`applyHpAmount`), nunca vem do cliente.
+   */
+  async applyAmount(
+    idGameSession: string,
+    input: ApplyAmountInput,
+    userId: string,
+  ): Promise<{current_hit_points?: number; temporary_hit_points?: number}> {
+    const amount = input?.amount;
+    if (!Number.isInteger(amount) || amount < 1 || amount > APPLY_AMOUNT_MAX)
+      throw new HttpErrors.UnprocessableEntity(
+        `amount deve ser um inteiro entre 1 e ${APPLY_AMOUNT_MAX}`,
+      );
+    if (!['damage', 'heal', 'temp_hp'].includes(input.kind))
+      throw new HttpErrors.UnprocessableEntity('kind inválido');
+    if (!['player', 'npc', 'monster'].includes(input.target_kind))
+      throw new HttpErrors.UnprocessableEntity('target_kind inválido');
+    if (!Number.isInteger(input.id_character))
+      throw new HttpErrors.UnprocessableEntity('id_character é obrigatório');
+
+    const canAct = await this.repository.canPostRollFor(
+      idGameSession,
+      input.id_character,
+      userId,
+    );
+    if (!canAct)
+      throw new HttpErrors.Forbidden('Você não pode agir por este personagem');
+    const isDm = await this.repository.isSessionOwner(idGameSession, userId);
+
+    const target = await this.repository.findApplyTarget(
+      idGameSession,
+      input.target_kind,
+      input.target_id,
+    );
+    // Monstro escondido não existe pro jogador (nem pra dizer que existe).
+    if (!target || (!isDm && !target.is_revealed))
+      throw new HttpErrors.NotFound('Alvo não encontrado na sessão');
+    if (input.target_kind === 'monster' && !isDm && input.kind !== 'damage')
+      throw new HttpErrors.UnprocessableEntity(
+        'Jogador só aplica dano em monstros',
+      );
+    if (input.kind === 'temp_hp' && input.target_kind !== 'player')
+      throw new HttpErrors.UnprocessableEntity(
+        'Só jogadores recebem PV temporários',
+      );
+
+    const next = applyHpAmount(target, amount, input.kind);
+    const actorName =
+      (await this.repository.findCharacterName(input.id_character)) ?? '—';
+    let result: {current_hit_points?: number; temporary_hit_points?: number} =
+      {};
+
+    if (input.target_kind === 'monster') {
+      await this.repository.writeMonsterHp(input.target_id, next.current);
+      this.events.publish({
+        type: 'monster_hp_updated',
+        id_game_session: idGameSession,
+        id_monster_session: input.target_id,
+        hp_current: next.current,
+      });
+    } else {
+      let hp = next.current;
+      let relentless: {idCharacter: number; name: string} | null = null;
+      if (input.target_kind === 'player' && input.kind === 'damage') {
+        const resolved = await this.repository.resolveRelentlessEndurance(
+          target.id_character!,
+          hp,
+        );
+        hp = resolved.finalHp;
+        relentless = resolved.relentlessEndurance;
+      }
+      await this.repository.writeCharacterHp(target.id_character!, hp, next.temp);
+      if (input.target_kind === 'player') {
+        this.events.publish({
+          type: 'player_hp_updated',
+          id_game_session: idGameSession,
+          id_player_session: input.target_id,
+          current_hit_points: hp,
+          temporary_hit_points: next.temp,
+        });
+      } else {
+        this.events.publish({
+          type: 'npc_hp_updated',
+          id_game_session: idGameSession,
+          id_npc_session: input.target_id,
+          current_hit_points: hp,
+        });
+      }
+      if (relentless) {
+        this.events.publish({
+          type: 'spell_cast',
+          id_game_session: idGameSession,
+          id_character: relentless.idCharacter,
+          actor_name: relentless.name,
+          spell_name: 'Resistência Implacável',
+          save_dc: null,
+          save_ability: null,
+          is_ability: true,
+        });
+      }
+      result = {current_hit_points: hp, temporary_hit_points: next.temp};
+    }
+
+    this.events.publish({
+      type: 'amount_applied',
+      id_game_session: idGameSession,
+      id_character: input.id_character,
+      actor_name: actorName,
+      target_label: target.label,
+      amount,
+      kind: input.kind,
+    });
+    return result;
   }
 
   /** Só o mestre pode alterar o PV atual de um NPC. */
