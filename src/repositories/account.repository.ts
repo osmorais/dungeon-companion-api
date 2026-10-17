@@ -69,7 +69,16 @@ export class AccountRepository {
             'image_url', ms.image_url
           ))
           FROM monster_session ms WHERE ms.id_game_session = gs.id_game_session
-        ), '[]'::json) AS monsters
+        ), '[]'::json) AS monsters,
+        COALESCE((
+          SELECT json_agg(json_build_object(
+            'id_reference_image', ri.id_reference_image,
+            'image_url', ri.image_url,
+            'title', ri.title,
+            'created_at', ri.created_at
+          ) ORDER BY ri.created_at)
+          FROM session_reference_image ri WHERE ri.id_game_session = gs.id_game_session
+        ), '[]'::json) AS reference_images
       FROM game_session gs
       WHERE gs.user_id = ${userId}
       ORDER BY gs.created_at
@@ -140,6 +149,10 @@ export class AccountRepository {
         SELECT ms.image_url FROM monster_session ms
         JOIN game_session gs ON gs.id_game_session = ms.id_game_session
         WHERE gs.user_id = ${userId} AND ms.image_url IS NOT NULL
+        UNION
+        SELECT ri.image_url FROM session_reference_image ri
+        JOIN game_session gs ON gs.id_game_session = ri.id_game_session
+        WHERE gs.user_id = ${userId}
       `;
       await sql`
         DELETE FROM session_roll_log

@@ -7,6 +7,7 @@ import {
   PlayerSession,
   RollLogEntry,
   SecretRollCheck,
+  ShownReferenceImage,
 } from './game-session-types';
 
 /**
@@ -82,6 +83,10 @@ export interface SessionEventPayloadMap {
     save_ability: 'STR' | 'DEX' | 'CON' | 'INT' | 'WIS' | 'CHA' | null;
     is_ability: boolean;
   };
+  /** Mestre mostra uma imagem de referência em tela cheia pra todos da sessão. */
+  reference_image_shown: {image: ShownReferenceImage};
+  /** Imagem fechada pra todos: o mestre fechou ou apagou a imagem que estava em exibição. */
+  reference_image_hidden: {reason: 'hidden' | 'deleted'};
   combat_started: {combat: CombatEncounterDetail};
   combat_participants_added: {combat: CombatEncounterDetail};
   initiative_submitted: {combat: CombatEncounterDetail};

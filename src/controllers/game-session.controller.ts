@@ -30,9 +30,11 @@ import {
   MonsterSession,
   NpcSession,
   PlayerSession,
+  ReferenceImage,
   RollLogEntry,
   RollLogInput,
   SecretRollRequestInput,
+  ShownReferenceImage,
   SpellCastInput,
 } from '../models/game-session-types';
 
@@ -295,6 +297,71 @@ export class GameSessionController {
       file.buffer,
       file.mimetype,
     );
+  }
+
+  @get('/api/game-session/{id}/reference-images')
+  @response(200, {
+    description: 'Lists the reference images the DM uploaded to the session (DM only)',
+    content: {'application/json': {schema: {type: 'array'}}},
+  })
+  async listReferenceImages(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+  ): Promise<ReferenceImage[]> {
+    return this.gameSessionService.listReferenceImages(id, currentUser.id);
+  }
+
+  @post('/api/game-session/{id}/reference-images')
+  @response(200, {
+    description:
+      'Uploads a reference image (multipart "image" + optional "title") to the session library (DM only)',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async uploadReferenceImage(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @inject(RestBindings.Http.REQUEST) request: Request,
+    @inject(RestBindings.Http.RESPONSE) httpResponse: Response,
+  ): Promise<ReferenceImage> {
+    const file = await this.parseImageUpload(request, httpResponse);
+    const title = (request.body as {title?: unknown} | undefined)?.title;
+    return this.gameSessionService.addReferenceImage(
+      id,
+      currentUser.id,
+      file.buffer,
+      file.mimetype,
+      typeof title === 'string' ? title : null,
+    );
+  }
+
+  @post('/api/game-session/reference-image/{id}/show')
+  @response(200, {
+    description: 'Shows a reference image full screen to everyone in the session (DM only)',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async showReferenceImage(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+  ): Promise<ShownReferenceImage> {
+    return this.gameSessionService.showReferenceImage(id, currentUser.id);
+  }
+
+  @post('/api/game-session/{id}/reference-images/hide')
+  @response(204, {description: 'Closes the reference image for everyone (DM only)'})
+  async hideReferenceImage(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+  ): Promise<void> {
+    await this.gameSessionService.hideReferenceImage(id, currentUser.id);
+  }
+
+  @del('/api/game-session/reference-image/{id}')
+  @response(204, {description: 'Deletes a reference image from the session library (DM only)'})
+  async deleteReferenceImage(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+  ): Promise<void> {
+    await this.gameSessionService.deleteReferenceImage(id, currentUser.id);
   }
 
   /** multer não tem binding nativo no LoopBack — roda como middleware Express dentro do handler. */

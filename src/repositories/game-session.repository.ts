@@ -25,8 +25,10 @@ import {
   MonsterSessionInput,
   NpcSession,
   PlayerSession,
+  ReferenceImage,
   RollLogEntry,
   RollLogInput,
+  ShownReferenceImage,
 } from '../models/game-session-types';
 
 /** Quantas rolagens ficam guardadas por sessão — não precisa de histórico ilimitado. */
@@ -331,6 +333,12 @@ export class GameSessionRepository {
     `;
 
     const recent_rolls = await this.findRecentRolls(id);
+    const [shown] = await this.db.sql<ShownReferenceImage[]>`
+      SELECT ri.id_reference_image, ri.image_url, ri.title
+      FROM game_session gs
+      JOIN session_reference_image ri ON ri.id_reference_image = gs.shown_reference_image_id
+      WHERE gs.id_game_session = ${id}
+    `;
 
     return {
       game_session: session,
@@ -341,7 +349,85 @@ export class GameSessionRepository {
       revealed_monsters: [],
       recent_rolls,
       combat: null,
+      shown_reference_image: shown ?? null,
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Imagens de referência (biblioteca do mestre na sessão)
+  // ---------------------------------------------------------------------------
+
+  /** Dono da sessão (`undefined` se a sessão não existe). */
+  async findSessionOwnerId(idGameSession: string): Promise<string | null | undefined> {
+    const [row] = await this.db.sql<{user_id: string | null}[]>`
+      SELECT user_id FROM game_session WHERE id_game_session = ${idGameSession}
+    `;
+    return row ? row.user_id : undefined;
+  }
+
+  async listReferenceImages(idGameSession: string): Promise<ReferenceImage[]> {
+    return this.db.sql<ReferenceImage[]>`
+      SELECT id_reference_image, id_game_session, image_url, title, created_at
+      FROM session_reference_image
+      WHERE id_game_session = ${idGameSession}
+      ORDER BY created_at DESC
+    `;
+  }
+
+  async countReferenceImages(idGameSession: string): Promise<number> {
+    const [row] = await this.db.sql<{count: number}[]>`
+      SELECT COUNT(*)::int AS count FROM session_reference_image
+      WHERE id_game_session = ${idGameSession}
+    `;
+    return row.count;
+  }
+
+  async addReferenceImage(
+    idGameSession: string,
+    imageUrl: string,
+    title: string | null,
+  ): Promise<ReferenceImage> {
+    const [row] = await this.db.sql<ReferenceImage[]>`
+      INSERT INTO session_reference_image (id_game_session, image_url, title)
+      VALUES (${idGameSession}, ${imageUrl}, ${title})
+      RETURNING id_reference_image, id_game_session, image_url, title, created_at
+    `;
+    return row;
+  }
+
+  /** Imagem + dono da sessão + se é a que está em exibição. */
+  async findReferenceImage(idReferenceImage: string): Promise<
+    | (ReferenceImage & {session_owner_id: string | null; is_shown: boolean})
+    | null
+  > {
+    const [row] = await this.db.sql<
+      (ReferenceImage & {session_owner_id: string | null; is_shown: boolean})[]
+    >`
+      SELECT ri.id_reference_image, ri.id_game_session, ri.image_url, ri.title, ri.created_at,
+             gs.user_id AS session_owner_id,
+             (gs.shown_reference_image_id = ri.id_reference_image) IS TRUE AS is_shown
+      FROM session_reference_image ri
+      JOIN game_session gs ON gs.id_game_session = ri.id_game_session
+      WHERE ri.id_reference_image = ${idReferenceImage}
+    `;
+    return row ?? null;
+  }
+
+  async setShownReferenceImage(
+    idGameSession: string,
+    idReferenceImage: string | null,
+  ): Promise<void> {
+    await this.db.sql`
+      UPDATE game_session SET shown_reference_image_id = ${idReferenceImage}
+      WHERE id_game_session = ${idGameSession}
+    `;
+  }
+
+  /** Apaga da biblioteca; se estava em exibição, o FK zera `shown_reference_image_id`. */
+  async deleteReferenceImage(idReferenceImage: string): Promise<void> {
+    await this.db.sql`
+      DELETE FROM session_reference_image WHERE id_reference_image = ${idReferenceImage}
+    `;
   }
 
   async addRoll(
@@ -1177,8 +1263,10 @@ export class GameSessionRepository {
       return {status: 'unauthorized', imageUrls: []};
 
     const images = await this.db.sql<{image_url: string}[]>`
-      SELECT DISTINCT image_url FROM monster_session
+      SELECT image_url FROM monster_session
       WHERE id_game_session = ${id} AND image_url IS NOT NULL
+      UNION
+      SELECT image_url FROM session_reference_image WHERE id_game_session = ${id}
     `;
     await this.db.sql`
       DELETE FROM game_session WHERE id_game_session = ${id}

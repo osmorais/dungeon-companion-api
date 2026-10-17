@@ -30,6 +30,8 @@ export interface ExportedDmSession {
   dm_name: string;
   created_at: Date;
   monsters: unknown[];
+  /** Imagens de referência que o mestre subiu na sessão. */
+  reference_images: unknown[];
 }
 
 export interface ExportedParticipation {

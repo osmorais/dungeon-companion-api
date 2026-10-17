@@ -21,12 +21,14 @@ import {
   MonsterAbilityKey,
   MonsterSession,
   NpcSession,
+  ReferenceImage,
   RevealedMonster,
   PlayerSession,
   RollLogEntry,
   RollLogInput,
   RollType,
   SecretRollRequestInput,
+  ShownReferenceImage,
   SpellCastInput,
 } from '../models/game-session-types';
 import {bardicInspirationSides} from './character-sheet/combat-features';
@@ -54,6 +56,10 @@ const ADVANTAGE_STATES: AdvantageState[] = [
 
 const SKILL_IDS_MAX = 18;
 const SAVE_ABILITIES = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
+
+/** Imagens de referência por sessão (cada uma até 10 MB, igual aos outros uploads). */
+const REFERENCE_IMAGE_LIMIT = 30;
+const REFERENCE_IMAGE_TITLE_MAX = 120;
 
 @injectable({scope: BindingScope.TRANSIENT})
 export class GameSessionService {
@@ -661,6 +667,127 @@ export class GameSessionService {
     });
     await this.imageCleanup.deleteIfUnreferenced([result.previousImageUrl]);
     return result.monster!;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Imagens de referência: o mestre sobe imagens na sessão e mostra uma em tela cheia pra todos
+  // ---------------------------------------------------------------------------
+
+  private async assertSessionOwner(
+    idGameSession: string,
+    userId: string,
+  ): Promise<void> {
+    const ownerId = await this.repository.findSessionOwnerId(idGameSession);
+    if (ownerId === undefined)
+      throw new HttpErrors.NotFound('Sessão não encontrada');
+    if (ownerId !== userId)
+      throw new HttpErrors.Forbidden(
+        'Apenas o mestre pode gerenciar as imagens da sessão',
+      );
+  }
+
+  private async ownedReferenceImage(idReferenceImage: string, userId: string) {
+    const image = await this.repository.findReferenceImage(idReferenceImage);
+    if (!image) throw new HttpErrors.NotFound('Imagem não encontrada');
+    if (image.session_owner_id !== userId)
+      throw new HttpErrors.Forbidden(
+        'Apenas o mestre pode gerenciar as imagens da sessão',
+      );
+    return image;
+  }
+
+  /** Biblioteca de imagens da sessão — só o mestre vê. */
+  async listReferenceImages(
+    idGameSession: string,
+    userId: string,
+  ): Promise<ReferenceImage[]> {
+    await this.assertSessionOwner(idGameSession, userId);
+    return this.repository.listReferenceImages(idGameSession);
+  }
+
+  /**
+   * Sobe uma imagem pra biblioteca da sessão. A permissão e o limite são conferidos **antes** do
+   * upload, pra não deixar arquivo sem dono no storage.
+   */
+  async addReferenceImage(
+    idGameSession: string,
+    userId: string,
+    buffer: Buffer,
+    contentType: string,
+    rawTitle?: string | null,
+  ): Promise<ReferenceImage> {
+    await this.assertSessionOwner(idGameSession, userId);
+    const title = rawTitle?.trim() ? rawTitle.trim() : null;
+    if (title && title.length > REFERENCE_IMAGE_TITLE_MAX)
+      throw new HttpErrors.UnprocessableEntity(
+        `A legenda pode ter até ${REFERENCE_IMAGE_TITLE_MAX} caracteres`,
+      );
+    const count = await this.repository.countReferenceImages(idGameSession);
+    if (count >= REFERENCE_IMAGE_LIMIT)
+      throw new HttpErrors.UnprocessableEntity(
+        `Limite de ${REFERENCE_IMAGE_LIMIT} imagens por sessão — apague alguma antes`,
+      );
+    const imageUrl = await this.storageService.uploadImage(buffer, contentType);
+    try {
+      return await this.repository.addReferenceImage(
+        idGameSession,
+        imageUrl,
+        title,
+      );
+    } catch (e) {
+      await this.imageCleanup.deleteIfUnreferenced([imageUrl]);
+      throw e;
+    }
+  }
+
+  /** Mostra a imagem em tela cheia pra todos da sessão (substitui a que estiver aberta). */
+  async showReferenceImage(
+    idReferenceImage: string,
+    userId: string,
+  ): Promise<ShownReferenceImage> {
+    const image = await this.ownedReferenceImage(idReferenceImage, userId);
+    await this.repository.setShownReferenceImage(
+      image.id_game_session,
+      image.id_reference_image,
+    );
+    const shown: ShownReferenceImage = {
+      id_reference_image: image.id_reference_image,
+      image_url: image.image_url,
+      title: image.title,
+    };
+    this.events.publish({
+      type: 'reference_image_shown',
+      id_game_session: image.id_game_session,
+      image: shown,
+    });
+    return shown;
+  }
+
+  /** Fecha a imagem em exibição pra todos. */
+  async hideReferenceImage(idGameSession: string, userId: string): Promise<void> {
+    await this.assertSessionOwner(idGameSession, userId);
+    await this.repository.setShownReferenceImage(idGameSession, null);
+    this.events.publish({
+      type: 'reference_image_hidden',
+      id_game_session: idGameSession,
+      reason: 'hidden',
+    });
+  }
+
+  /** Apaga da biblioteca (e do storage); se estava em exibição, fecha pra todos. */
+  async deleteReferenceImage(
+    idReferenceImage: string,
+    userId: string,
+  ): Promise<void> {
+    const image = await this.ownedReferenceImage(idReferenceImage, userId);
+    await this.repository.deleteReferenceImage(idReferenceImage);
+    if (image.is_shown)
+      this.events.publish({
+        type: 'reference_image_hidden',
+        id_game_session: image.id_game_session,
+        reason: 'deleted',
+      });
+    await this.imageCleanup.deleteIfUnreferenced([image.image_url]);
   }
 
   /** Só o mestre pode revelar/esconder monstros da sessão. */

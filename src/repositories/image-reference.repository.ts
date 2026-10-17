@@ -21,6 +21,8 @@ export class ImageReferenceRepository {
         SELECT 1 FROM monster_catalog WHERE image_url = ${imageUrl}
         UNION ALL
         SELECT 1 FROM monster_session WHERE image_url = ${imageUrl}
+        UNION ALL
+        SELECT 1 FROM session_reference_image WHERE image_url = ${imageUrl}
       ) AS found
     `;
     return rows[0].found;

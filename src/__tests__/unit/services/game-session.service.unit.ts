@@ -63,6 +63,7 @@ function sessionDetail(): GameSessionDetail {
       {id: 'r2', is_hidden: true} as unknown as RollLogEntry,
     ],
     combat: null,
+    shown_reference_image: null,
   };
 }
 
@@ -191,6 +192,172 @@ describe('GameSessionService', () => {
         statusCode: 403,
       });
       expect(repository.stubs.findCharacterOwnerId.called).to.be.false();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('imagens de referência', () => {
+    const image = (overrides = {}) => ({
+      id_reference_image: 'img1',
+      id_game_session: 'gs',
+      image_url: 'https://cdn/ref.png',
+      title: 'Mapa da masmorra',
+      created_at: new Date(),
+      session_owner_id: 'dm',
+      is_shown: false,
+      ...overrides,
+    });
+    const upload = (user: string, title?: string | null) =>
+      service.addReferenceImage(
+        'gs',
+        user,
+        Buffer.from('x'),
+        'image/png',
+        title,
+      );
+
+    beforeEach(() => {
+      repository.stubs.findSessionOwnerId.resolves('dm');
+      repository.stubs.countReferenceImages.resolves(0);
+      repository.stubs.addReferenceImage.callsFake(async (id, url, title) =>
+        image({image_url: url, title}),
+      );
+      storage.stubs.uploadImage.resolves('https://cdn/novo.png');
+    });
+
+    it('mestre sobe imagem com legenda aparada (vazia vira sem legenda)', async () => {
+      const created = await upload('dm', '  Taverna  ');
+      expect(created.title).to.equal('Taverna');
+      expect(
+        repository.stubs.addReferenceImage.calledWith(
+          'gs',
+          'https://cdn/novo.png',
+          'Taverna',
+        ),
+      ).to.be.true();
+      await upload('dm', '   ');
+      expect(
+        repository.stubs.addReferenceImage.secondCall.args[2],
+      ).to.be.null();
+    });
+
+    it('jogador não sobe (403) e o arquivo nem chega no storage; sessão inexistente: 404', async () => {
+      await expect(upload('jogador')).to.be.rejectedWith({statusCode: 403});
+      expect(storage.stubs.uploadImage.called).to.be.false();
+      repository.stubs.findSessionOwnerId.resolves(undefined);
+      await expect(upload('dm')).to.be.rejectedWith({statusCode: 404});
+    });
+
+    it('legenda longa demais e limite de imagens: 422 sem upload', async () => {
+      await expect(upload('dm', 'x'.repeat(121))).to.be.rejectedWith({
+        statusCode: 422,
+      });
+      repository.stubs.countReferenceImages.resolves(30);
+      await expect(upload('dm')).to.be.rejectedWith({statusCode: 422});
+      expect(storage.stubs.uploadImage.called).to.be.false();
+    });
+
+    it('falha ao gravar descarta o arquivo enviado', async () => {
+      repository.stubs.addReferenceImage.rejects(new Error('db'));
+      await expect(upload('dm')).to.be.rejectedWith('db');
+      expect(
+        imageCleanup.stubs.deleteIfUnreferenced.calledWith([
+          'https://cdn/novo.png',
+        ]),
+      ).to.be.true();
+    });
+
+    it('lista só pro mestre', async () => {
+      repository.stubs.listReferenceImages.resolves([image()]);
+      expect(await service.listReferenceImages('gs', 'dm')).to.have.length(1);
+      await expect(
+        service.listReferenceImages('gs', 'jogador'),
+      ).to.be.rejectedWith({statusCode: 403});
+    });
+
+    it('mostrar: grava a imagem em exibição e avisa a mesa toda', async () => {
+      repository.stubs.findReferenceImage.resolves(image());
+      const shown = await service.showReferenceImage('img1', 'dm');
+      expect(shown).to.eql({
+        id_reference_image: 'img1',
+        image_url: 'https://cdn/ref.png',
+        title: 'Mapa da masmorra',
+      });
+      expect(
+        repository.stubs.setShownReferenceImage.calledWith('gs', 'img1'),
+      ).to.be.true();
+      expect(events).to.eql([
+        {type: 'reference_image_shown', id_game_session: 'gs', image: shown},
+      ]);
+      expect(isDmOnlyEvent(events[0])).to.be.false();
+    });
+
+    it('mostrar/apagar imagem de outro mestre: 403; inexistente: 404', async () => {
+      repository.stubs.findReferenceImage.resolves(
+        image({session_owner_id: 'outro'}),
+      );
+      await expect(service.showReferenceImage('img1', 'dm')).to.be.rejectedWith(
+        {statusCode: 403},
+      );
+      await expect(
+        service.deleteReferenceImage('img1', 'dm'),
+      ).to.be.rejectedWith({statusCode: 403});
+      repository.stubs.findReferenceImage.resolves(null);
+      await expect(service.showReferenceImage('x', 'dm')).to.be.rejectedWith({
+        statusCode: 404,
+      });
+      expect(events).to.eql([]);
+    });
+
+    it('fechar: zera a exibição e avisa; só o mestre', async () => {
+      await service.hideReferenceImage('gs', 'dm');
+      expect(
+        repository.stubs.setShownReferenceImage.calledWith('gs', null),
+      ).to.be.true();
+      expect(events).to.eql([
+        {
+          type: 'reference_image_hidden',
+          id_game_session: 'gs',
+          reason: 'hidden',
+        },
+      ]);
+      await expect(
+        service.hideReferenceImage('gs', 'jogador'),
+      ).to.be.rejectedWith({statusCode: 403});
+    });
+
+    it('apagar: some do storage; se estava aberta, fecha pra todos', async () => {
+      repository.stubs.findReferenceImage.resolves(image({is_shown: true}));
+      await service.deleteReferenceImage('img1', 'dm');
+      expect(
+        repository.stubs.deleteReferenceImage.calledWith('img1'),
+      ).to.be.true();
+      expect(
+        imageCleanup.stubs.deleteIfUnreferenced.calledWith([
+          'https://cdn/ref.png',
+        ]),
+      ).to.be.true();
+      expect(events.map(e => e.type)).to.eql(['reference_image_hidden']);
+
+      events.length = 0;
+      repository.stubs.findReferenceImage.resolves(image({is_shown: false}));
+      await service.deleteReferenceImage('img1', 'dm');
+      expect(events).to.eql([]);
+    });
+
+    it('jogador recebe a imagem em exibição ao abrir a sessão', async () => {
+      const shown = {
+        id_reference_image: 'img1',
+        image_url: 'https://cdn/ref.png',
+        title: null,
+      };
+      repository.stubs.findById.resolves({
+        ...sessionDetail(),
+        shown_reference_image: shown,
+      });
+      repository.stubs.hasSessionAccess.resolves(true);
+      const detail = await service.getSession('gs', 'jogador');
+      expect(detail.shown_reference_image).to.eql(shown);
     });
   });
 

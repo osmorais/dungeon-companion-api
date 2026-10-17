@@ -224,6 +224,24 @@ export interface GameSessionDetail {
   revealed_monsters: RevealedMonster[];
   recent_rolls: RollLogEntry[];
   combat: CombatEncounterDetail | null;
+  /** Imagem de referência que o mestre está mostrando agora (todos veem) — `null` se nenhuma. */
+  shown_reference_image: ShownReferenceImage | null;
+}
+
+/** Imagem da biblioteca do mestre numa sessão (só o mestre lista). */
+export interface ReferenceImage {
+  id_reference_image: string;
+  id_game_session: string;
+  image_url: string;
+  title: string | null;
+  created_at: Date;
+}
+
+/** O que os jogadores recebem da imagem em exibição. */
+export interface ShownReferenceImage {
+  id_reference_image: string;
+  image_url: string;
+  title: string | null;
 }
 
 export interface GameSessionSummary {

@@ -694,3 +694,32 @@ CREATE TABLE IF NOT EXISTS player_inventory_item (
 ALTER TABLE character ALTER COLUMN total_po TYPE FLOAT;
 -- damage sempre recebeu notação de dado ('1d10'), nunca número.
 ALTER TABLE spell ALTER COLUMN damage TYPE VARCHAR(50);
+
+-- ==========================================
+-- IMAGENS DE REFERÊNCIA DA SESSÃO (2026-10-17)
+-- ==========================================
+
+-- Biblioteca de imagens que o mestre sobe numa sessão (mapa, cena, NPC...) pra mostrar em tela
+-- cheia pros jogadores (GameSessionService.showReferenceImage). Só o mestre vê a lista; os
+-- jogadores só recebem a imagem que estiver em exibição. Vai embora junto com a sessão (e, por
+-- cascata, com a conta do mestre); o arquivo no storage é limpo pelo ImageCleanupService.
+CREATE TABLE IF NOT EXISTS session_reference_image (
+    id_reference_image UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    id_game_session UUID NOT NULL REFERENCES game_session(id_game_session) ON DELETE CASCADE,
+
+    image_url TEXT NOT NULL,
+    -- Legenda opcional mostrada junto com a imagem (texto livre do mestre, até 120 caracteres).
+    title VARCHAR(120),
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_reference_image_session
+    ON session_reference_image(id_game_session);
+
+-- Imagem de referência em exibição agora (NULL = nenhuma). Quem entra ou recarrega a sessão
+-- recebe a imagem por GameSessionDetail.shown_reference_image.
+ALTER TABLE game_session
+  ADD COLUMN IF NOT EXISTS shown_reference_image_id UUID
+    REFERENCES session_reference_image(id_reference_image) ON DELETE SET NULL;
