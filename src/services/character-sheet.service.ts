@@ -91,7 +91,7 @@ import {
   getKnownClassAbilities,
   hasArcaneSecretsChoice,
 } from './character-sheet/rules';
-import {FEATS} from './character-sheet/feats';
+import {FEATS, TOOL_PROFICIENCY_OPTIONS} from './character-sheet/feats';
 import {buildSpellRoll, healingFeaturesFor} from './character-sheet/spell-mechanics';
 import {abilityMechanicsFor} from './character-sheet/ability-mechanics';
 import {
@@ -797,6 +797,12 @@ export class CharacterSheetService {
       featInitiativeBonus += feat?.initiativeBonus ?? 0;
       featPassivePerceptionBonus += feat?.passivePerceptionBonus ?? 0;
     }
+    // Ferramentas escolhidas em talentos (Habilidoso), guardadas no histórico de nível.
+    const featTools = (chosenFeats.length ? (await this.repository.findChoiceData(character.id_character)) ?? [] : [])
+      .flatMap(row => {
+        const picked = (row.choice_data as {feat_proficiencies?: {tools?: unknown}})?.feat_proficiencies?.tools;
+        return Array.isArray(picked) ? picked.filter((t): t is string => typeof t === 'string') : [];
+      });
     const languages = buildLanguages(raceRule, bgRule);
 
     // CA deixou de ser congelada em `character.armour_class` — recalculada a cada carregamento
@@ -907,6 +913,7 @@ export class CharacterSheetService {
               ...bgRule.tools,
               ...(subraceRule?.toolProficiencies ?? []),
               ...(character.chosen_tool_proficiency ? [character.chosen_tool_proficiency] : []),
+              ...featTools,
             ]),
           ],
           languages,
@@ -1166,7 +1173,14 @@ export class CharacterSheetService {
           ? THIRD_CASTER_SLOTS[nextLevel] ?? null
           : null,
       feat_options: levelData.isAsiLevel
-        ? Object.values(FEATS).map(f => ({id_feat: f.id_feat, display_name: f.displayName, description: f.description}))
+        ? Object.values(FEATS).map(f => ({
+            id_feat: f.id_feat,
+            display_name: f.displayName,
+            description: f.description,
+            proficiency_choice: f.proficiencyChoice
+              ? {count: f.proficiencyChoice.count, tool_options: TOOL_PROFICIENCY_OPTIONS}
+              : null,
+          }))
         : [],
       spell_choices: this.computeSpellChoices(
         character.id_class,
@@ -1249,6 +1263,8 @@ export class CharacterSheetService {
     let asiType: 'asi' | 'feat' | null = null;
     let asiStatIncreases: Partial<Record<StatKeyEn, number>> | null = null;
     let featId: string | null = null;
+    let featSkillIds: number[] = [];
+    let choiceData: Record<string, unknown> | null = input.choice_data ?? null;
 
     if (levelData.isAsiLevel) {
       const choice = input.asi_or_feat;
@@ -1262,6 +1278,14 @@ export class CharacterSheetService {
         featId = feat.id_feat;
         if (feat.abilityIncrease) {
           asiStatIncreases = {[feat.abilityIncrease.stat]: feat.abilityIncrease.amount};
+        }
+        const picked = this.validateFeatProficiencies(feat.proficiencyChoice ?? null, choice.skill_ids, choice.tools, skills);
+        featSkillIds = picked.skillIds;
+        if (picked.skillIds.length || picked.tools.length) {
+          choiceData = {
+            ...(choiceData ?? {}),
+            feat_proficiencies: {feat_id: feat.id_feat, skill_ids: picked.skillIds, tools: picked.tools},
+          };
         }
       }
     } else if (input.asi_or_feat) {
@@ -1318,7 +1342,8 @@ export class CharacterSheetService {
       newHitDice,
       idSubclass: subclassOptions ? chosenSubclassId : null,
       fightingStyle: fightingStyleRequired ? input.fighting_style! : null,
-      choiceData: input.choice_data ?? null,
+      choiceData,
+      featSkillIds,
       newSpellSaveDc,
       newSpellAttackBonus,
       asiType,
@@ -1371,6 +1396,40 @@ export class CharacterSheetService {
   }
 
   /** ASI padrão de 5e: até 2 pontos no total, no máximo +2 num único atributo. */
+  /**
+   * Habilidoso: exatamente `count` escolhas somando perícias (ainda não treinadas) e ferramentas
+   * da lista, sem repetir. Talento sem escolha não aceita perícia/ferramenta.
+   */
+  private validateFeatProficiencies(
+    choice: {count: number} | null,
+    skillIds: number[] | undefined,
+    tools: string[] | undefined,
+    currentSkills: {id_skill: number; is_trained: boolean}[],
+  ): {skillIds: number[]; tools: string[]} {
+    const ids = skillIds ?? [];
+    const toolList = tools ?? [];
+    if (!choice) {
+      if (ids.length || toolList.length) throw new Error('This feat does not grant proficiency choices');
+      return {skillIds: [], tools: []};
+    }
+    if (ids.length + toolList.length !== choice.count) {
+      throw new Error(`Choose exactly ${choice.count} skills or tools for this feat`);
+    }
+    if (new Set(ids).size !== ids.length || new Set(toolList).size !== toolList.length) {
+      throw new Error('Duplicate skill or tool in feat choice');
+    }
+    const byId = new Map(currentSkills.map(s => [s.id_skill, s]));
+    for (const id of ids) {
+      const skill = byId.get(id);
+      if (!skill) throw new Error('Unknown skill in feat choice');
+      if (skill.is_trained) throw new Error('Skill already trained');
+    }
+    for (const tool of toolList) {
+      if (!TOOL_PROFICIENCY_OPTIONS.includes(tool)) throw new Error('Unknown tool in feat choice');
+    }
+    return {skillIds: ids, tools: toolList};
+  }
+
   private validateAsiIncreases(
     increases: Partial<Record<StatKeyEn, number>>,
   ): Partial<Record<StatKeyEn, number>> {

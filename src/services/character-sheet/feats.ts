@@ -25,6 +25,8 @@ export interface FeatRule {
   initiativeBonus?: number;
   /** Bônus fixo de percepção passiva (hoje só o Analítico). */
   passivePerceptionBonus?: number;
+  /** Escolhe proficiências novas ao ganhar o talento (Habilidoso: 3 perícias e/ou ferramentas). */
+  proficiencyChoice?: {count: number};
 }
 
 export const FEATS: Record<string, FeatRule> = {
@@ -69,6 +71,7 @@ export const FEATS: Record<string, FeatRule> = {
     displayName: 'Habilidoso',
     description:
       'Você ganha proficiência em três perícias ou ferramentas à sua escolha.',
+    proficiencyChoice: {count: 3},
   },
   'iniciado-em-magia': {
     id_feat: 'iniciado-em-magia',
@@ -286,3 +289,37 @@ export const FEATS: Record<string, FeatRule> = {
     abilityIncrease: {stat: 'STR', amount: 1},
   },
 };
+
+/**
+ * Ferramentas que podem ser escolhidas como proficiência nova (Habilidoso) — lista do Livro do
+ * Jogador: ferramentas de artesão, kits, instrumento, jogos e veículos.
+ */
+export const TOOL_PROFICIENCY_OPTIONS: readonly string[] = [
+  'Ferramentas de Alquimista',
+  'Suprimentos de Cervejeiro',
+  'Suprimentos de Calígrafo',
+  'Ferramentas de Carpinteiro',
+  'Ferramentas de Cartógrafo',
+  'Ferramentas de Sapateiro',
+  'Utensílios de Cozinheiro',
+  'Ferramentas de Vidreiro',
+  'Ferramentas de Joalheiro',
+  'Ferramentas de Coureiro',
+  'Ferramentas de Pedreiro',
+  'Suprimentos de Pintor',
+  'Ferramentas de Oleiro',
+  'Ferramentas de Ferreiro',
+  'Ferramentas de Funileiro',
+  'Ferramentas de Tecelão',
+  'Ferramentas de Entalhador',
+  'Kit de Disfarce',
+  'Kit de Falsificação',
+  'Kit de Herbalismo',
+  'Kit de Envenenador',
+  'Ferramentas de Navegador',
+  'Ferramentas de Ladrão',
+  'Instrumento Musical',
+  'Kit de Jogo',
+  'Veículos Terrestres',
+  'Veículos Aquáticos',
+];

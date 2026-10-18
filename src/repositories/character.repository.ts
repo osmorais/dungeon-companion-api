@@ -239,6 +239,8 @@ export class CharacterRepository {
       newSpellIds: number[];
       /** Especialização/Aptidão ganha neste nível — dobra o bônus de proficiência nessas perícias, já treinadas. */
       expertiseSkillIds: number[];
+      /** Perícias que passam a ser treinadas neste nível (talento Habilidoso). */
+      featSkillIds?: number[];
       /** Só setado quando esse é o nível de escolha de subclasse; nos demais fica `null` e o
        *  COALESCE abaixo mantém a subclasse já escolhida antes intacta. */
       idSubclass: string | null;
@@ -314,6 +316,14 @@ export class CharacterRepository {
           await sql`
             INSERT INTO character_spell (id_character, id_spell, id_attribute)
             VALUES (${idCharacter}, ${idSpell}, ${null})
+          `;
+        }
+
+        for (const idSkill of input.featSkillIds ?? []) {
+          await sql`
+            UPDATE character_skill
+            SET is_trained = TRUE, trained_value = ${input.newProficiencyBonus}
+            WHERE id_character = ${idCharacter} AND id_skill = ${idSkill} AND is_trained = FALSE
           `;
         }
 

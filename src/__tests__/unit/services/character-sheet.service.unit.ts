@@ -553,6 +553,120 @@ describe('CharacterSheetService', () => {
         });
       });
 
+      describe('Habilidoso (3 perícias e/ou ferramentas)', () => {
+        const skill = (
+          id_skill: number,
+          name: string,
+          is_trained: boolean,
+        ) => ({
+          id_skill,
+          name,
+          id_attribute: 1,
+          attribute_name: 'FOR',
+          description: '',
+          is_trained,
+          is_expert: false,
+          level_value: 3,
+          total_skill_value: 0,
+        });
+        beforeEach(() =>
+          givenCharacter({
+            character: {level: 3, id_subclass: 'campeao'},
+            skills: [
+              skill(1, 'Atletismo', true),
+              skill(2, 'Acrobacia', false),
+              skill(3, 'Furtividade', false),
+              skill(5, 'Arcanismo', false),
+            ],
+          }),
+        );
+        const skilled = (skill_ids?: number[], tools?: string[]) =>
+          service.confirmLevelUp(1, 'owner', {
+            hit_die_roll: 5,
+            asi_or_feat: {
+              type: 'feat',
+              feat_id: 'afiar-habilidades',
+              skill_ids,
+              tools,
+            },
+          });
+
+        it('preview avisa que o talento escolhe 3 com a lista de ferramentas', async () => {
+          const preview = await service.getLevelUpPreview(1, 'owner');
+          const option = preview.feat_options.find(
+            f => f.id_feat === 'afiar-habilidades',
+          )!;
+          expect(option.proficiency_choice!.count).to.equal(3);
+          expect(option.proficiency_choice!.tool_options).to.containEql(
+            'Ferramentas de Ladrão',
+          );
+          expect(
+            preview.feat_options.find(f => f.id_feat === 'duro')!
+              .proficiency_choice,
+          ).to.be.null();
+        });
+
+        it('2 perícias + 1 ferramenta: treina as perícias e guarda tudo no histórico', async () => {
+          await skilled([2, 3], ['Ferramentas de Ladrão']);
+          const payload = repository.stubs.applyLevelUp.lastCall.args[1];
+          expect(payload.featSkillIds).to.eql([2, 3]);
+          expect(payload.choiceData).to.eql({
+            feat_proficiencies: {
+              feat_id: 'afiar-habilidades',
+              skill_ids: [2, 3],
+              tools: ['Ferramentas de Ladrão'],
+            },
+          });
+        });
+
+        it('quantidade errada, repetida, já treinada, inexistente ou ferramenta fora da lista', async () => {
+          await expect(skilled([2, 3])).to.be.rejectedWith(/exactly 3/);
+          await expect(skilled([2, 2, 3])).to.be.rejectedWith(/Duplicate/);
+          await expect(skilled([1, 2, 3])).to.be.rejectedWith(
+            /already trained/,
+          );
+          await expect(skilled([2, 3, 99])).to.be.rejectedWith(/Unknown skill/);
+          await expect(skilled([2, 3], ['Varinha'])).to.be.rejectedWith(
+            /Unknown tool/,
+          );
+          await expect(skilled()).to.be.rejectedWith(/exactly 3/);
+        });
+
+        it('outro talento não aceita perícias', async () => {
+          await expect(
+            service.confirmLevelUp(1, 'owner', {
+              hit_die_roll: 5,
+              asi_or_feat: {type: 'feat', feat_id: 'duro', skill_ids: [2]},
+            }),
+          ).to.be.rejectedWith(/does not grant/);
+        });
+
+        it('ferramenta do talento aparece nas proficiências da ficha', async () => {
+          repository.stubs.findChosenFeats.resolves([
+            {level: 4, feat_id: 'afiar-habilidades'},
+          ]);
+          repository.stubs.findChoiceData.resolves([
+            {
+              level: 4,
+              choice_data: {
+                feat_proficiencies: {
+                  feat_id: 'afiar-habilidades',
+                  skill_ids: [2],
+                  tools: ['Kit de Herbalismo', 'Ferramentas de Ladrão'],
+                },
+              },
+            },
+          ]);
+          const sheet = await service.loadCharacter(1, 'owner');
+          expect(
+            sheet!.character_sheet.proficiencies_and_languages.tools,
+          ).to.containEql('Kit de Herbalismo');
+          expect(
+            sheet!.character_sheet.proficiencies_and_languages.tools,
+          ).to.containEql('Ferramentas de Ladrão');
+        });
+      });
+
       it('Vigoroso: bônus retroativo de 2 × novo nível', async () => {
         const result = await service.confirmLevelUp(1, 'owner', {
           hit_die_roll: 5,

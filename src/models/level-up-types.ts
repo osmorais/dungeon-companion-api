@@ -10,6 +10,8 @@ export interface LevelUpFeatOption {
   id_feat: string;
   display_name: string;
   description: string;
+  /** Talento que escolhe proficiências novas (Habilidoso): quantas e quais ferramentas valem. */
+  proficiency_choice?: {count: number; tool_options: readonly string[]} | null;
 }
 
 export interface LevelUpSubclassOption {
@@ -82,7 +84,13 @@ export interface LevelUpHitDieRoll {
 
 export type AsiOrFeatChoice =
   | {type: 'asi'; increases: Partial<Record<StatKeyEn, number>>}
-  | {type: 'feat'; feat_id: string};
+  | {
+      type: 'feat';
+      feat_id: string;
+      /** Habilidoso: perícias novas (ainda não treinadas) e ferramentas — somando `proficiency_choice.count`. */
+      skill_ids?: number[];
+      tools?: string[];
+    };
 
 export interface LevelUpConfirmInput {
   hit_die_roll: number;
