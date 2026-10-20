@@ -52,6 +52,21 @@ export interface GrantXpInput {
   id_npc_sessions?: string[];
 }
 
+export type PartyRestType = 'short' | 'long';
+
+export interface PartyRestInput {
+  rest_type: PartyRestType;
+  id_player_sessions?: string[];
+  id_npc_sessions?: string[];
+}
+
+export interface PartyRestResult {
+  /** Nomes dos personagens que descansaram. */
+  rested: string[];
+  /** Quem ficou de fora (descanso longo exige PV > 0) — nome e motivo. */
+  skipped: {name: string; reason: string}[];
+}
+
 export interface GrantXpResult {
   participant_type: 'player' | 'npc';
   /** Setado quando participant_type === 'player'. */

@@ -4448,6 +4448,9 @@ export const KNOWN_CASTER_CLASS_IDS: ReadonlySet<number> = new Set([2, 3, 6, 12]
 
 export const WIZARD_CLASS_ID = 9;
 
+/** Bruxo: os espaços da Magia de Pacto voltam no descanso curto (e no longo). */
+export const WARLOCK_CLASS_ID = 3;
+
 /**
  * Clérigo, Druida e Paladino "conhecem" instantaneamente toda a lista de magias da classe —
  * eles não "aprendem" magias novas ao subir de nível, apenas preparam um subconjunto (limite =

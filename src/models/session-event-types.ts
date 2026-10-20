@@ -27,6 +27,13 @@ export interface SessionEventPayloadMap {
     name: string;
     image_url: string | null;
   };
+  /** Mestre apagou a sessão — quem está nela volta pro início. */
+  session_deleted: Record<never, never>;
+  /** Mestre declarou um descanso do grupo — só o aviso pra mesa (PV vai em *_hp_updated). */
+  party_rested: {
+    rest_type: 'short' | 'long';
+    character_names: string[];
+  };
   player_hp_updated: {
     id_player_session: string;
     current_hit_points: number;

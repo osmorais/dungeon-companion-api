@@ -510,6 +510,22 @@ export class GameSessionRepository {
     return rows[0].found;
   }
 
+  /** Dono e anotações do mestre — `null` se a sessão não existe. */
+  async findDmNotes(
+    idGameSession: string,
+  ): Promise<{user_id: string; dm_notes: string | null} | null> {
+    const rows = await this.db.sql<{user_id: string; dm_notes: string | null}[]>`
+      SELECT user_id, dm_notes FROM game_session WHERE id_game_session = ${idGameSession}
+    `;
+    return rows[0] ?? null;
+  }
+
+  async updateDmNotes(idGameSession: string, notes: string | null): Promise<void> {
+    await this.db.sql`
+      UPDATE game_session SET dm_notes = ${notes} WHERE id_game_session = ${idGameSession}
+    `;
+  }
+
   async isSessionOwner(
     idGameSession: string,
     userId: string,

@@ -723,3 +723,10 @@ CREATE INDEX IF NOT EXISTS idx_session_reference_image_session
 ALTER TABLE game_session
   ADD COLUMN IF NOT EXISTS shown_reference_image_id UUID
     REFERENCES session_reference_image(id_reference_image) ON DELETE SET NULL;
+
+-- Anotações privadas do mestre na sessão (Quadro do Mestre). Só o dono da sessão lê e grava
+-- (GET/PUT /api/game-session/{id}/dm-notes) — nunca vai no detalhe da sessão que os jogadores
+-- recebem. Até 10.000 caracteres (validado no GameSessionService). Sai na exportação da conta e
+-- vai embora junto com a sessão.
+ALTER TABLE game_session
+  ADD COLUMN IF NOT EXISTS dm_notes TEXT;

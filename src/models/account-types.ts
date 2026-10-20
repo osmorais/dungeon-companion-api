@@ -32,6 +32,8 @@ export interface ExportedDmSession {
   monsters: unknown[];
   /** Imagens de referência que o mestre subiu na sessão. */
   reference_images: unknown[];
+  /** Anotações privadas do mestre (Quadro do Mestre). */
+  dm_notes: string | null;
 }
 
 export interface ExportedParticipation {

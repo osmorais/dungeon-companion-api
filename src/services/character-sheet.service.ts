@@ -71,6 +71,7 @@ import {
   SPELL_SLOTS,
   KNOWN_CASTER_CLASS_IDS,
   WIZARD_CLASS_ID,
+  WARLOCK_CLASS_ID,
   FULL_LIST_PREPARED_CASTER_CLASS_IDS,
   CLASS_SPELLS,
   THIRD_CASTER_SLOTS,
@@ -1741,6 +1742,8 @@ export class CharacterSheetService {
     hit_dice_total: number;
     die_size: number;
     resource_trackers: CharacterSheet['character_sheet']['resource_trackers'];
+    /** Só do bruxo: espaços da Magia de Pacto recuperados (sempre `{}`). */
+    slots_expended?: Record<string, number>;
   }> {
     const raw = await this.repository.findCharacterById(id);
     if (!raw)
@@ -1776,6 +1779,7 @@ export class CharacterSheetService {
     await this.repository.updateHitDiceAndHp(id, nextSpent, nextHp);
     const restFeatIds = (await this.repository.findChosenFeats(id)).map(f => f.feat_id);
     const expendedAfterShortRest = await this.rechargeResourceOnRest(id, raw.character, 'short_rest', restFeatIds);
+    const pactSlots = await this.recoverPactSlotsOnShortRest(id, raw.character.id_class);
 
     return {
       roll,
@@ -1789,6 +1793,7 @@ export class CharacterSheetService {
         idRace: raw.character.id_race,
         featIds: restFeatIds,
       }),
+      ...pactSlots,
     };
   }
 
@@ -1815,6 +1820,48 @@ export class CharacterSheetService {
     }
     await this.repository.updateResourceUsesExpended(id, expended);
     return expended;
+  }
+
+  /**
+   * Descanso curto do grupo (mestre declara): recarrega os recursos de descanso curto sem gastar
+   * Dado de Vida — gastar dados continua no rollHitDie, que também recarrega. Sem isso, quem
+   * estava com PV cheio não recuperava Surto de Ação, Chi etc.
+   */
+  async shortRest(
+    id: number,
+    userId: string,
+  ): Promise<{
+    resource_trackers: CharacterSheet['character_sheet']['resource_trackers'];
+    slots_expended?: Record<string, number>;
+  }> {
+    const raw = await this.repository.findCharacterById(id);
+    if (!raw)
+      throw new HttpErrors.NotFound(`Character with id ${id} not found`);
+    if (!(await this.userCanManageCharacter(raw.character.user_id, id, userId)))
+      throw new HttpErrors.Forbidden();
+
+    const restFeatIds = (await this.repository.findChosenFeats(id)).map(f => f.feat_id);
+    const expended = await this.rechargeResourceOnRest(id, raw.character, 'short_rest', restFeatIds);
+    const pactSlots = await this.recoverPactSlotsOnShortRest(id, raw.character.id_class);
+    const classRule = resolveClass(raw.character.id_class);
+    const subclassRule = resolveSubclass(raw.character.id_class, raw.character.id_subclass);
+    return {
+      resource_trackers: this.buildResourceTrackers(classRule, subclassRule, raw.character.level, expended, this.statsFromRaw(raw.attributes), {
+        idRace: raw.character.id_race,
+        featIds: restFeatIds,
+      }),
+      ...pactSlots,
+    };
+  }
+
+  /** Bruxo recupera todos os espaços da Magia de Pacto no descanso curto (regra do livro). */
+  private async recoverPactSlotsOnShortRest(
+    id: number,
+    idClass: number,
+  ): Promise<{slots_expended?: Record<string, number>}> {
+    if (idClass !== WARLOCK_CLASS_ID) return {};
+    await this.repository.updateSpellSlotsExpended(id, {});
+    return {slots_expended: {}};
   }
 
   async longRest(

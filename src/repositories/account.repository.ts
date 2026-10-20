@@ -57,7 +57,7 @@ export class AccountRepository {
     return this.db.sql<ExportedDmSession[]>`
       SELECT
         gs.id_game_session, gs.session_name, gs.session_code, gs.max_player_quantity,
-        gs.dm_name, gs.created_at,
+        gs.dm_name, gs.created_at, gs.dm_notes,
         COALESCE((
           SELECT json_agg(json_build_object(
             'id_monster_session', ms.id_monster_session,

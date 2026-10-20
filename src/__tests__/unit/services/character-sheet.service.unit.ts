@@ -939,6 +939,40 @@ describe('CharacterSheetService', () => {
       ).to.eql({});
     });
 
+    it('descanso curto do grupo: recarrega só os recursos de descanso curto, sem mexer em PV', async () => {
+      givenCharacter({
+        character: {
+          level: 14,
+          id_subclass: 'campeao',
+          current_hit_points: 120,
+          max_hit_points: 120,
+          resource_uses_expended: {'Surto de Ação': 1, Indomável: 2},
+        },
+      });
+      await service.shortRest(1, 'owner');
+      expect(
+        repository.stubs.updateResourceUsesExpended.firstCall.args[1],
+      ).to.eql({Indomável: 2});
+      sinon.assert.notCalled(repository.stubs.updateHitDiceAndHp);
+    });
+
+    it('descanso curto devolve os espaços da Magia de Pacto do bruxo (e só do bruxo)', async () => {
+      givenCharacter({character: {id_class: 3, spell_slots_expended: {level_1: 1}}});
+      expect((await service.shortRest(1, 'owner')).slots_expended).to.eql({});
+      expect(repository.stubs.updateSpellSlotsExpended.calledOnceWith(1, {})).to.be.true();
+
+      repository.stubs.updateSpellSlotsExpended.resetHistory();
+      sinon.stub(Math, 'random').returns(0);
+      givenCharacter({character: {id_class: 3, current_hit_points: 5}});
+      expect((await service.rollHitDie(1, 'owner')).slots_expended).to.eql({});
+      expect(repository.stubs.updateSpellSlotsExpended.calledOnceWith(1, {})).to.be.true();
+
+      repository.stubs.updateSpellSlotsExpended.resetHistory();
+      givenCharacter({character: {id_class: 7}});
+      expect((await service.shortRest(1, 'owner')).slots_expended).to.be.undefined();
+      sinon.assert.notCalled(repository.stubs.updateSpellSlotsExpended);
+    });
+
     it('descanso longo encerra os efeitos ativos (Fúria, Arma Sagrada)', async () => {
       givenCharacter({
         character: {active_effects: {active: ['Fúria'], turn_uses: {}}},

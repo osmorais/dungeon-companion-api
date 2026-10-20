@@ -11,6 +11,7 @@ import {CombatService} from '../../../services/combat.service';
 import {MonsterCatalogService} from '../../../services/monster-catalog.service';
 import {SupabaseStorageService} from '../../../services/supabase-storage.service';
 import {ImageCleanupService} from '../../../services/image-cleanup.service';
+import {CharacterSheetService} from '../../../services/character-sheet.service';
 import {GameSessionRepository} from '../../../repositories/game-session.repository';
 import {
   GameSessionDetail,
@@ -85,6 +86,7 @@ describe('GameSessionService', () => {
   let events: SessionEvent[];
   let storage: StubbedInstanceWithSinonAccessor<SupabaseStorageService>;
   let imageCleanup: StubbedInstanceWithSinonAccessor<ImageCleanupService>;
+  let characterSheet: StubbedInstanceWithSinonAccessor<CharacterSheetService>;
   let service: GameSessionService;
 
   beforeEach(() => {
@@ -101,6 +103,7 @@ describe('GameSessionService', () => {
       createStubInstance(MonsterCatalogService),
       (storage = createStubInstance(SupabaseStorageService)),
       (imageCleanup = createStubInstance(ImageCleanupService)),
+      (characterSheet = createStubInstance(CharacterSheetService)),
     );
   });
 
@@ -853,9 +856,199 @@ describe('GameSessionService', () => {
         'https://x/b.png',
       ]);
     });
+
+    it('avisa quem está na sessão que ela foi apagada (só quando apagou)', async () => {
+      repository.stubs.deleteOwnedSession.resolves({
+        status: 'unauthorized',
+        imageUrls: [],
+      });
+      await expect(service.deleteSession('gs', 'player')).to.be.rejected();
+      expect(events).to.be.empty();
+      repository.stubs.deleteOwnedSession.resolves({
+        status: 'ok',
+        imageUrls: [],
+      });
+      await service.deleteSession('gs', 'dm');
+      expect(events).to.eql([{type: 'session_deleted', id_game_session: 'gs'}]);
+    });
   });
 
   // -------------------------------------------------------------------------
+  describe('anotações do mestre', () => {
+    beforeEach(() => {
+      repository.stubs.findDmNotes.resolves({
+        user_id: 'dm',
+        dm_notes: 'Goblins na ponte',
+      });
+    });
+
+    it('só o mestre lê; sem anotação vem texto vazio', async () => {
+      expect(await service.getDmNotes('gs', 'dm')).to.eql({
+        notes: 'Goblins na ponte',
+      });
+      await expect(service.getDmNotes('gs', 'player')).to.be.rejectedWith(
+        /Apenas o mestre/,
+      );
+      repository.stubs.findDmNotes.resolves({user_id: 'dm', dm_notes: null});
+      expect(await service.getDmNotes('gs', 'dm')).to.eql({notes: ''});
+      repository.stubs.findDmNotes.resolves(null);
+      await expect(service.getDmNotes('gs', 'dm')).to.be.rejectedWith(
+        /não encontrada/,
+      );
+    });
+
+    it('só o mestre grava; texto em branco vira null', async () => {
+      expect(await service.updateDmNotes('gs', 'Chefe: Orc', 'dm')).to.eql({
+        notes: 'Chefe: Orc',
+      });
+      sinon.assert.calledWith(
+        repository.stubs.updateDmNotes,
+        'gs',
+        'Chefe: Orc',
+      );
+      await service.updateDmNotes('gs', '   ', 'dm');
+      sinon.assert.calledWith(repository.stubs.updateDmNotes, 'gs', null);
+      await expect(
+        service.updateDmNotes('gs', 'x', 'player'),
+      ).to.be.rejectedWith(/Apenas o mestre/);
+    });
+
+    it('valida tipo e tamanho antes de gravar', async () => {
+      await expect(service.updateDmNotes('gs', 42, 'dm')).to.be.rejectedWith(
+        /texto/,
+      );
+      await expect(
+        service.updateDmNotes('gs', 'a'.repeat(10_001), 'dm'),
+      ).to.be.rejectedWith(/10000 caracteres/);
+      expect(
+        await service.updateDmNotes('gs', 'a'.repeat(10_000), 'dm'),
+      ).to.be.ok();
+      sinon.assert.calledOnce(repository.stubs.updateDmNotes);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('partyRest', () => {
+    function partyDetail(): GameSessionDetail {
+      const character = (name: string, hp: number, temp = 0) =>
+        ({
+          name,
+          current_hit_points: hp,
+          max_hit_points: 20,
+          temporary_hit_points: temp,
+        }) as never;
+      return {
+        ...sessionDetail(),
+        players: [
+          {
+            id_player_session: 'p1',
+            id_character: 1,
+            character: character('Ana', 5, 3),
+          },
+          {
+            id_player_session: 'p2',
+            id_character: 2,
+            character: character('Bia', 0),
+          },
+          {id_player_session: 'p3', id_character: 3, character: null},
+        ] as never,
+        npcs: [
+          {
+            id_npc_session: 'n1',
+            id_character: 9,
+            character: character('Guarda', 4),
+          },
+        ] as never,
+      };
+    }
+
+    beforeEach(() => {
+      repository.stubs.isSessionOwner.resolves(true);
+      repository.stubs.findById.resolves(partyDetail());
+      characterSheet.stubs.longRest.resolves({current_hit_points: 20} as never);
+      characterSheet.stubs.shortRest.resolves({resource_trackers: []});
+    });
+
+    it('valida tipo e seleção, e só o mestre declara', async () => {
+      await expect(
+        service.partyRest(
+          'gs',
+          {rest_type: 'nap' as never, id_player_sessions: ['p1']},
+          'dm',
+        ),
+      ).to.be.rejectedWith(/rest_type/);
+      await expect(
+        service.partyRest('gs', {rest_type: 'long'}, 'dm'),
+      ).to.be.rejectedWith(/ao menos um/);
+      repository.stubs.isSessionOwner.resolves(false);
+      await expect(
+        service.partyRest(
+          'gs',
+          {rest_type: 'long', id_player_sessions: ['p1']},
+          'p',
+        ),
+      ).to.be.rejectedWith(/Apenas o mestre/);
+      sinon.assert.notCalled(characterSheet.stubs.longRest);
+    });
+
+    it('longo: PV cheio pros escolhidos (mantém PV temporário), pula quem está com 0 PV e avisa a mesa', async () => {
+      const result = await service.partyRest(
+        'gs',
+        {
+          rest_type: 'long',
+          id_player_sessions: ['p1', 'p2', 'p3'],
+          id_npc_sessions: ['n1'],
+        },
+        'dm',
+      );
+      expect(result).to.eql({
+        rested: ['Ana', 'Guarda'],
+        skipped: [{name: 'Bia', reason: 'sem pontos de vida'}],
+      });
+      expect(characterSheet.stubs.longRest.args).to.eql([
+        [1, 'dm'],
+        [9, 'dm'],
+      ]);
+      expect(events.map(e => e.type)).to.eql([
+        'player_hp_updated',
+        'npc_hp_updated',
+        'party_rested',
+      ]);
+      expect(events[0]).to.containDeep({
+        current_hit_points: 20,
+        temporary_hit_points: 3,
+      });
+      expect(events[2]).to.containDeep({
+        rest_type: 'long',
+        character_names: ['Ana', 'Guarda'],
+      });
+    });
+
+    it('curto: só recarrega recursos (inclusive de quem está com 0 PV), sem mexer no PV', async () => {
+      const result = await service.partyRest(
+        'gs',
+        {rest_type: 'short', id_player_sessions: ['p1', 'p2']},
+        'dm',
+      );
+      expect(result.rested).to.eql(['Ana', 'Bia']);
+      sinon.assert.notCalled(characterSheet.stubs.longRest);
+      expect(characterSheet.stubs.shortRest.args).to.eql([
+        [1, 'dm'],
+        [2, 'dm'],
+      ]);
+      expect(events.map(e => e.type)).to.eql(['party_rested']);
+    });
+
+    it('ninguém descansou: não avisa a mesa', async () => {
+      await service.partyRest(
+        'gs',
+        {rest_type: 'long', id_player_sessions: ['p2']},
+        'dm',
+      );
+      expect(events).to.be.empty();
+    });
+  });
+
   describe('grantXp', () => {
     it('valida quantidade e seleção', async () => {
       await expect(

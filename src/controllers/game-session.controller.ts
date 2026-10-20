@@ -6,6 +6,7 @@ import {
   param,
   patch,
   post,
+  put,
   requestBody,
   response,
   HttpErrors,
@@ -26,6 +27,8 @@ import {
   GameSessionDetail,
   GameSessionPagedList,
   GrantXpInput,
+  PartyRestInput,
+  PartyRestResult,
   GrantXpResult,
   MonsterAbilityKey,
   MonsterSession,
@@ -631,6 +634,70 @@ export class GameSessionController {
     body: ApplyAmountInput,
   ): Promise<{current_hit_points?: number; temporary_hit_points?: number}> {
     return this.gameSessionService.applyAmount(id, body, currentUser.id);
+  }
+
+  @get('/api/game-session/{id}/dm-notes')
+  @response(200, {
+    description: 'Private DM notes for the session (owner only)',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async getDmNotes(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+  ): Promise<{notes: string}> {
+    return this.gameSessionService.getDmNotes(id, currentUser.id);
+  }
+
+  @put('/api/game-session/{id}/dm-notes')
+  @response(200, {
+    description: 'Saves the private DM notes for the session (owner only)',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async updateDmNotes(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      description: 'Full notes text (replaces the previous one)',
+      required: true,
+      content: {
+        'application/json': {
+          schema: {type: 'object', required: ['notes'], properties: {notes: {type: 'string'}}},
+        },
+      },
+    })
+    body: {notes: string},
+  ): Promise<{notes: string}> {
+    return this.gameSessionService.updateDmNotes(id, body?.notes, currentUser.id);
+  }
+
+  @post('/api/game-session/{id}/rest')
+  @response(200, {
+    description: 'DM declares a short or long rest for the chosen players/NPCs',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async partyRest(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      description: 'Rest type and the players/NPCs resting',
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            required: ['rest_type'],
+            properties: {
+              rest_type: {type: 'string', enum: ['short', 'long']},
+              id_player_sessions: {type: 'array', items: {type: 'string'}},
+              id_npc_sessions: {type: 'array', items: {type: 'string'}},
+            },
+          },
+        },
+      },
+    })
+    body: PartyRestInput,
+  ): Promise<PartyRestResult> {
+    return this.gameSessionService.partyRest(id, body, currentUser.id);
   }
 
   @post('/api/game-session/{id}/grant-xp')

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import {injectable, BindingScope, service} from '@loopback/core';
+import {inject, injectable, BindingScope, service} from '@loopback/core';
 import {HttpErrors} from '@loopback/rest';
 import {GameSessionRepository} from '../repositories/game-session.repository';
 import {CombatService} from './combat.service';
@@ -7,6 +7,7 @@ import {SessionEventsService} from './session-events.service';
 import {MonsterCatalogService} from './monster-catalog.service';
 import {SupabaseStorageService} from './supabase-storage.service';
 import {ImageCleanupService} from './image-cleanup.service';
+import {CharacterSheetService} from './character-sheet.service';
 import {xpNeededForLevel} from './character-sheet/rules';
 import {
   AddMonsterToSessionInput,
@@ -22,6 +23,8 @@ import {
   MonsterAbilityKey,
   MonsterSession,
   NpcSession,
+  PartyRestInput,
+  PartyRestResult,
   ReferenceImage,
   RevealedMonster,
   PlayerSession,
@@ -65,6 +68,8 @@ const APPLY_AMOUNT_MAX = 9999;
 /** Imagens de referência por sessão (cada uma até 10 MB, igual aos outros uploads). */
 const REFERENCE_IMAGE_LIMIT = 30;
 const REFERENCE_IMAGE_TITLE_MAX = 120;
+/** Limite das anotações do mestre (Quadro do Mestre). */
+const DM_NOTES_MAX_LENGTH = 10_000;
 
 @injectable({scope: BindingScope.TRANSIENT})
 export class GameSessionService {
@@ -84,6 +89,9 @@ export class GameSessionService {
     private storageService: SupabaseStorageService,
     @service(ImageCleanupService)
     private imageCleanup: ImageCleanupService,
+    // Registrado à mão no application.ts (dois bindings) — ver "Injeção de dependência" no CLAUDE.md.
+    @inject('services.CharacterSheetService')
+    private characterSheetService: CharacterSheetService,
   ) {}
 
   async createSession(
@@ -462,13 +470,121 @@ export class GameSessionService {
     return result.granted;
   }
 
+  /**
+   * Mestre declara um descanso pro grupo (jogadores/NPCs escolhidos). Longo: PV cheio, metade dos
+   * Dados de Vida, espaços e recursos — mesma regra do descanso individual, e quem está com 0 PV
+   * fica de fora. Curto: só recarrega os recursos de descanso curto; cada jogador gasta os
+   * próprios Dados de Vida depois, na tela dele.
+   */
+  async partyRest(
+    idGameSession: string,
+    input: PartyRestInput,
+    userId: string,
+  ): Promise<PartyRestResult> {
+    if (input?.rest_type !== 'short' && input?.rest_type !== 'long')
+      throw new HttpErrors.UnprocessableEntity('rest_type deve ser "short" ou "long"');
+    const idPlayerSessions = new Set(input.id_player_sessions ?? []);
+    const idNpcSessions = new Set(input.id_npc_sessions ?? []);
+    if (!idPlayerSessions.size && !idNpcSessions.size)
+      throw new HttpErrors.UnprocessableEntity('Selecione ao menos um jogador ou NPC');
+    if (!(await this.repository.isSessionOwner(idGameSession, userId)))
+      throw new HttpErrors.Forbidden('Apenas o mestre pode declarar um descanso');
+
+    const session = await this.repository.findById(idGameSession);
+    if (!session)
+      throw new HttpErrors.NotFound(`Sessão com id ${idGameSession} não encontrada`);
+
+    const targets = [
+      ...session.players
+        .filter(p => idPlayerSessions.has(p.id_player_session) && p.character)
+        .map(p => ({kind: 'player' as const, id: p.id_player_session, idCharacter: p.id_character, character: p.character!})),
+      ...session.npcs
+        .filter(n => idNpcSessions.has(n.id_npc_session) && n.character)
+        .map(n => ({kind: 'npc' as const, id: n.id_npc_session, idCharacter: n.id_character, character: n.character!})),
+    ];
+
+    const result: PartyRestResult = {rested: [], skipped: []};
+    for (const target of targets) {
+      const name = target.character.name;
+      if (input.rest_type === 'short') {
+        await this.characterSheetService.shortRest(target.idCharacter, userId);
+        result.rested.push(name);
+        continue;
+      }
+      if (target.character.current_hit_points <= 0) {
+        result.skipped.push({name, reason: 'sem pontos de vida'});
+        continue;
+      }
+      const {current_hit_points} = await this.characterSheetService.longRest(target.idCharacter, userId);
+      result.rested.push(name);
+      if (target.kind === 'player') {
+        this.events.publish({
+          type: 'player_hp_updated',
+          id_game_session: idGameSession,
+          id_player_session: target.id,
+          current_hit_points,
+          temporary_hit_points: target.character.temporary_hit_points,
+        });
+      } else {
+        this.events.publish({
+          type: 'npc_hp_updated',
+          id_game_session: idGameSession,
+          id_npc_session: target.id,
+          current_hit_points,
+        });
+      }
+    }
+
+    if (result.rested.length) {
+      this.events.publish({
+        type: 'party_rested',
+        id_game_session: idGameSession,
+        rest_type: input.rest_type,
+        character_names: result.rested,
+      });
+    }
+    return result;
+  }
+
   async deleteSession(id: string, userId: string): Promise<void> {
     const result = await this.repository.deleteOwnedSession(id, userId);
     if (result.status === 'not_found')
       throw new HttpErrors.NotFound(`Sessão com id ${id} não encontrada`);
     if (result.status === 'unauthorized')
       throw new HttpErrors.Forbidden('Apenas o mestre pode excluir a sessão');
+    this.events.publish({type: 'session_deleted', id_game_session: id});
     await this.imageCleanup.deleteIfUnreferenced(result.imageUrls);
+  }
+
+  /** Anotações privadas do mestre — só o dono da sessão lê (não vão no detalhe da sessão). */
+  async getDmNotes(idGameSession: string, userId: string): Promise<{notes: string}> {
+    const row = await this.repository.findDmNotes(idGameSession);
+    if (!row)
+      throw new HttpErrors.NotFound(`Sessão com id ${idGameSession} não encontrada`);
+    if (row.user_id !== userId)
+      throw new HttpErrors.Forbidden('Apenas o mestre pode ver as anotações');
+    return {notes: row.dm_notes ?? ''};
+  }
+
+  async updateDmNotes(
+    idGameSession: string,
+    notes: unknown,
+    userId: string,
+  ): Promise<{notes: string}> {
+    if (typeof notes !== 'string')
+      throw new HttpErrors.UnprocessableEntity('notes deve ser um texto');
+    if (notes.length > DM_NOTES_MAX_LENGTH)
+      throw new HttpErrors.UnprocessableEntity(
+        `As anotações passam de ${DM_NOTES_MAX_LENGTH} caracteres`,
+      );
+    const row = await this.repository.findDmNotes(idGameSession);
+    if (!row)
+      throw new HttpErrors.NotFound(`Sessão com id ${idGameSession} não encontrada`);
+    if (row.user_id !== userId)
+      throw new HttpErrors.Forbidden('Apenas o mestre pode editar as anotações');
+    const value = notes.trim() ? notes : null;
+    await this.repository.updateDmNotes(idGameSession, value);
+    return {notes: value ?? ''};
   }
 
   async getSession(id: string, userId: string): Promise<GameSessionDetail> {
