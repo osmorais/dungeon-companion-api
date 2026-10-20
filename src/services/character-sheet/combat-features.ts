@@ -3,7 +3,7 @@ import {FinalStats, StatKeyEn} from '../../models/character-sheet-types';
 import {getMod} from './calculator';
 
 /**
- * Traços que mexem no ataque com arma (fase 2 de `docs/dungeon-companion-tracos-mecanicos.md`):
+ * Traços que mexem no ataque com arma (fase 2 de `docs/dungeon-companion/conceitos/tracos-mecanicos.md`):
  * crítico, somas no acerto, bônus de ataque, ataque poderoso e ataque desarmado do Monge — já com
  * os números do personagem, pro modal de rolagem usar.
  */

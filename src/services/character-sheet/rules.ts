@@ -79,7 +79,7 @@ export interface ClassRule {
   traits: Trait[];
   /**
    * Progressão nível a nível (1-20), fonte: PHB. Preenchida classe por classe, confirmada com o
-   * usuário antes de cada uma — ver `docs/dungeon-companion-levelup-plan.md`. Nível 1 aqui
+   * usuário antes de cada uma — ver `docs/dungeon-companion/historico/levelup-plan.md`. Nível 1 aqui
    * duplica o conteúdo de `traits` (mantido por compatibilidade com o fluxo de criação); as duas
    * listas devem ser mantidas em sincronia manualmente pra uma classe já preenchida.
    */
@@ -2785,7 +2785,7 @@ export const CLASSES: Record<number, ClassRule> = {
 
 // ---------------------------------------------------------------------------
 // Subclasses (Fase 2) — conteúdo confirmado com o usuário classe por classe antes de escrever,
-// mesmo processo já usado em `featuresByLevel`. Ver docs/dungeon-companion-levelup-plan.md.
+// mesmo processo já usado em `featuresByLevel`. Ver docs/dungeon-companion/historico/levelup-plan.md.
 // ---------------------------------------------------------------------------
 
 export const SUBCLASSES: Record<number, SubclassRule[]> = {

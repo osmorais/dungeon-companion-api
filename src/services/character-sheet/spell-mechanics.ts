@@ -4,7 +4,7 @@ import {StatKeyEn} from '../../models/character-sheet-types';
 
 /**
  * Mecânica de rolagem das magias — o que o modal de rolagem precisa pra lançar a magia sem o
- * jogador montar os dados na mão (ver `docs/dungeon-companion-magias-mecanicas.md`). A tabela
+ * jogador montar os dados na mão (ver `docs/dungeon-companion/conceitos/magias-mecanicas.md`). A tabela
  * `spell` do banco guarda só o texto; a regra fica aqui, igual a `rules.ts`/`feats.ts`.
  *
  * Fase 1: magias de **ataque mágico** e de **acerto automático**. Fase 2: magias de
@@ -16,7 +16,7 @@ import {StatKeyEn} from '../../models/character-sheet-types';
  * antes; o jogador marca no acerto).
  * Efeitos além do dano imediato (ex.: metade do dano ao errar na Flecha Ácida, cura do Toque
  * Vampírico, dano repetido do Raio de Bruxa, condições) continuam só na descrição — o mestre
- * aplica. Os números seguem o livro (`docs/magias.txt`).
+ * aplica. Os números seguem o livro (`docs/dungeon-companion/referencias/magias.txt`).
  */
 export interface SpellMechanics {
   /** Nome como está na tabela `spell` — só pra leitura e pros testes; a chave é o `id_spell`. */

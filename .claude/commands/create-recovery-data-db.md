@@ -14,8 +14,8 @@ Then perform all steps below without further interruption.
 
 ### 1. Add the SQL type to the API
 
-You can find the database structure on `dungeon-companion/docs/database.sql`
-Edit `dungeon-companion-api/src/services/character-options/types.ts`:
+You can find the database structure on `docs/database/database.sql` (this repo).
+Edit `src/models/character-options-types.ts`:
 - Add a new exported interface matching the columns in the database, e.g.:
 ```ts
 export interface Race {
@@ -35,7 +35,7 @@ export interface CharacterOptions {
 
 ### 2. Add the DB query to the service
 
-Edit `dungeon-companion-api/src/services/character-options.service.ts`:
+Edit `src/services/character-options.service.ts`:
 - Add the new query inside the existing `Promise.all([...])` array, following the same tagged-template pattern:
 ```ts
 this.repository.findSkills(),
@@ -46,15 +46,15 @@ const [attributes, skills, races] = await Promise.all([...]);
 return { attributes, skills, races };
 ```
 - Create the repository to execute the query that you want:
-follow the instructions on `dungeon-companion/.claude/commands/create-repository.md`
+add the query method to `src/repositories/character-options.repository.ts`, or follow `.claude/commands/create-repository.md` for a new repository
 
 ### 3. Build and verify the API
 
-Run `npm run build` from `dungeon-companion-api/`. Fix any TypeScript errors before proceeding.
+Run `npm run build` in this repo. Fix any TypeScript errors before proceeding.
 
 ### 4. Add the interface to the frontend model
 
-Edit `dungeon-companion-web/src/app/models/character-options.interface.ts` or the interface responsible about the entity requested (if there isn't any, create following the `dungeon-companion-web/src/app/models/character-options.interface.ts` example):
+Edit `../dungeon-companion-web/src/app/models/character-options.interface.ts` or the interface responsible about the entity requested (if there isn't any, create following the `character-options.interface.ts` example):
 - Add the new interface matching the API type, e.g.:
 ```ts
 export interface Race {
@@ -74,7 +74,7 @@ export interface CharacterOptions {
 
 ### 5. Expose the new list in the component
 
-Edit `dungeon-companion-web/src/app/character-wizard/character-wizard.component.ts`:
+Edit `../dungeon-companion-web/src/app/character-wizard/character-wizard.component.ts`:
 - Add a typed property for the new list:
 ```ts
 availableRaces: Race[] = [];
@@ -86,7 +86,7 @@ this.availableRaces = options.races;
 
 ### 6. Render the list in the template
 
-Edit `dungeon-companion-web/src/app/character-wizard/character-wizard.component.html` in the step and `<legend>` or the part of frontend identified by the user.
+Edit `../dungeon-companion-web/src/app/character-wizard/character-wizard.component.html` in the step and `<legend>` or the part of frontend identified by the user.
 
 - For **checkbox lists** (multi-select, e.g. skills):
 ```html
@@ -136,7 +136,7 @@ This only applies to `<select [(ngModel)]>` with async options. Checkbox lists (
 
 ### 7. Verify the frontend build
 
-Run `npm start` from `dungeon-companion-web/` (or the running dev server will reload). Fix any TypeScript template errors before finishing.
+Run `npm run build` in `../dungeon-companion-web/` (type-checks templates). Fix any errors before finishing. Follow `.claude/rules/testes.md` in both repos.
 
 ### 8. Report to the user
 

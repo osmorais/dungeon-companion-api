@@ -24,7 +24,7 @@ LoopBack 4 REST API with clean layered architecture and pluggable AI providers.
 **Request flow:** Controller → Service → Repository → PostgresDatasource (Neon serverless)
 
 **Key layers:**
-- `src/controllers/` — HTTP endpoints; inject services via `@service()`
+- `src/controllers/` — HTTP endpoints; inject services via `@service()` (exceção: ver "Injeção de dependência" abaixo)
 - `src/services/` — Business logic; `ai-agent.service.ts` orchestrates AI character generation, `character-sheet.service.ts` applies D&D 5e rules
 - `src/services/character-sheet/` — Core rules engine: `rules.ts` has hardcoded D&D 5e data (races, classes, backgrounds, spell slots), `calculator.ts` applies them deterministically
 - `src/repositories/` — All SQL queries; `character.repository.ts` handles multi-table character persistence
@@ -41,6 +41,8 @@ Both providers implement `IAiProvider`:
 - `chatWithTools(systemPrompt, userMessage, tools, executor)` — agentic loop: model calls tools (`rollDice`, `getClassFeatures`), server executes them, loop continues until `end_turn`
 
 Anthropic defaults: `claude-sonnet-4-6` for chat, `claude-opus-4-7` for agentic. Overridable via `ANTHROPIC_MODEL` / `OPENAI_AGENT_MODEL`.
+
+**A IA está desativada hoje** (rota comentada em `character.controller.ts`). Reativar conta como terceiro novo na LGPD — ver `.claude/rules/lgpd.md`.
 
 ## D&D Rules Engine
 
@@ -60,6 +62,27 @@ Required `.env` variables:
 - `PGHOST`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`, `ENDPOINT_ID` — Neon PostgreSQL
 - `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`
 - `AI_PROVIDER` — `anthropic` or `openai`
+
+## Injeção de dependência (LoopBack)
+
+O boot registra sozinho tudo em `src/services/*.service.ts` e `src/repositories/*.repository.ts`. Classe nova: **não** registrar à mão no `application.ts` e injetar com `@service(Classe)`. Registro duplicado faz o `@service()` falhar com "More than one bindings found".
+
+Exceção legada: `AiAgentService`, `CharacterSheetService`, `CharacterOptionsService` e `GameSessionService` são registrados à mão com `this.service(Cls, 'services.Cls')` e por isso têm dois bindings. Esses quatro são injetados com `@inject('services.NomeDaClasse')` (chave literal). Não "corrigir" sem pedido.
+
+## Contexto do projeto
+
+Estado atual, pendências, decisões e armadilhas ficam em `~/projects/docs/` (índice em
+`~/projects/docs/README.md`). Antes de começar uma tarefa, ler
+`~/projects/docs/dungeon-companion/estado-atual.md` e `backlog.md`; ao terminar uma entrega,
+atualizar os dois (ver "Manutenção" no índice).
+
+## Convenções que já deram problema
+
+- **Commit e push só com pedido explícito, a cada vez** — mesmo depois de várias aprovações seguidas.
+- **Prettier**: antes de formatar um arquivo, confirmar com `git stash && npx prettier --check <arquivo> && git stash pop` se o aviso já existia (débito antigo, não mexer) ou veio da edição (aí `--write` só nele).
+- **`@types/multer`** falha em build limpo no Render: usar o `declare module 'multer'` de `src/types/multer.ts` (`.ts`, não `.d.ts` — o `tsconfig` exclui `**/*.d.ts`) e a interface `MulterFile` local no controller.
+- Erro de validação usa **422**, não 401 (401 fora de `/auth/` desloga o usuário no frontend).
+- Mais armadilhas por área: `~/projects/docs/dungeon-companion/gotchas.md`.
 
 ## Testes
 

@@ -5,7 +5,7 @@ import {SupabaseStorageService} from './supabase-storage.service';
 /**
  * Apaga do Supabase Storage as imagens que deixaram de ser usadas (imagem trocada, personagem /
  * monstro / sessão / conta excluídos). Sem isso o arquivo continuaria acessível pela URL pública
- * pra sempre (LGPD — ver docs/dungeon-companion-lgpd.md, item 6).
+ * pra sempre (LGPD — ver docs/dungeon-companion/conceitos/lgpd.md, item 6).
  *
  * Deve ser chamado **depois** que o registro já foi alterado/apagado no banco: só remove a URL
  * se nenhum outro registro ainda apontar pra ela. Nunca lança — falha na limpeza não pode

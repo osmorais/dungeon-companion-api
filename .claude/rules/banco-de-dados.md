@@ -19,8 +19,9 @@ recriar o banco do zero.
    `class`, `race`, `background`, `alignment`, `attribute_type`. Alterar a linha do INSERT
    existente (não acrescentar UPDATE no fim) pra o seed continuar gerando o estado atual.
 3. **Dados de usuários** (fichas, sessões, rolagens, contas) **não** vão pro seed. Correção
-   pontual em produção (ex.: perícias do antecedente das fichas antigas) fica registrada no doc
-   da sessão em `~/projects/docs/` (o que mudou, quantas linhas, quando, quem autorizou).
+   pontual em produção (ex.: perícias do antecedente das fichas antigas) fica registrada em
+   `~/projects/docs/dungeon-companion/estado-atual.md`, seção "Mudanças feitas direto no banco
+   de produção" (o que mudou, quantas linhas, quando, quem autorizou).
 
 ## Como aplicar em produção
 
@@ -30,11 +31,11 @@ recriar o banco do zero.
 - Rodar numa transação quando houver mais de um comando; conferir o resultado depois (ex.:
   `information_schema`, contagem de linhas).
 - Script temporário fica no scratchpad da sessão e lê o `.env` (banco de produção); scripts
-  reaproveitáveis ficam em `~/projects/docs/dungeon-companion-db-scripts/`.
+  reaproveitáveis ficam em `~/projects/docs/dungeon-companion/scripts/db/`.
 
 ## Conferência
 
-- `node ~/projects/docs/dungeon-companion-db-scripts/schema-diff.js` (de dentro deste repo,
+- `node ~/projects/docs/dungeon-companion/scripts/db/schema-diff.js` (de dentro deste repo,
   depois de `npm run build`; só leitura): lista tabelas/colunas do banco de produção que não
   aparecem no `database.sql`. Deve sair vazio.
 - Os dois arquivos usam quebra de linha **CRLF** — editar preservando (em Python,

@@ -3,7 +3,7 @@ import {StatKeyEn} from '../../models/character-sheet-types';
 
 /**
  * Catálogo de feats pro sistema de level-up (Fase 1) — todos os talentos do capítulo
- * "Opções de Personalização" do livro (`docs/livro.txt`). `abilityIncrease` é aplicado
+ * "Opções de Personalização" do livro (`docs/dungeon-companion/referencias/livro.txt`). `abilityIncrease` é aplicado
  * automaticamente pelo level-up (mesmo mecanismo do ASI) usando um atributo fixo quando o
  * talento deixa a escolha livre pro jogador (ex: "Força ou Destreza" vira sempre Força); o
  * resto do efeito do feat é só texto informativo na ficha, sem aplicação mecânica automática —

@@ -7,7 +7,7 @@ import {ABILITY_ACTIVATES} from './combat-features';
 /**
  * O que acontece ao "USAR" uma habilidade de classe (as de `getKnownClassAbilities`), no mesmo
  * formato da rolagem das magias (`SpellRoll`), pra reaproveitar o modal de rolagem — ver
- * `docs/dungeon-companion-tracos-mecanicos.md` (fase 1). Sem entrada aqui, o "USAR" só gasta o
+ * `docs/dungeon-companion/conceitos/tracos-mecanicos.md` (fase 1). Sem entrada aqui, o "USAR" só gasta o
  * recurso e anuncia na mesa.
  */
 export interface AbilityContext {

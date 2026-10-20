@@ -3,8 +3,8 @@
 Vale para toda implementação nova, correção de bug ou mudança de comportamento neste repositório.
 O sistema é público e trata dados pessoais. A política de privacidade e os termos de uso
 prometem coisas que o código precisa cumprir. Histórico e status completos:
-`~/projects/docs/dungeon-companion-lgpd.md`. Plano de incidente:
-`~/projects/docs/dungeon-companion-incidente.md`.
+`~/projects/docs/dungeon-companion/conceitos/lgpd.md`. Plano de incidente:
+`~/projects/docs/dungeon-companion/procedimentos/incidente.md`.
 
 ## Ao planejar e ao terminar a implementação (junto com a regra de testes)
 
@@ -68,7 +68,7 @@ Se a análise revelar exposição de dados que já está em produção, como per
 dado de um usuário visível para outro:
 - **não** corrigir em silêncio: avisar o usuário com a gravidade;
 - propor a correção;
-- seguir `dungeon-companion-incidente.md` (avaliar risco e registrar na tabela de incidentes).
+- seguir `dungeon-companion/procedimentos/incidente.md` (avaliar risco e registrar na tabela de incidentes).
 
 ## No resumo final
 
@@ -77,5 +77,5 @@ Incluir uma linha **LGPD**:
 - os pontos do checklist que se aplicaram e o que foi feito, e se a Política ou os Termos
   precisam ser (ou foram) atualizados.
 
-Atualizar `~/projects/docs/dungeon-companion-lgpd.md` quando houver mudança relevante (dado novo,
+Atualizar `~/projects/docs/dungeon-companion/conceitos/lgpd.md` quando houver mudança relevante (dado novo,
 terceiro novo, item novo de risco).
