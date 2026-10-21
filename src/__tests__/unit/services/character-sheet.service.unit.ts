@@ -22,6 +22,7 @@ describe('CharacterSheetService', () => {
   let optionsRepository: StubbedInstanceWithSinonAccessor<CharacterOptionsRepository>;
   let storage: StubbedInstanceWithSinonAccessor<SupabaseStorageService>;
   let imageCleanup: StubbedInstanceWithSinonAccessor<ImageCleanupService>;
+  let combatRepository: StubbedInstanceWithSinonAccessor<CombatRepository>;
   let service: CharacterSheetService;
 
   beforeEach(() => {
@@ -41,7 +42,7 @@ describe('CharacterSheetService', () => {
       gameSessionRepository,
       optionsRepository,
       storage,
-      createStubInstance(CombatRepository),
+      (combatRepository = createStubInstance(CombatRepository)),
       imageCleanup,
     );
   });
@@ -957,19 +958,27 @@ describe('CharacterSheetService', () => {
     });
 
     it('descanso curto devolve os espaços da Magia de Pacto do bruxo (e só do bruxo)', async () => {
-      givenCharacter({character: {id_class: 3, spell_slots_expended: {level_1: 1}}});
+      givenCharacter({
+        character: {id_class: 3, spell_slots_expended: {level_1: 1}},
+      });
       expect((await service.shortRest(1, 'owner')).slots_expended).to.eql({});
-      expect(repository.stubs.updateSpellSlotsExpended.calledOnceWith(1, {})).to.be.true();
+      expect(
+        repository.stubs.updateSpellSlotsExpended.calledOnceWith(1, {}),
+      ).to.be.true();
 
       repository.stubs.updateSpellSlotsExpended.resetHistory();
       sinon.stub(Math, 'random').returns(0);
       givenCharacter({character: {id_class: 3, current_hit_points: 5}});
       expect((await service.rollHitDie(1, 'owner')).slots_expended).to.eql({});
-      expect(repository.stubs.updateSpellSlotsExpended.calledOnceWith(1, {})).to.be.true();
+      expect(
+        repository.stubs.updateSpellSlotsExpended.calledOnceWith(1, {}),
+      ).to.be.true();
 
       repository.stubs.updateSpellSlotsExpended.resetHistory();
       givenCharacter({character: {id_class: 7}});
-      expect((await service.shortRest(1, 'owner')).slots_expended).to.be.undefined();
+      expect(
+        (await service.shortRest(1, 'owner')).slots_expended,
+      ).to.be.undefined();
       sinon.assert.notCalled(repository.stubs.updateSpellSlotsExpended);
     });
 
@@ -1474,6 +1483,33 @@ describe('CharacterSheetService', () => {
       );
       expect(repository.stubs.deleteCharacter.called).to.be.false();
       expect(imageCleanup.stubs.deleteIfUnreferenced.called).to.be.false();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('preparar magia × combate', () => {
+    beforeEach(() => {
+      givenCharacter({character: {id_class: 9, level: 5}}); // Mago
+      repository.stubs.countPreparedSpells.resolves(0);
+    });
+
+    it('antes de rolar a iniciativa (luta recém-iniciada) ainda pode preparar', async () => {
+      combatRepository.stubs.isCharacterPreparationLocked.resolves(false);
+      await service.setSpellPrepared(1, 42, true, 'owner');
+      sinon.assert.calledOnceWithExactly(
+        repository.stubs.setSpellPrepared,
+        1,
+        42,
+        true,
+      );
+    });
+
+    it('já na ordem de turnos (iniciativa rolada): recusa com 409 e não grava', async () => {
+      combatRepository.stubs.isCharacterPreparationLocked.resolves(true);
+      await expect(
+        service.setSpellPrepared(1, 42, true, 'owner'),
+      ).to.be.rejectedWith(/durante o combate/);
+      sinon.assert.notCalled(repository.stubs.setSpellPrepared);
     });
   });
 });

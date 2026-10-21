@@ -1,6 +1,6 @@
 {
   "name": "dungeon-companion-api",
-  "version": "1.3.10",
+  "version": "1.3.11",
   "description": "api",
   "keywords": [
     "loopback-application",

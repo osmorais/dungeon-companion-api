@@ -848,7 +848,7 @@ export class CharacterSheetService {
     // Só consulta se a classe realmente precisa preparar magia — evita uma query à toa pras
     // outras (maioria das classes/personagens não-conjuradores).
     const inActiveCombat = classRule.preparesSpells
-      ? await this.combatRepository.isCharacterInActiveCombat(character.id_character)
+      ? await this.combatRepository.isCharacterPreparationLocked(character.id_character)
       : false;
 
     return {
@@ -1935,7 +1935,7 @@ export class CharacterSheetService {
       );
     }
 
-    if (await this.combatRepository.isCharacterInActiveCombat(id)) {
+    if (await this.combatRepository.isCharacterPreparationLocked(id)) {
       throw new HttpErrors.Conflict(
         'Não é possível preparar magias durante o combate',
       );

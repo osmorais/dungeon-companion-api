@@ -77,7 +77,7 @@ describe('Criação de personagem → ficha gravada', () => {
     optionsRepository.stubs.findSpellLevelsByIds.callsFake(async ids =>
       ids.map(id => ({id_spell: id, spell_level: SPELL_LEVELS.get(id) ?? 0})),
     );
-    combatRepository.stubs.isCharacterInActiveCombat.resolves(false);
+    combatRepository.stubs.isCharacterPreparationLocked.resolves(false);
     service = new CharacterSheetService(
       repository,
       gameSessionRepository,

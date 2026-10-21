@@ -329,9 +329,12 @@ export class CombatRepository {
     return rows[0] ?? null;
   }
 
-  /** true se o personagem (como jogador ou NPC) está num combate ainda não encerrado, em
-   *  qualquer sessão — usado pra travar preparo de magia durante o combate. */
-  async isCharacterInActiveCombat(idCharacter: number): Promise<boolean> {
+  /**
+   * Preparar magia fica travado quando o personagem já está **na ordem de turnos** de um combate
+   * em andamento — participante com a iniciativa rolada. Antes de rolar (o mestre acabou de
+   * iniciar a luta e o jogador recebe o "Deseja selecionar suas magias preparadas?"), ainda pode.
+   */
+  async isCharacterPreparationLocked(idCharacter: number): Promise<boolean> {
     const rows = await this.db.sql<{id_combat_participant: string}[]>`
       SELECT cp.id_combat_participant
       FROM combat_participant cp
@@ -339,11 +342,13 @@ export class CombatRepository {
       LEFT JOIN player_session ps ON ps.id_player_session = cp.id_player_session
       LEFT JOIN npc_session ns ON ns.id_npc_session = cp.id_npc_session
       WHERE ce.status = ANY(${ACTIVE_STATUSES})
+        AND cp.initiative_total IS NOT NULL
         AND (ps.id_character = ${idCharacter} OR ns.id_character = ${idCharacter})
       LIMIT 1
     `;
     return rows.length > 0;
   }
+
 
   async findParticipantContext(
     idCombatParticipant: string,
