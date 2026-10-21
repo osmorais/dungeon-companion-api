@@ -1046,6 +1046,28 @@ export class GameSessionService {
       name: result.customName ?? this.monsterSnapshotName(result.dataSnapshot),
       image_url: result.imageUrl ?? null,
     });
+    await this.joinActiveCombat(result.idGameSession!, idMonsterSession, userId);
+  }
+
+  /**
+   * Revelar com combate em andamento coloca o monstro na luta (o caminho inverso já existia:
+   * entrar no combate revela). Mesmo efeito do "+ ADICIONAR": entra com a iniciativa rolada e,
+   * se o combate já está ativo, no fim da ordem. Monstro que já está na luta fica como está.
+   * O anúncio de "monstro revelado" sai antes, então não se repete aqui.
+   */
+  private async joinActiveCombat(
+    idGameSession: string,
+    idMonsterSession: string,
+    userId: string,
+  ): Promise<void> {
+    const combat = await this.combatService.getActiveEncounterDetail(idGameSession);
+    if (!combat) return;
+    if (combat.participants.some(p => p.id_monster_session === idMonsterSession)) return;
+    await this.combatService.addParticipants(
+      combat.encounter.id_combat_encounter,
+      [{participant_type: 'monster', id: idMonsterSession}],
+      userId,
+    );
   }
 
   async hideMonster(idMonsterSession: string, userId: string): Promise<void> {

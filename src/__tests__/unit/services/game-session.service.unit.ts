@@ -723,6 +723,52 @@ describe('GameSessionService', () => {
       ]);
     });
 
+    describe('revelar com combate em andamento', () => {
+      beforeEach(() => {
+        repository.stubs.setMonsterRevealed.resolves({
+          status: 'ok',
+          idGameSession: 'gs',
+          customName: null,
+          dataSnapshot: {name: 'Orc'},
+          imageUrl: null,
+        });
+      });
+
+      it('coloca o monstro na luta, como o + ADICIONAR', async () => {
+        combatService.stubs.getActiveEncounterDetail.resolves({
+          encounter: {id_combat_encounter: 'enc'},
+          participants: [{id_monster_session: 'outro'}],
+        } as never);
+        await service.revealMonster('m', 'dm');
+        sinon.assert.calledOnceWithExactly(
+          combatService.stubs.addParticipants,
+          'enc',
+          [{participant_type: 'monster', id: 'm'}],
+          'dm',
+        );
+      });
+
+      it('monstro que já está na luta não entra de novo', async () => {
+        combatService.stubs.getActiveEncounterDetail.resolves({
+          encounter: {id_combat_encounter: 'enc'},
+          participants: [{id_monster_session: 'm'}],
+        } as never);
+        await service.revealMonster('m', 'dm');
+        sinon.assert.notCalled(combatService.stubs.addParticipants);
+      });
+
+      it('sem combate só revela', async () => {
+        await service.revealMonster('m', 'dm');
+        sinon.assert.notCalled(combatService.stubs.addParticipants);
+      });
+
+      it('quem não é mestre é barrado antes de mexer no combate', async () => {
+        repository.stubs.setMonsterRevealed.resolves({status: 'unauthorized'});
+        await expect(service.revealMonster('m', 'player')).to.be.rejected();
+        sinon.assert.notCalled(combatService.stubs.getActiveEncounterDetail);
+      });
+    });
+
     it('esconder/revelar só pelo mestre', async () => {
       repository.stubs.setMonsterRevealed.resolves({status: 'unauthorized'});
       await expect(service.revealMonster('m', 'player')).to.be.rejectedWith(
