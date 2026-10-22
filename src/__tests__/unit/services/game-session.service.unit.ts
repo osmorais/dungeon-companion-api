@@ -1225,6 +1225,20 @@ describe('GameSessionService', () => {
       expect(events.map(e => e.type)).to.eql(['roll_added', 'roll_added']);
     });
 
+    it('rolagem de um lançamento: cast_id vai só no evento (não é gravado) e é validado', async () => {
+      await service.addRoll('gs', {...ROLL, cast_id: 'cast-1234'}, 'u');
+      expect(repository.stubs.addRoll.firstCall.args[1]).to.not.have.property(
+        'cast_id',
+      );
+      expect(events[0]).to.containDeep({
+        type: 'roll_added',
+        roll: {cast_id: 'cast-1234'},
+      });
+      await expect(
+        service.addRoll('gs', {...ROLL, cast_id: 'x'}, 'u'),
+      ).to.be.rejectedWith(/cast_id/);
+    });
+
     it('aceita rolagem de cura (magias de cura)', async () => {
       await service.addRoll('gs', {...ROLL, roll_type: 'heal'}, 'u');
       expect(repository.stubs.addRoll.firstCall.args[1].roll_type).to.equal(
@@ -1488,6 +1502,97 @@ describe('GameSessionService', () => {
         ),
       ).to.be.rejectedWith(/outra criatura/);
       expect(repository.stubs.setBardicInspiration.called).to.be.false();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('publishSpellCastStage', () => {
+    const SPELL = {
+      id_spell: 9,
+      name: 'Raio de Fogo',
+      casting_time: '1 ação',
+      range_distance: 36,
+      duration: 'Instantânea',
+      is_verbal: true,
+      is_somatic: true,
+      is_material: false,
+      spellLevel: 0,
+      school: 'Evocação',
+    };
+    const STAGE = {
+      cast_id: 'cast-1234',
+      id_character: 1,
+      actor_name: 'Merlin',
+      id_spell: 9,
+      phase: 'open' as const,
+      rolls: [
+        {
+          id_roll: 'r1',
+          kind: 'attack' as const,
+          outcome: 'hit' as const,
+          critical: false,
+        },
+      ],
+    };
+
+    beforeEach(() => {
+      repository.stubs.hasSessionAccess.resolves(true);
+      repository.stubs.canPostRollFor.resolves(true);
+      repository.stubs.findSpellCard.resolves(SPELL);
+    });
+
+    it('publica a etapa com a carta da magia e quem lançou (não grava nada)', async () => {
+      await service.publishSpellCastStage('gs', STAGE, 'u1');
+      expect(events).to.eql([
+        {
+          type: 'spell_cast_stage',
+          id_game_session: 'gs',
+          cast_id: 'cast-1234',
+          user_id: 'u1',
+          id_character: 1,
+          actor_name: 'Merlin',
+          spell: SPELL,
+          phase: 'open',
+          rolls: STAGE.rolls,
+          save_dc: null,
+          save_ability: null,
+        },
+      ]);
+      expect(repository.stubs.addRoll.called).to.be.false();
+    });
+
+    it('valida id, fase, rolagens e CD; exige permissão e magia existente', async () => {
+      await expect(
+        service.publishSpellCastStage('gs', {...STAGE, cast_id: '!'}, 'u'),
+      ).to.be.rejectedWith(/cast_id/);
+      await expect(
+        service.publishSpellCastStage(
+          'gs',
+          {...STAGE, phase: 'x' as never},
+          'u',
+        ),
+      ).to.be.rejectedWith(/phase/);
+      await expect(
+        service.publishSpellCastStage(
+          'gs',
+          {...STAGE, rolls: [{...STAGE.rolls[0], kind: 'x' as never}]},
+          'u',
+        ),
+      ).to.be.rejectedWith(/rolls/);
+      await expect(
+        service.publishSpellCastStage('gs', {...STAGE, save_dc: 14}, 'u'),
+      ).to.be.rejectedWith(/juntos/);
+
+      repository.stubs.findSpellCard.resolves(null);
+      await expect(
+        service.publishSpellCastStage('gs', STAGE, 'u'),
+      ).to.be.rejectedWith(/Magia não encontrada/);
+
+      repository.stubs.canPostRollFor.resolves(false);
+      await expect(
+        service.publishSpellCastStage('gs', STAGE, 'u'),
+      ).to.be.rejectedWith(/não pode lançar/);
+      expect(events).to.eql([]);
     });
   });
 

@@ -31,6 +31,9 @@ import {
   RollLogEntry,
   RollLogInput,
   RollType,
+  SpellCastStageInput,
+  CAST_ROLL_KINDS,
+  CAST_ROLL_OUTCOMES,
   SecretRollRequestInput,
   ShownReferenceImage,
   SpellCastInput,
@@ -1161,8 +1164,13 @@ export class GameSessionService {
       ? await this.repository.isSessionOwner(idGameSession, userId)
       : false;
 
+    const castId = input.cast_id;
+    if (castId !== undefined && !isCastId(castId))
+      throw new HttpErrors.UnprocessableEntity('cast_id inválido');
+
     const rollInput = {...input};
     delete rollInput.secret_request_id;
+    delete rollInput.cast_id;
     const roll = await this.repository.addRoll(idGameSession, {
       ...rollInput,
       id_character: idCharacter,
@@ -1171,7 +1179,7 @@ export class GameSessionService {
     this.events.publish({
       type: 'roll_added',
       id_game_session: idGameSession,
-      roll,
+      roll: castId ? {...roll, cast_id: castId} : roll,
     });
     return roll;
   }
@@ -1323,6 +1331,96 @@ export class GameSessionService {
     });
   }
 
+  /**
+   * Etapa de um lançamento de magia (1.5.0): só publica (não grava) — a mesa monta um aviso único
+   * com o card do personagem, a carta da magia (buscada aqui pelo id) e as rolagens (já registradas
+   * em /roll, referenciadas pelo id). Mesmas permissões de rolar pelo personagem.
+   */
+  async publishSpellCastStage(
+    idGameSession: string,
+    input: SpellCastStageInput,
+    userId: string,
+  ): Promise<void> {
+    const hasAccess = await this.repository.hasSessionAccess(
+      idGameSession,
+      userId,
+    );
+    if (!hasAccess)
+      throw new HttpErrors.Forbidden('Você não tem acesso a esta sessão');
+
+    if (!isCastId(input.cast_id))
+      throw new HttpErrors.UnprocessableEntity('cast_id inválido');
+    if (!Number.isInteger(input.id_character))
+      throw new HttpErrors.UnprocessableEntity('id_character inválido');
+    if (!input.actor_name?.trim() || input.actor_name.length > 100)
+      throw new HttpErrors.UnprocessableEntity('actor_name é obrigatório');
+    if (!Number.isInteger(input.id_spell))
+      throw new HttpErrors.UnprocessableEntity('id_spell inválido');
+    if (input.phase !== 'open' && input.phase !== 'done')
+      throw new HttpErrors.UnprocessableEntity('phase inválida');
+    if (!Array.isArray(input.rolls) || input.rolls.length > 30)
+      throw new HttpErrors.UnprocessableEntity('rolls inválido');
+    for (const r of input.rolls) {
+      if (
+        typeof r?.id_roll !== 'string' ||
+        !r.id_roll ||
+        r.id_roll.length > 64 ||
+        !(CAST_ROLL_KINDS as readonly string[]).includes(r.kind) ||
+        (r.outcome !== null &&
+          !(CAST_ROLL_OUTCOMES as readonly string[]).includes(r.outcome)) ||
+        typeof r.critical !== 'boolean'
+      )
+        throw new HttpErrors.UnprocessableEntity('rolls inválido');
+    }
+    const saveDc = input.save_dc ?? null;
+    const saveAbility = input.save_ability ?? null;
+    if ((saveDc === null) !== (saveAbility === null))
+      throw new HttpErrors.UnprocessableEntity(
+        'save_dc e save_ability vão juntos',
+      );
+    if (
+      saveDc !== null &&
+      (!Number.isInteger(saveDc) || saveDc < 1 || saveDc > 40)
+    )
+      throw new HttpErrors.UnprocessableEntity('save_dc inválido');
+    if (
+      saveAbility !== null &&
+      !['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'].includes(saveAbility)
+    )
+      throw new HttpErrors.UnprocessableEntity('save_ability inválido');
+
+    const canPost = await this.repository.canPostRollFor(
+      idGameSession,
+      input.id_character,
+      userId,
+    );
+    if (!canPost)
+      throw new HttpErrors.Forbidden(
+        'Você não pode lançar uma magia por esse personagem',
+      );
+    const spell = await this.repository.findSpellCard(input.id_spell);
+    if (!spell) throw new HttpErrors.NotFound('Magia não encontrada');
+
+    this.events.publish({
+      type: 'spell_cast_stage',
+      id_game_session: idGameSession,
+      cast_id: input.cast_id,
+      user_id: userId,
+      id_character: input.id_character,
+      actor_name: input.actor_name,
+      spell,
+      phase: input.phase,
+      rolls: input.rolls.map(r => ({
+        id_roll: r.id_roll,
+        kind: r.kind,
+        outcome: r.outcome,
+        critical: r.critical,
+      })),
+      save_dc: saveDc,
+      save_ability: saveAbility,
+    });
+  }
+
   async listUserSessions(
     userId: string,
     pageSize: number,
@@ -1342,4 +1440,9 @@ export class GameSessionService {
       total_count: rows[0]?.total_count ?? 0,
     };
   }
+}
+
+/** Id do lançamento gerado pelo cliente (uuid ou parecido). */
+function isCastId(value: unknown): value is string {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(value);
 }

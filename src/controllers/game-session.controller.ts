@@ -40,6 +40,7 @@ import {
   SecretRollRequestInput,
   ShownReferenceImage,
   SpellCastInput,
+  SpellCastStageInput,
 } from '../models/game-session-types';
 
 const IMAGE_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
@@ -615,6 +616,28 @@ export class GameSessionController {
     body: SpellCastInput,
   ): Promise<void> {
     return this.gameSessionService.announceSpellCast(id, body, currentUser.id);
+  }
+
+  @post('/api/game-session/{id}/spell-cast-stage')
+  @response(204, {
+    description:
+      'Broadcasts a step of a spell cast (single table notice with the spell card and its rolls) — not persisted',
+  })
+  async publishSpellCastStage(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      description: 'Spell cast step',
+      required: true,
+      content: {'application/json': {schema: {type: 'object'}}},
+    })
+    body: SpellCastStageInput,
+  ): Promise<void> {
+    return this.gameSessionService.publishSpellCastStage(
+      id,
+      body,
+      currentUser.id,
+    );
   }
 
   @post('/api/game-session/{id}/apply-amount')

@@ -4,10 +4,12 @@ import {
   MonsterAbilityKey,
   MonsterSession,
   NpcSession,
+  CastStageRoll,
   PlayerSession,
   RollLogEntry,
   SecretRollCheck,
   ShownReferenceImage,
+  SpellCardInfo,
 } from './game-session-types';
 
 /**
@@ -72,7 +74,8 @@ export interface SessionEventPayloadMap {
     image_url: string | null;
   };
   monster_hidden: {id_monster_session: string};
-  roll_added: {roll: RollLogEntry};
+  /** `cast_id`: rolagem de um lançamento de magia — a mesa mostra no aviso do lançamento. */
+  roll_added: {roll: RollLogEntry & {cast_id?: string}};
   /** Teste secreto pedido pelo mestre — vai só pro jogador alvo (ver `eventTargetUserId`). */
   secret_roll_requested: {
     target_user_id: string;
@@ -89,6 +92,19 @@ export interface SessionEventPayloadMap {
     save_dc: number | null;
     save_ability: 'STR' | 'DEX' | 'CON' | 'INT' | 'WIS' | 'CHA' | null;
     is_ability: boolean;
+  };
+  /** Etapa de um lançamento de magia (aviso único da mesa: card do personagem + carta da magia +
+   *  rolagens). `user_id` = quem lançou (o próprio cliente já vê no modal de rolagem). */
+  spell_cast_stage: {
+    cast_id: string;
+    user_id: string;
+    id_character: number;
+    actor_name: string;
+    spell: SpellCardInfo;
+    phase: 'open' | 'done';
+    rolls: CastStageRoll[];
+    save_dc: number | null;
+    save_ability: 'STR' | 'DEX' | 'CON' | 'INT' | 'WIS' | 'CHA' | null;
   };
   /** Alguém aplicou dano/cura de uma rolagem num alvo — só o aviso pra mesa (o PV vai no evento
    *  de PV de cada tipo; o de monstro continua só pro mestre). */

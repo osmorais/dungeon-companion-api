@@ -29,6 +29,7 @@ import {
   RollLogEntry,
   RollLogInput,
   ShownReferenceImage,
+  SpellCardInfo,
 } from '../models/game-session-types';
 
 /** Quantas rolagens ficam guardadas por sessão — não precisa de histórico ilimitado. */
@@ -479,6 +480,17 @@ export class GameSessionRepository {
   }
 
   /** Mestre pode rolar por qualquer personagem da sessão; jogador só pelo seu próprio. */
+  /** Magia pra carta do aviso de lançamento (sem descrição). */
+  async findSpellCard(idSpell: number): Promise<SpellCardInfo | null> {
+    const rows = await this.db.sql<SpellCardInfo[]>`
+      SELECT id_spell, name, casting_time, range_distance, duration,
+        is_verbal, is_somatic, is_material, spelllevel AS "spellLevel", school
+      FROM spell
+      WHERE id_spell = ${idSpell}
+    `;
+    return rows[0] ?? null;
+  }
+
   async canPostRollFor(
     idGameSession: string,
     idCharacter: number | null,

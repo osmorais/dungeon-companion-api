@@ -202,6 +202,9 @@ export interface RollLogInput {
   /** Resposta do jogador a um teste secreto pedido pelo mestre: a rolagem fica oculta (só o
    *  mestre recebe; o jogador vê o resultado no próprio modal). */
   secret_request_id?: string;
+  /** Rolagem de um lançamento de magia (aviso único da mesa, 1.5.0): não é gravado, só vai no
+   *  evento `roll_added` pra mesa não abrir o aviso de rolagem avulso. */
+  cast_id?: string;
 }
 
 /** O que o mestre pede no teste secreto — o jogador rola com o bônus da própria ficha. */
@@ -227,6 +230,49 @@ export interface SpellCastInput {
   save_ability?: 'STR' | 'DEX' | 'CON' | 'INT' | 'WIS' | 'CHA' | null;
   /** Habilidade de classe (não magia): o toast diz "USOU" em vez de "LANÇOU". */
   is_ability?: boolean;
+}
+
+/** Magia mostrada como carta no aviso de lançamento (sem a descrição, pra o evento ficar leve). */
+export interface SpellCardInfo {
+  id_spell: number;
+  name: string;
+  casting_time: string | null;
+  range_distance: number | null;
+  duration: string | null;
+  is_verbal: boolean;
+  is_somatic: boolean;
+  is_material: boolean;
+  spellLevel: number;
+  school: string | null;
+}
+
+export const CAST_ROLL_KINDS = ['attack', 'damage', 'heal'] as const;
+export const CAST_ROLL_OUTCOMES = ['pending', 'hit', 'miss'] as const;
+
+/** Rolagem que faz parte do lançamento (o id é o da rolagem já registrada em /roll). */
+export interface CastStageRoll {
+  id_roll: string;
+  kind: (typeof CAST_ROLL_KINDS)[number];
+  /** Só ataque: aguardando a decisão, acertou ou errou. */
+  outcome: (typeof CAST_ROLL_OUTCOMES)[number] | null;
+  critical: boolean;
+}
+
+/**
+ * Etapa de um lançamento de magia (1.5.0): quem lança manda a situação inteira a cada passo
+ * (rolou o ataque, decidiu acerto/erro, rolou o dano, terminou) e a mesa mostra um aviso só,
+ * com o card do personagem, a carta da magia e as rolagens. Não é gravado.
+ */
+export interface SpellCastStageInput {
+  cast_id: string;
+  id_character: number;
+  actor_name: string;
+  id_spell: number;
+  /** `open`: ainda decidindo (o aviso fica); `done`: acabou (o aviso some depois de alguns segundos). */
+  phase: 'open' | 'done';
+  rolls: CastStageRoll[];
+  save_dc?: number | null;
+  save_ability?: 'STR' | 'DEX' | 'CON' | 'INT' | 'WIS' | 'CHA' | null;
 }
 
 /**
