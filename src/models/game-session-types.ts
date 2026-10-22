@@ -106,6 +106,8 @@ export interface PlayerCharacterSummary {
    *  livro: nunca acumula com uma vida temporária existente, cura nunca a restaura). */
   temporary_hit_points: number;
   experience_points: number;
+  /** XP total pra chegar ao próximo nível (`null` no 20) — barra de XP do card na sessão. */
+  next_level_xp: number | null;
   avatar_preset: AvatarPreset | null;
   /** Foto de verdade (via Supabase Storage), à parte do avatar_preset — usada como fundo do
    *  toast de rolagem na sessão. */
@@ -250,6 +252,13 @@ export const CAST_ROLL_KINDS = ['attack', 'damage', 'heal'] as const;
 export const CAST_ROLL_OUTCOMES = ['pending', 'hit', 'miss'] as const;
 
 /** Rolagem que faz parte do lançamento (o id é o da rolagem já registrada em /roll). */
+/** Dano/cura do lançamento já aplicado num alvo (mostrado no aviso, no lugar do aviso avulso). */
+export interface CastStageApplied {
+  label: string;
+  amount: number;
+  kind: 'damage' | 'heal' | 'temp_hp';
+}
+
 export interface CastStageRoll {
   id_roll: string;
   kind: (typeof CAST_ROLL_KINDS)[number];
@@ -289,6 +298,8 @@ export interface SpellCastStageInput {
   /** `open`: ainda decidindo (o aviso fica); `done`: acabou (o aviso some depois de alguns segundos). */
   phase: 'open' | 'done';
   rolls: CastStageRoll[];
+  /** O que quem lança já aplicou nos alvos (opcional; clientes antigos não mandam). */
+  applied?: CastStageApplied[];
   save_dc?: number | null;
   save_ability?: 'STR' | 'DEX' | 'CON' | 'INT' | 'WIS' | 'CHA' | null;
 }
@@ -304,6 +315,8 @@ export interface ApplyAmountInput {
   target_id: string;
   amount: number;
   kind: 'damage' | 'heal' | 'temp_hp';
+  /** Aplicação feita dentro de um lançamento: a mesa mostra no aviso dele, sem aviso avulso. */
+  cast_id?: string;
 }
 
 export interface GameSessionDetail {

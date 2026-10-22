@@ -256,6 +256,16 @@ describe('GameSessionService', () => {
       });
     });
 
+    it('aplicação de um lançamento leva o cast_id no aviso (a mesa mostra no aviso dele)', async () => {
+      await service.applyAmount('gs', {...input(), cast_id: 'cast-0001'}, 'u1');
+      expect(events.find(e => e.type === 'amount_applied')).to.containDeep({
+        cast_id: 'cast-0001',
+      });
+      await expect(
+        service.applyAmount('gs', {...input(), cast_id: 'x'}, 'u1'),
+      ).to.be.rejectedWith({statusCode: 422});
+    });
+
     it('dano em aliado passa pela Resistência Implacável e avisa o uso', async () => {
       repository.stubs.resolveRelentlessEndurance.resolves({
         finalHp: 1,
@@ -1713,6 +1723,7 @@ describe('GameSessionService', () => {
           weapon: null,
           phase: 'open',
           rolls: STAGE.rolls,
+          applied: [],
           save_dc: null,
           save_ability: null,
         },
@@ -1777,6 +1788,31 @@ describe('GameSessionService', () => {
       ).to.be.rejectedWith(/weapon inválida/);
       await service.publishSpellCastStage('gs', {...base, weapon}, 'u');
       expect(events).to.have.length(1);
+    });
+
+    it('leva o que já foi aplicado nos alvos; valida a lista', async () => {
+      await service.publishSpellCastStage(
+        'gs',
+        {...STAGE, applied: [{label: ' Goblin ', amount: 8, kind: 'damage'}]},
+        'u1',
+      );
+      expect(events[0]).to.containDeep({
+        applied: [{label: 'Goblin', amount: 8, kind: 'damage'}],
+      });
+      for (const applied of [
+        [{label: '', amount: 8, kind: 'damage'}],
+        [{label: 'Goblin', amount: -1, kind: 'damage'}],
+        [{label: 'Goblin', amount: 8, kind: 'xyz'}],
+        'nada',
+      ]) {
+        await expect(
+          service.publishSpellCastStage(
+            'gs',
+            {...STAGE, applied: applied as never},
+            'u1',
+          ),
+        ).to.be.rejectedWith({statusCode: 422});
+      }
     });
 
     it('valida id, fase, rolagens e CD; exige permissão e magia existente', async () => {

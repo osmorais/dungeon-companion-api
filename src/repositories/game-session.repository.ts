@@ -9,6 +9,7 @@ import {StartingItem} from '../services/character-sheet/starting-items';
 import {
   RELENTLESS_ENDURANCE_KEY,
   RELENTLESS_ENDURANCE_RACE_ID,
+  xpNeededForLevel,
 } from '../services/character-sheet/rules';
 import {PendingQuery, Row, Sql, TransactionSql} from 'postgres';
 import {PostgresDatasource} from '../datasources';
@@ -238,6 +239,7 @@ export class GameSessionRepository {
               current_hit_points: row.current_hit_points ?? 0,
               temporary_hit_points: row.temporary_hit_points ?? 0,
               experience_points: row.xp_points ?? 0,
+              next_level_xp: xpNeededForLevel(row.character_level ?? 0),
               image_url: row.image_url ?? null,
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               avatar_preset: (row.avatar_preset as any) ?? null,
@@ -313,6 +315,7 @@ export class GameSessionRepository {
               current_hit_points: row.current_hit_points ?? 0,
               temporary_hit_points: row.temporary_hit_points ?? 0,
               experience_points: row.xp_points ?? 0,
+              next_level_xp: xpNeededForLevel(row.character_level ?? 0),
               image_url: row.image_url ?? null,
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               avatar_preset: (row.avatar_preset as any) ?? null,
@@ -740,6 +743,7 @@ export class GameSessionRepository {
               current_hit_points: row.current_hit_points ?? 0,
               temporary_hit_points: row.temporary_hit_points ?? 0,
               experience_points: row.xp_points ?? 0,
+              next_level_xp: xpNeededForLevel(row.character_level ?? 0),
               image_url: row.image_url ?? null,
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               avatar_preset: (row.avatar_preset as any) ?? null,

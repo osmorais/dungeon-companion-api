@@ -4,6 +4,7 @@ import {
   MonsterAbilityKey,
   MonsterSession,
   NpcSession,
+  CastStageApplied,
   CastStageRoll,
   PlayerSession,
   RollLogEntry,
@@ -106,6 +107,7 @@ export interface SessionEventPayloadMap {
     weapon: WeaponCardInfo | null;
     phase: 'open' | 'done';
     rolls: CastStageRoll[];
+    applied: CastStageApplied[];
     save_dc: number | null;
     save_ability: 'STR' | 'DEX' | 'CON' | 'INT' | 'WIS' | 'CHA' | null;
   };
@@ -117,6 +119,8 @@ export interface SessionEventPayloadMap {
     target_label: string;
     amount: number;
     kind: 'damage' | 'heal' | 'temp_hp';
+    /** Veio de um lançamento: a mesa mostra no aviso dele (sem aviso avulso). */
+    cast_id?: string;
   };
   /** Mestre mostra uma imagem de referência em tela cheia pra todos da sessão. */
   reference_image_shown: {image: ShownReferenceImage};

@@ -661,6 +661,8 @@ export class GameSessionService {
       throw new HttpErrors.UnprocessableEntity('target_kind inválido');
     if (!Number.isInteger(input.id_character))
       throw new HttpErrors.UnprocessableEntity('id_character é obrigatório');
+    if (input.cast_id !== undefined && !isCastId(input.cast_id))
+      throw new HttpErrors.UnprocessableEntity('cast_id inválido');
 
     const canAct = await this.repository.canPostRollFor(
       idGameSession,
@@ -766,6 +768,7 @@ export class GameSessionService {
       target_label: target.label,
       amount,
       kind: input.kind,
+      ...(input.cast_id ? {cast_id: input.cast_id} : {}),
     });
     return result;
   }
@@ -1419,6 +1422,19 @@ export class GameSessionService {
       )
         throw new HttpErrors.UnprocessableEntity('rolls inválido');
     }
+    const applied = input.applied ?? [];
+    if (!Array.isArray(applied) || applied.length > 30)
+      throw new HttpErrors.UnprocessableEntity('applied inválido');
+    for (const a of applied) {
+      if (
+        !shortText(a?.label, 80) ||
+        !Number.isInteger(a.amount) ||
+        a.amount < 0 ||
+        a.amount > APPLY_AMOUNT_MAX ||
+        !['damage', 'heal', 'temp_hp'].includes(a.kind)
+      )
+        throw new HttpErrors.UnprocessableEntity('applied inválido');
+    }
     const saveDc = input.save_dc ?? null;
     const saveAbility = input.save_ability ?? null;
     if ((saveDc === null) !== (saveAbility === null))
@@ -1469,6 +1485,11 @@ export class GameSessionService {
         kind: r.kind,
         outcome: r.outcome,
         critical: r.critical,
+      })),
+      applied: applied.map(a => ({
+        label: a.label.trim(),
+        amount: a.amount,
+        kind: a.kind,
       })),
       save_dc: saveDc,
       save_ability: saveAbility,
