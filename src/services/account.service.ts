@@ -56,6 +56,11 @@ export class AccountService {
       }
       await this.repository.updateFullName(userId, fullName);
     }
+    if (input.show_in_ranking !== undefined) {
+      if (typeof input.show_in_ranking !== 'boolean')
+        throw new HttpErrors.UnprocessableEntity('show_in_ranking inválido');
+      await this.repository.updateShowInRanking(userId, input.show_in_ranking);
+    }
     return this.getProfile(userId);
   }
 
@@ -75,13 +80,19 @@ export class AccountService {
         characters.push({...basic, aviso: EXPORT_SHEET_WARNING});
       }
     }
-    const [sessionsAsDm, sessionsAsPlayer, monsterCatalog, rolls] =
-      await Promise.all([
-        this.repository.findDmSessions(userId),
-        this.repository.findParticipations(userId),
-        this.repository.findCatalogMonsters(userId),
-        this.repository.findRolls(userId),
-      ]);
+    const [
+      sessionsAsDm,
+      sessionsAsPlayer,
+      monsterCatalog,
+      rolls,
+      rankingStats,
+    ] = await Promise.all([
+      this.repository.findDmSessions(userId),
+      this.repository.findParticipations(userId),
+      this.repository.findCatalogMonsters(userId),
+      this.repository.findRolls(userId),
+      this.repository.findRankingStats(userId),
+    ]);
     return {
       exported_at: new Date().toISOString(),
       account,
@@ -90,6 +101,7 @@ export class AccountService {
       sessions_as_player: sessionsAsPlayer,
       monster_catalog: monsterCatalog,
       rolls,
+      ranking_stats: rankingStats,
     };
   }
 
@@ -131,5 +143,6 @@ function toProfile(
     created_at: row.created_at,
     has_password: row.has_password,
     google_linked: row.google_linked,
+    show_in_ranking: row.show_in_ranking ?? true,
   };
 }

@@ -10,7 +10,7 @@ import {
   RELENTLESS_ENDURANCE_KEY,
   RELENTLESS_ENDURANCE_RACE_ID,
 } from '../services/character-sheet/rules';
-import {Sql, TransactionSql} from 'postgres';
+import {PendingQuery, Row, Sql, TransactionSql} from 'postgres';
 import {PostgresDatasource} from '../datasources';
 import {
   AddPlayerInput,
@@ -31,6 +31,7 @@ import {
   ShownReferenceImage,
   SpellCardInfo,
 } from '../models/game-session-types';
+import {MAX_STATS, RANKING_STATS, StatDelta} from '../services/ranking-stats';
 
 /** Quantas rolagens ficam guardadas por sessão — não precisa de histórico ilimitado. */
 const ROLL_LOG_RETENTION = 30;
@@ -879,6 +880,9 @@ export class GameSessionRepository {
     currentHitPoints?: number;
     /** Nome do personagem quando a Resistência Implacável foi usada agora. */
     relentlessEndurance?: {idCharacter: number; name: string} | null;
+    /** Personagem e PV antes da mudança (estatísticas do ranking). */
+    idCharacter?: number;
+    previous?: {current: number; temp: number};
   }> {
     const rows = await this.db.sql<
       {
@@ -886,18 +890,28 @@ export class GameSessionRepository {
         id_character: number;
         player_user_id: string | null;
         session_owner_id: string | null;
+        current_hit_points: number | null;
+        temporary_hit_points: number | null;
       }[]
     >`
-      SELECT ps.id_game_session, ps.id_character, ps.user_id AS player_user_id, gs.user_id AS session_owner_id
+      SELECT ps.id_game_session, ps.id_character, ps.user_id AS player_user_id, gs.user_id AS session_owner_id,
+             c.current_hit_points, c.temporary_hit_points
       FROM player_session ps
       JOIN game_session gs ON gs.id_game_session = ps.id_game_session
+      LEFT JOIN character c ON c.id_character = ps.id_character
       WHERE ps.id_player_session = ${idPlayerSession}
       LIMIT 1
     `;
     if (!rows.length) return {status: 'not_found'};
 
-    const {id_game_session, id_character, player_user_id, session_owner_id} =
-      rows[0];
+    const {
+      id_game_session,
+      id_character,
+      player_user_id,
+      session_owner_id,
+      current_hit_points,
+      temporary_hit_points,
+    } = rows[0];
     if (player_user_id !== userId && session_owner_id !== userId)
       return {status: 'unauthorized'};
 
@@ -916,7 +930,50 @@ export class GameSessionRepository {
       idGameSession: id_game_session,
       currentHitPoints: finalHp,
       relentlessEndurance,
+      idCharacter: id_character,
+      previous: {current: current_hit_points ?? 0, temp: temporary_hit_points ?? 0},
     };
+  }
+
+  /**
+   * Soma nas estatísticas do ranking (`character_session_stats`) de um personagem numa sessão.
+   * Só grava pra personagem de jogador daquela sessão (NPC e monstro não entram); `MAX_STATS`
+   * guardam o maior valor em vez de somar.
+   */
+  async bumpStats(
+    idGameSession: string,
+    idCharacter: number,
+    delta: StatDelta,
+  ): Promise<void> {
+    const values: Record<string, number> = {};
+    for (const key of RANKING_STATS) {
+      const v = delta[key];
+      if (v !== undefined && Number.isFinite(v) && v > 0) values[key] = Math.round(v);
+    }
+    const keys = Object.keys(values);
+    if (!keys.length) return;
+    const sql = this.db.sql;
+    const updates = keys.map(k =>
+      MAX_STATS.includes(k as never)
+        ? sql`${sql(k)} = GREATEST(character_session_stats.${sql(k)}, EXCLUDED.${sql(k)})`
+        : sql`${sql(k)} = character_session_stats.${sql(k)} + EXCLUDED.${sql(k)}`,
+    );
+    const join = (parts: PendingQuery<Row[]>[]) =>
+      parts.reduce((acc, p) => sql`${acc}, ${p}`);
+    const setClause = join(updates);
+    const valueList = join(keys.map(k => sql`${values[k]}::int`));
+    // Colunas uma a uma: `${sql(keys)}` logo depois de INSERT INTO vira lista de valores.
+    const columnList = join(keys.map(k => sql`${sql(k)}`));
+    await sql`
+      INSERT INTO character_session_stats (id_game_session, id_character, ${columnList})
+      SELECT ${idGameSession}::uuid, ${idCharacter}::int, ${valueList}
+      WHERE EXISTS (
+        SELECT 1 FROM player_session
+        WHERE id_game_session = ${idGameSession} AND id_character = ${idCharacter}
+      )
+      ON CONFLICT (id_game_session, id_character) DO UPDATE
+      SET ${setClause}, updated_at = NOW()
+    `;
   }
 
   /**

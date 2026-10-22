@@ -48,7 +48,10 @@ export class AccountController {
         'application/json': {
           schema: {
             type: 'object',
-            properties: {full_name: {type: 'string', nullable: true}},
+            properties: {
+              full_name: {type: 'string', nullable: true},
+              show_in_ranking: {type: 'boolean'},
+            },
           },
         },
       },

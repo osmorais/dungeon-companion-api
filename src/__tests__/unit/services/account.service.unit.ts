@@ -26,6 +26,7 @@ function profileRow(
     created_at: null,
     has_password: true,
     google_linked: false,
+    show_in_ranking: true,
     password_hash: 'hash',
     ...overrides,
   };
@@ -62,6 +63,7 @@ describe('AccountService', () => {
         created_at: null,
         has_password: true,
         google_linked: false,
+        show_in_ranking: true,
       });
       expect(profile).to.not.have.property('password_hash');
     });
@@ -90,6 +92,26 @@ describe('AccountService', () => {
     it('sem full_name no corpo não altera nada', async () => {
       await service.updateProfile('u1', {});
       expect(repository.stubs.updateFullName.called).to.be.false();
+      expect(repository.stubs.updateShowInRanking.called).to.be.false();
+    });
+
+    it('sair e voltar pro ranking', async () => {
+      await service.updateProfile('u1', {show_in_ranking: false});
+      sinon.assert.calledWith(
+        repository.stubs.updateShowInRanking,
+        'u1',
+        false,
+      );
+      expect(repository.stubs.updateFullName.called).to.be.false();
+    });
+
+    it('show_in_ranking que não é booleano é recusado', async () => {
+      await expect(
+        service.updateProfile('u1', {
+          show_in_ranking: 'não' as unknown as boolean,
+        }),
+      ).to.be.rejectedWith({statusCode: 422});
+      expect(repository.stubs.updateShowInRanking.called).to.be.false();
     });
   });
 
@@ -106,8 +128,10 @@ describe('AccountService', () => {
       repository.stubs.findParticipations.resolves([]);
       repository.stubs.findCatalogMonsters.resolves([]);
       repository.stubs.findRolls.resolves([]);
+      repository.stubs.findRankingStats.resolves([{id_character: 1, nat20: 3}]);
 
       const data = await service.exportData('u1');
+      expect(data.ranking_stats).to.eql([{id_character: 1, nat20: 3}]);
       expect(data.account.email).to.equal('Heroi@Aventura.com');
       expect(data.account).to.not.have.property('password_hash');
       expect(data.characters).to.eql([{character_name: 'Thorin'}]);

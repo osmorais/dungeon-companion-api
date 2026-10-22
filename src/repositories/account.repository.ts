@@ -26,6 +26,7 @@ export class AccountRepository {
       SELECT id, email, full_name, created_at,
              (password_hash IS NOT NULL) AS has_password,
              (google_id IS NOT NULL) AS google_linked,
+             show_in_ranking,
              password_hash
       FROM users
       WHERE id = ${userId}
@@ -37,6 +38,23 @@ export class AccountRepository {
   async updateFullName(userId: string, fullName: string | null): Promise<void> {
     await this.db.sql`
       UPDATE users SET full_name = ${fullName} WHERE id = ${userId}
+    `;
+  }
+
+  async updateShowInRanking(userId: string, show: boolean): Promise<void> {
+    await this.db.sql`
+      UPDATE users SET show_in_ranking = ${show} WHERE id = ${userId}
+    `;
+  }
+
+  async findRankingStats(userId: string): Promise<object[]> {
+    return this.db.sql`
+      SELECT s.*, gs.session_name
+      FROM character_session_stats s
+      JOIN character c ON c.id_character = s.id_character
+      JOIN game_session gs ON gs.id_game_session = s.id_game_session
+      WHERE c.user_id = ${userId}
+      ORDER BY s.updated_at
     `;
   }
 

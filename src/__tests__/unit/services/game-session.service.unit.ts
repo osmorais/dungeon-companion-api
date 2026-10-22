@@ -1173,6 +1173,164 @@ describe('GameSessionService', () => {
   });
 
   // -------------------------------------------------------------------------
+  describe('estatísticas do ranking', () => {
+    beforeEach(() => {
+      repository.stubs.hasSessionAccess.resolves(true);
+      repository.stubs.canPostRollFor.resolves(true);
+      repository.stubs.isSessionOwner.resolves(false);
+      repository.stubs.findCharacterName.resolves('Ana');
+      repository.stubs.addRoll.callsFake(
+        async (_gs, input) => ({...input}) as unknown as RollLogEntry,
+      );
+    });
+
+    it('rolagem de d20 com 20 natural soma crítico pra quem rolou', async () => {
+      await service.addRoll(
+        'gs',
+        {
+          ...ROLL,
+          id_character: 7,
+          dice_notation: '1d20',
+          rolls: [20],
+          roll_type: 'attack',
+        },
+        'u',
+      );
+      sinon.assert.calledWith(repository.stubs.bumpStats, 'gs', 7, {
+        rolls_count: 1,
+        d20_count: 1,
+        d20_sum: 20,
+        nat20: 1,
+      });
+    });
+
+    it('aplicar o golpe final num monstro conta monstro derrotado', async () => {
+      repository.stubs.findApplyTarget.resolves({
+        id_character: null,
+        label: 'Goblin',
+        current: 7,
+        max: 7,
+        temp: 0,
+        is_revealed: true,
+      });
+      await service.applyAmount(
+        'gs',
+        {
+          id_character: 7,
+          target_kind: 'monster',
+          target_id: 'm1',
+          amount: 12,
+          kind: 'damage',
+        },
+        'u',
+      );
+      sinon.assert.calledWith(repository.stubs.bumpStats, 'gs', 7, {
+        monsters_defeated: 1,
+      });
+    });
+
+    it('dano em aliado conta como dano sofrido pra quem recebeu', async () => {
+      repository.stubs.findApplyTarget.resolves({
+        id_character: 20,
+        label: 'Thorin',
+        current: 4,
+        max: 30,
+        temp: 2,
+        is_revealed: true,
+      });
+      repository.stubs.resolveRelentlessEndurance.callsFake(
+        async (_id, hp) => ({
+          finalHp: hp,
+          relentlessEndurance: null,
+        }),
+      );
+      await service.applyAmount(
+        'gs',
+        {
+          id_character: 7,
+          target_kind: 'player',
+          target_id: 'p2',
+          amount: 10,
+          kind: 'damage',
+        },
+        'u',
+      );
+      sinon.assert.calledWith(repository.stubs.bumpStats, 'gs', 20, {
+        damage_taken: 6,
+        knockouts: 1,
+      });
+      sinon.assert.neverCalledWith(repository.stubs.bumpStats, 'gs', 7);
+    });
+
+    it('rolagem de dano conta dano causado e maior golpe sem aplicar em ninguém', async () => {
+      await service.addRoll(
+        'gs',
+        {
+          ...ROLL,
+          id_character: 7,
+          roll_type: 'damage',
+          dice_notation: '2d6',
+          rolls: [4, 5],
+          total: 12,
+        },
+        'u',
+      );
+      sinon.assert.calledWith(repository.stubs.bumpStats, 'gs', 7, {
+        rolls_count: 1,
+        damage_dealt: 12,
+        biggest_hit: 12,
+      });
+    });
+
+    it('PV editado à mão: a queda conta como dano sofrido', async () => {
+      repository.stubs.updateCharacterHp.resolves({
+        status: 'ok',
+        idGameSession: 'gs',
+        currentHitPoints: 3,
+        relentlessEndurance: null,
+        idCharacter: 20,
+        previous: {current: 10, temp: 0},
+      });
+      await service.updateCharacterHp('p2', 3, 0, 'u');
+      sinon.assert.calledWith(repository.stubs.bumpStats, 'gs', 20, {
+        damage_taken: 7,
+      });
+    });
+
+    it('magia conta uma vez, quando o lançamento termina', async () => {
+      repository.stubs.findSpellCard.resolves({id_spell: 1} as never);
+      const stage = {
+        cast_id: 'cast-0001',
+        id_character: 7,
+        actor_name: 'Ana',
+        id_spell: 1,
+        rolls: [],
+      };
+      await service.publishSpellCastStage('gs', {...stage, phase: 'open'}, 'u');
+      expect(repository.stubs.bumpStats.called).to.be.false();
+      await service.publishSpellCastStage('gs', {...stage, phase: 'done'}, 'u');
+      sinon.assert.calledWith(repository.stubs.bumpStats, 'gs', 7, {
+        spells_cast: 1,
+      });
+    });
+
+    it('falha ao gravar a estatística não derruba a rolagem', async () => {
+      repository.stubs.bumpStats.rejects(new Error('banco fora'));
+      const errStub = sinon.stub(console, 'error');
+      try {
+        const roll = await service.addRoll(
+          'gs',
+          {...ROLL, id_character: 7},
+          'u',
+        );
+        expect(roll).to.be.ok();
+        expect(events.map(e => e.type)).to.containEql('roll_added');
+      } finally {
+        errStub.restore();
+      }
+    });
+  });
+
   describe('addRoll', () => {
     beforeEach(() => {
       repository.stubs.hasSessionAccess.resolves(true);

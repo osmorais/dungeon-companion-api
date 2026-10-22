@@ -43,6 +43,12 @@ import {bardicInspirationSides} from './character-sheet/combat-features';
 import {startingInventory} from './character-sheet/starting-items';
 import {applyHpAmount} from './hp-math';
 import {
+  applyStats,
+  manualHpStats,
+  rollStats,
+  StatDelta,
+} from './ranking-stats';
+import {
   SecretRollRequestStore,
   secretRollRequests,
 } from './secret-roll-requests';
@@ -393,6 +399,16 @@ export class GameSessionService {
       throw new HttpErrors.Forbidden(
         'Você não tem permissão para alterar a vida deste personagem',
       );
+    if (result.idCharacter && result.previous) {
+      await this.recordStats(
+        result.idGameSession!,
+        result.idCharacter,
+        manualHpStats(result.previous, {
+          current: result.currentHitPoints ?? currentHitPoints,
+          temp: temporaryHitPoints,
+        }),
+      );
+    }
     this.events.publish({
       type: 'player_hp_updated',
       id_game_session: result.idGameSession!,
@@ -450,6 +466,9 @@ export class GameSessionService {
       const canLevelUp = xpNeeded !== null && grant.xp_points >= xpNeeded;
 
       if (grant.participant_type === 'player') {
+        await this.recordStats(idGameSession, grant.id_character, {
+          xp_gained: input.xp_amount,
+        });
         this.events.publish({
           type: 'player_xp_granted',
           id_game_session: idGameSession,
@@ -674,8 +693,10 @@ export class GameSessionService {
       (await this.repository.findCharacterName(input.id_character)) ?? '—';
     let result: {current_hit_points?: number; temporary_hit_points?: number} =
       {};
+    let after = {current: next.current, temp: next.temp};
 
     if (input.target_kind === 'monster') {
+      after = {current: next.current, temp: 0};
       await this.repository.writeMonsterHp(input.target_id, next.current);
       this.events.publish({
         type: 'monster_hp_updated',
@@ -694,6 +715,7 @@ export class GameSessionService {
         hp = resolved.finalHp;
         relentless = resolved.relentlessEndurance;
       }
+      after = {current: hp, temp: next.temp};
       await this.repository.writeCharacterHp(target.id_character!, hp, next.temp);
       if (input.target_kind === 'player') {
         this.events.publish({
@@ -725,6 +747,16 @@ export class GameSessionService {
       }
       result = {current_hit_points: hp, temporary_hit_points: next.temp};
     }
+
+    const stats = applyStats({
+      kind: input.kind,
+      targetKind: input.target_kind,
+      before: {current: target.current, temp: target.temp},
+      after,
+    });
+    await this.recordStats(idGameSession, input.id_character, stats.actor);
+    if (input.target_kind === 'player' && target.id_character)
+      await this.recordStats(idGameSession, target.id_character, stats.target);
 
     this.events.publish({
       type: 'amount_applied',
@@ -1177,6 +1209,8 @@ export class GameSessionService {
       id_character: idCharacter,
       is_hidden: answersSecretRequest || (isDm && !!input.is_hidden),
     });
+    if (idCharacter !== null)
+      await this.recordStats(idGameSession, idCharacter, rollStats(input));
     this.events.publish({
       type: 'roll_added',
       id_game_session: idGameSession,
@@ -1320,6 +1354,8 @@ export class GameSessionService {
         'Você não pode anunciar uma magia pra esse personagem',
       );
 
+    if (input.is_ability !== true && input.id_character !== null)
+      await this.recordStats(idGameSession, input.id_character, {spells_cast: 1});
     this.events.publish({
       type: 'spell_cast',
       id_game_session: idGameSession,
@@ -1415,6 +1451,9 @@ export class GameSessionService {
     if (hasSpell && !spell)
       throw new HttpErrors.NotFound('Magia não encontrada');
 
+    // Conta a magia uma vez, quando o lançamento termina.
+    if (hasSpell && input.phase === 'done')
+      await this.recordStats(idGameSession, input.id_character, {spells_cast: 1});
     this.events.publish({
       type: 'spell_cast_stage',
       id_game_session: idGameSession,
@@ -1434,6 +1473,23 @@ export class GameSessionService {
       save_dc: saveDc,
       save_ability: saveAbility,
     });
+  }
+
+  /**
+   * Estatísticas do ranking: nunca podem atrapalhar a jogada — erro aqui só vai pro log (sem
+   * dado pessoal).
+   */
+  private async recordStats(
+    idGameSession: string,
+    idCharacter: number,
+    delta: StatDelta,
+  ): Promise<void> {
+    if (!Object.keys(delta).length) return;
+    try {
+      await this.repository.bumpStats(idGameSession, idCharacter, delta);
+    } catch (err) {
+      console.error('[ranking] falha ao gravar estatística:', (err as Error).message);
+    }
   }
 
   async listUserSessions(

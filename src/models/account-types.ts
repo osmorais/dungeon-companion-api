@@ -7,10 +7,13 @@ export interface AccountProfile {
   created_at: Date | null;
   has_password: boolean;
   google_linked: boolean;
+  /** Aparece no ranking global (padrão sim; o usuário pode sair em /conta). */
+  show_in_ranking: boolean;
 }
 
 export interface UpdateAccountInput {
   full_name?: string | null;
+  show_in_ranking?: boolean;
 }
 
 /**
@@ -78,4 +81,6 @@ export interface AccountExport {
   sessions_as_player: ExportedParticipation[];
   monster_catalog: ExportedCatalogMonster[];
   rolls: ExportedRoll[];
+  /** Estatísticas do ranking dos personagens do usuário, por sessão. */
+  ranking_stats: object[];
 }

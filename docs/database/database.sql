@@ -730,3 +730,40 @@ ALTER TABLE game_session
 -- vai embora junto com a sessão.
 ALTER TABLE game_session
   ADD COLUMN IF NOT EXISTS dm_notes TEXT;
+
+-- ==========================================
+-- RANKING (1.7.0)
+-- ==========================================
+
+-- Estatísticas do ranking global por personagem e sessão, somadas enquanto a mesa joga
+-- (GameSessionService.recordStats -> GameSessionRepository.bumpStats; regras em
+-- services/ranking-stats.ts). Só personagem de jogador da sessão entra. Lido por
+-- RankingRepository (GET /api/ranking). Vai embora com a sessão e com o personagem (e, por
+-- cascata, com a conta); sai na exportação da conta.
+CREATE TABLE IF NOT EXISTS character_session_stats (
+    id_game_session UUID NOT NULL REFERENCES game_session(id_game_session) ON DELETE CASCADE,
+    id_character INT NOT NULL REFERENCES Character(id_character) ON DELETE CASCADE,
+
+    damage_dealt INT NOT NULL DEFAULT 0,      -- dano rolado (conta na rolagem, aplicado ou não)
+    damage_taken INT NOT NULL DEFAULT 0,      -- PV perdidos (aplicado ou editado à mão)
+    healing_done INT NOT NULL DEFAULT 0,      -- cura rolada (conta na rolagem)
+    biggest_hit INT NOT NULL DEFAULT 0,       -- maior rolagem de dano (guarda o máximo)
+    monsters_defeated INT NOT NULL DEFAULT 0, -- golpe final em monstro (dano aplicado que zerou)
+    knockouts INT NOT NULL DEFAULT 0,         -- vezes que caiu a 0 PV
+    nat20 INT NOT NULL DEFAULT 0,
+    nat1 INT NOT NULL DEFAULT 0,
+    d20_count INT NOT NULL DEFAULT 0,         -- d20 puros rolados (média = d20_sum / d20_count)
+    d20_sum INT NOT NULL DEFAULT 0,
+    rolls_count INT NOT NULL DEFAULT 0,
+    spells_cast INT NOT NULL DEFAULT 0,
+    xp_gained INT NOT NULL DEFAULT 0,
+
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (id_game_session, id_character)
+);
+
+CREATE INDEX IF NOT EXISTS idx_character_session_stats_character
+    ON character_session_stats(id_character);
+
+-- O usuário pode sair do ranking global na página /conta (padrão: aparece).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS show_in_ranking BOOLEAN NOT NULL DEFAULT TRUE;
