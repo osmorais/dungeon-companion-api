@@ -32,6 +32,7 @@ import {
   RollLogInput,
   RollType,
   SpellCastStageInput,
+  WeaponCardInfo,
   CAST_ROLL_KINDS,
   CAST_ROLL_OUTCOMES,
   SecretRollRequestInput,
@@ -1332,9 +1333,10 @@ export class GameSessionService {
   }
 
   /**
-   * Etapa de um lançamento de magia (1.5.0): só publica (não grava) — a mesa monta um aviso único
-   * com o card do personagem, a carta da magia (buscada aqui pelo id) e as rolagens (já registradas
-   * em /roll, referenciadas pelo id). Mesmas permissões de rolar pelo personagem.
+   * Etapa de um lançamento de magia (1.5.0) ou ataque com arma (1.6.1): só publica (não grava) — a
+   * mesa monta um aviso único com o card do personagem, a carta (magia buscada aqui pelo id; arma
+   * vinda do cliente, já calculada pro personagem) e as rolagens (já registradas em /roll,
+   * referenciadas pelo id). Mesmas permissões de rolar pelo personagem.
    */
   async publishSpellCastStage(
     idGameSession: string,
@@ -1354,8 +1356,17 @@ export class GameSessionService {
       throw new HttpErrors.UnprocessableEntity('id_character inválido');
     if (!input.actor_name?.trim() || input.actor_name.length > 100)
       throw new HttpErrors.UnprocessableEntity('actor_name é obrigatório');
-    if (!Number.isInteger(input.id_spell))
+    const hasSpell = input.id_spell !== undefined && input.id_spell !== null;
+    const hasWeapon = input.weapon !== undefined && input.weapon !== null;
+    if (hasSpell === hasWeapon)
+      throw new HttpErrors.UnprocessableEntity(
+        'Informe a magia (id_spell) ou a arma (weapon)',
+      );
+    if (hasSpell && !Number.isInteger(input.id_spell))
       throw new HttpErrors.UnprocessableEntity('id_spell inválido');
+    const weapon = hasWeapon ? validWeaponCard(input.weapon) : null;
+    if (hasWeapon && !weapon)
+      throw new HttpErrors.UnprocessableEntity('weapon inválida');
     if (input.phase !== 'open' && input.phase !== 'done')
       throw new HttpErrors.UnprocessableEntity('phase inválida');
     if (!Array.isArray(input.rolls) || input.rolls.length > 30)
@@ -1398,8 +1409,11 @@ export class GameSessionService {
       throw new HttpErrors.Forbidden(
         'Você não pode lançar uma magia por esse personagem',
       );
-    const spell = await this.repository.findSpellCard(input.id_spell);
-    if (!spell) throw new HttpErrors.NotFound('Magia não encontrada');
+    const spell = hasSpell
+      ? await this.repository.findSpellCard(input.id_spell as number)
+      : null;
+    if (hasSpell && !spell)
+      throw new HttpErrors.NotFound('Magia não encontrada');
 
     this.events.publish({
       type: 'spell_cast_stage',
@@ -1409,6 +1423,7 @@ export class GameSessionService {
       id_character: input.id_character,
       actor_name: input.actor_name,
       spell,
+      weapon,
       phase: input.phase,
       rolls: input.rolls.map(r => ({
         id_roll: r.id_roll,
@@ -1446,3 +1461,40 @@ export class GameSessionService {
 function isCastId(value: unknown): value is string {
   return typeof value === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(value);
 }
+
+const shortText = (value: unknown, max: number): value is string =>
+  typeof value === 'string' && value.trim().length > 0 && value.length <= max;
+const optionalText = (value: unknown, max: number): boolean =>
+  value === null || shortText(value, max);
+const smallInt = (value: unknown, limit: number): value is number =>
+  Number.isInteger(value) && Math.abs(value as number) <= limit;
+
+/** Carta da arma vinda do cliente: só campos de exibição, com tamanho e faixa limitados. */
+function validWeaponCard(value: unknown): WeaponCardInfo | null {
+  const w = value as Partial<WeaponCardInfo> | null | undefined;
+  if (!w || typeof w !== 'object') return null;
+  const ok =
+    (w.id_weapon === null || smallInt(w.id_weapon, 100000)) &&
+    shortText(w.name, 100) &&
+    smallInt(w.attack_bonus, 50) &&
+    smallInt(w.damage_modifier, 50) &&
+    optionalText(w.damage_die, 20) &&
+    optionalText(w.damage_type, 40) &&
+    optionalText(w.properties, 300) &&
+    (w.weight === null ||
+      (typeof w.weight === 'number' && w.weight >= 0 && w.weight <= 1000)) &&
+    typeof w.is_ranged === 'boolean';
+  if (!ok) return null;
+  return {
+    id_weapon: w.id_weapon as number | null,
+    name: w.name as string,
+    attack_bonus: w.attack_bonus as number,
+    damage_modifier: w.damage_modifier as number,
+    damage_die: w.damage_die ?? null,
+    damage_type: w.damage_type ?? null,
+    properties: w.properties ?? null,
+    weight: w.weight ?? null,
+    is_ranged: w.is_ranged as boolean,
+  };
+}
+

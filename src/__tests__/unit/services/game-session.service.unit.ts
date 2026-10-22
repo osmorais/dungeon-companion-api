@@ -1552,6 +1552,7 @@ describe('GameSessionService', () => {
           id_character: 1,
           actor_name: 'Merlin',
           spell: SPELL,
+          weapon: null,
           phase: 'open',
           rolls: STAGE.rolls,
           save_dc: null,
@@ -1559,6 +1560,65 @@ describe('GameSessionService', () => {
         },
       ]);
       expect(repository.stubs.addRoll.called).to.be.false();
+    });
+
+    it('ataque com arma: publica a carta da arma (vinda do cliente) sem buscar magia', async () => {
+      const weapon = {
+        id_weapon: 20,
+        name: 'Espada Longa',
+        attack_bonus: 5,
+        damage_modifier: 3,
+        damage_die: '1d8',
+        damage_type: 'cortante',
+        properties: 'Versátil (1d10)',
+        weight: 1.5,
+        is_ranged: false,
+      };
+      const {id_spell: _omit, ...base} = STAGE;
+      await service.publishSpellCastStage('gs', {...base, weapon}, 'u1');
+      expect(events[0]).to.containDeep({
+        type: 'spell_cast_stage',
+        spell: null,
+        weapon,
+      });
+      expect(repository.stubs.findSpellCard.called).to.be.false();
+    });
+
+    it('exige magia ou arma (uma só) e valida a carta da arma', async () => {
+      const weapon = {
+        id_weapon: null,
+        name: 'Ataque Desarmado',
+        attack_bonus: 4,
+        damage_modifier: 2,
+        damage_die: '1d4',
+        damage_type: 'concussão',
+        properties: null,
+        weight: null,
+        is_ranged: false,
+      };
+      const {id_spell: _omit, ...base} = STAGE;
+      await expect(
+        service.publishSpellCastStage('gs', base, 'u'),
+      ).to.be.rejectedWith(/magia \(id_spell\) ou a arma/);
+      await expect(
+        service.publishSpellCastStage('gs', {...STAGE, weapon}, 'u'),
+      ).to.be.rejectedWith(/magia \(id_spell\) ou a arma/);
+      await expect(
+        service.publishSpellCastStage(
+          'gs',
+          {...base, weapon: {...weapon, name: 'x'.repeat(101)}},
+          'u',
+        ),
+      ).to.be.rejectedWith(/weapon inválida/);
+      await expect(
+        service.publishSpellCastStage(
+          'gs',
+          {...base, weapon: {...weapon, attack_bonus: 1.5}},
+          'u',
+        ),
+      ).to.be.rejectedWith(/weapon inválida/);
+      await service.publishSpellCastStage('gs', {...base, weapon}, 'u');
+      expect(events).to.have.length(1);
     });
 
     it('valida id, fase, rolagens e CD; exige permissão e magia existente', async () => {

@@ -10,6 +10,7 @@ import {
   SecretRollCheck,
   ShownReferenceImage,
   SpellCardInfo,
+  WeaponCardInfo,
 } from './game-session-types';
 
 /**
@@ -93,14 +94,16 @@ export interface SessionEventPayloadMap {
     save_ability: 'STR' | 'DEX' | 'CON' | 'INT' | 'WIS' | 'CHA' | null;
     is_ability: boolean;
   };
-  /** Etapa de um lançamento de magia (aviso único da mesa: card do personagem + carta da magia +
-   *  rolagens). `user_id` = quem lançou (o próprio cliente já vê no modal de rolagem). */
+  /** Etapa de um lançamento de magia ou ataque com arma (aviso único da mesa: card do personagem +
+   *  carta + rolagens). `user_id` = quem lançou (o próprio cliente já vê no modal de rolagem). */
   spell_cast_stage: {
     cast_id: string;
     user_id: string;
     id_character: number;
     actor_name: string;
-    spell: SpellCardInfo;
+    /** Lançamento de magia (`weapon` null) ou ataque com arma (`spell` null, 1.6.1). */
+    spell: SpellCardInfo | null;
+    weapon: WeaponCardInfo | null;
     phase: 'open' | 'done';
     rolls: CastStageRoll[];
     save_dc: number | null;

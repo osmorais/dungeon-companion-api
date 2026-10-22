@@ -263,11 +263,29 @@ export interface CastStageRoll {
  * (rolou o ataque, decidiu acerto/erro, rolou o dano, terminou) e a mesa mostra um aviso só,
  * com o card do personagem, a carta da magia e as rolagens. Não é gravado.
  */
+/**
+ * Arma do ataque mostrada como carta no aviso (1.6.1). Vem do cliente já calculada pro personagem
+ * (bônus e modificador dependem da ficha); `id_weapon` null = ataque desarmado.
+ */
+export interface WeaponCardInfo {
+  id_weapon: number | null;
+  name: string;
+  attack_bonus: number;
+  damage_modifier: number;
+  damage_die: string | null;
+  damage_type: string | null;
+  properties: string | null;
+  weight: number | null;
+  is_ranged: boolean;
+}
+
 export interface SpellCastStageInput {
   cast_id: string;
   id_character: number;
   actor_name: string;
-  id_spell: number;
+  /** Magia lançada — ou `weapon` (ataque com arma), um dos dois. */
+  id_spell?: number | null;
+  weapon?: WeaponCardInfo | null;
   /** `open`: ainda decidindo (o aviso fica); `done`: acabou (o aviso some depois de alguns segundos). */
   phase: 'open' | 'done';
   rolls: CastStageRoll[];
