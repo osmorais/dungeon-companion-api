@@ -1790,6 +1790,19 @@ describe('GameSessionService', () => {
       expect(events).to.have.length(1);
     });
 
+    it('aceita cancelar (fechou sem rolar) e não conta magia lançada', async () => {
+      await service.publishSpellCastStage(
+        'gs',
+        {...STAGE, phase: 'cancel', rolls: []},
+        'u1',
+      );
+      expect(events[0]).to.containDeep({
+        type: 'spell_cast_stage',
+        phase: 'cancel',
+      });
+      expect(repository.stubs.bumpStats.called).to.be.false();
+    });
+
     it('leva o que já foi aplicado nos alvos; valida a lista', async () => {
       await service.publishSpellCastStage(
         'gs',

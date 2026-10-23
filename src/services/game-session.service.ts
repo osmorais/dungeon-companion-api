@@ -1406,7 +1406,7 @@ export class GameSessionService {
     const weapon = hasWeapon ? validWeaponCard(input.weapon) : null;
     if (hasWeapon && !weapon)
       throw new HttpErrors.UnprocessableEntity('weapon inválida');
-    if (input.phase !== 'open' && input.phase !== 'done')
+    if (!['open', 'done', 'cancel'].includes(input.phase))
       throw new HttpErrors.UnprocessableEntity('phase inválida');
     if (!Array.isArray(input.rolls) || input.rolls.length > 30)
       throw new HttpErrors.UnprocessableEntity('rolls inválido');

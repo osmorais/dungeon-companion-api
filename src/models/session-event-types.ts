@@ -105,7 +105,7 @@ export interface SessionEventPayloadMap {
     /** Lançamento de magia (`weapon` null) ou ataque com arma (`spell` null, 1.6.1). */
     spell: SpellCardInfo | null;
     weapon: WeaponCardInfo | null;
-    phase: 'open' | 'done';
+    phase: 'open' | 'done' | 'cancel';
     rolls: CastStageRoll[];
     applied: CastStageApplied[];
     save_dc: number | null;

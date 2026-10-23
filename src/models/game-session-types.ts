@@ -295,8 +295,9 @@ export interface SpellCastStageInput {
   /** Magia lançada — ou `weapon` (ataque com arma), um dos dois. */
   id_spell?: number | null;
   weapon?: WeaponCardInfo | null;
-  /** `open`: ainda decidindo (o aviso fica); `done`: acabou (o aviso some depois de alguns segundos). */
-  phase: 'open' | 'done';
+  /** `open`: ainda decidindo (o aviso fica); `done`: acabou (o aviso some depois de alguns
+   *  segundos); `cancel`: fechou sem rolar nada (o aviso some na hora). */
+  phase: 'open' | 'done' | 'cancel';
   rolls: CastStageRoll[];
   /** O que quem lança já aplicou nos alvos (opcional; clientes antigos não mandam). */
   applied?: CastStageApplied[];
