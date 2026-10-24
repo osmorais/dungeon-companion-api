@@ -6,10 +6,10 @@ import {
   StubbedInstanceWithSinonAccessor,
 } from '@loopback/testlab';
 import {MonsterCatalogService} from '../../../services/monster-catalog.service';
-import {SrdMonsterService} from '../../../services/srd-monster.service';
 import {SupabaseStorageService} from '../../../services/supabase-storage.service';
 import {ImageCleanupService} from '../../../services/image-cleanup.service';
 import {MonsterCatalogRepository} from '../../../repositories/monster-catalog.repository';
+import {MonsterRepository} from '../../../repositories/monster.repository';
 import {MonsterCatalogEntry} from '../../../models/monster-catalog-types';
 
 function entry(
@@ -36,7 +36,7 @@ describe('MonsterCatalogService (imagens)', () => {
     repository.stubs.findById.resolves(entry());
     service = new MonsterCatalogService(
       repository,
-      createStubInstance(SrdMonsterService),
+      createStubInstance(MonsterRepository),
       storage,
       imageCleanup,
     );
@@ -89,5 +89,83 @@ describe('MonsterCatalogService (imagens)', () => {
     );
     expect(repository.stubs.delete.called).to.be.false();
     expect(imageCleanup.stubs.deleteIfUnreferenced.called).to.be.false();
+  });
+});
+
+describe('MonsterCatalogService (bestiário)', () => {
+  let repository: StubbedInstanceWithSinonAccessor<MonsterCatalogRepository>;
+  let bestiary: StubbedInstanceWithSinonAccessor<MonsterRepository>;
+  let service: MonsterCatalogService;
+
+  const abolete = {
+    slug: 'abolete',
+    name: 'Abolete',
+    hp_max: 135,
+    ac: 17,
+    data: {index: 'abolete', name: 'Abolete', hit_points: 135},
+  };
+
+  beforeEach(() => {
+    repository = createStubInstance(MonsterCatalogRepository);
+    bestiary = createStubInstance(MonsterRepository);
+    service = new MonsterCatalogService(
+      repository,
+      bestiary,
+      createStubInstance(SupabaseStorageService),
+      createStubInstance(ImageCleanupService),
+    );
+  });
+
+  afterEach(() => sinon.restore());
+
+  it('lista o bestiário da tabela monster', async () => {
+    const list = [
+      {
+        index: 'abolete',
+        name: 'Abolete',
+        challenge_rating: 10,
+        size: 'Grande',
+        type: 'aberração',
+      },
+    ];
+    bestiary.stubs.listSummaries.resolves(list);
+    expect(await service.listBestiary()).to.deepEqual(list);
+  });
+
+  it('devolve a ficha do bestiário pelo slug', async () => {
+    bestiary.stubs.findBySlug.resolves(abolete);
+    expect(await service.getBestiaryMonster('abolete')).to.deepEqual(
+      abolete.data,
+    );
+  });
+
+  it('slug fora do bestiário dá 404', async () => {
+    bestiary.stubs.findBySlug.resolves(null);
+    await expect(service.getBestiaryMonster('goblin-x')).to.be.rejectedWith(
+      /não encontrado no bestiário/,
+    );
+  });
+
+  it('catalogar copia PV, CA e ficha do bestiário pro mestre', async () => {
+    bestiary.stubs.findBySlug.resolves(abolete);
+    repository.stubs.create.resolves(entry({monster_api_slug: 'abolete'}));
+    await service.catalogMonster('dm', 'abolete', 'Bicho do Lago');
+    sinon.assert.calledWith(
+      repository.stubs.create,
+      'dm',
+      'abolete',
+      'Bicho do Lago',
+      135,
+      17,
+      abolete.data,
+    );
+  });
+
+  it('catalogar slug fora do bestiário dá 404 e não grava', async () => {
+    bestiary.stubs.findBySlug.resolves(null);
+    await expect(service.catalogMonster('dm', 'nada', null)).to.be.rejectedWith(
+      /não encontrado no bestiário/,
+    );
+    expect(repository.stubs.create.called).to.be.false();
   });
 });

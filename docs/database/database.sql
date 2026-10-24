@@ -775,3 +775,20 @@ CREATE INDEX IF NOT EXISTS idx_character_session_stats_character
 
 -- O usuário pode sair do ranking global na página /conta (padrão: aparece).
 ALTER TABLE users ADD COLUMN IF NOT EXISTS show_in_ranking BOOLEAN NOT NULL DEFAULT TRUE;
+
+-- ==========================================
+-- MONSTER (bestiário de referência: as 428 fichas do Manual dos Monstros em português)
+-- ==========================================
+-- Dado de fábrica, igual pra todos os mestres (seed em database_inserts.sql). Vai substituir a
+-- consulta à dnd5eapi (SrdMonsterService) como fonte da lista de monstros pra catalogar.
+-- `data` segue as chaves da dnd5eapi (armor_class, hit_points, actions…), que o site já lê, com os
+-- valores em português; ataques, dano, CD e usos vêm estruturados em cada habilidade.
+CREATE TABLE IF NOT EXISTS monster (
+    id_monster SERIAL PRIMARY KEY,
+    slug VARCHAR(100) NOT NULL UNIQUE,      -- = data.index
+    name VARCHAR(150) NOT NULL,
+    challenge_rating NUMERIC(6,3) NOT NULL, -- 0, 0.125, 0.25, 0.5, 1..30
+    hp_max INTEGER NOT NULL,
+    ac INTEGER NOT NULL,
+    data JSONB NOT NULL
+);

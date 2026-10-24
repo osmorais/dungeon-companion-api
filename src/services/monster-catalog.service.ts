@@ -2,39 +2,46 @@
 import {injectable, BindingScope, service} from '@loopback/core';
 import {HttpErrors} from '@loopback/rest';
 import {MonsterCatalogRepository} from '../repositories/monster-catalog.repository';
-import {SrdMonsterService, SrdMonsterSummary} from './srd-monster.service';
+import {MonsterRepository} from '../repositories/monster.repository';
 import {SupabaseStorageService} from './supabase-storage.service';
 import {ImageCleanupService} from './image-cleanup.service';
-import {MonsterCatalogEntry, MonsterCatalogPagedList} from '../models/monster-catalog-types';
-
-interface SrdMonsterShape {
-  armor_class?: {value: number}[];
-  hit_points?: number;
-}
+import {
+  BestiaryMonster,
+  BestiaryMonsterSummary,
+  MonsterCatalogEntry,
+  MonsterCatalogPagedList,
+} from '../models/monster-catalog-types';
 
 @injectable({scope: BindingScope.TRANSIENT})
 export class MonsterCatalogService {
   constructor(
     @service(MonsterCatalogRepository)
     private repository: MonsterCatalogRepository,
-    @service(SrdMonsterService)
-    private srdMonsterService: SrdMonsterService,
+    @service(MonsterRepository)
+    private bestiary: MonsterRepository,
     @service(SupabaseStorageService)
     private storageService: SupabaseStorageService,
     @service(ImageCleanupService)
     private imageCleanup: ImageCleanupService,
   ) {}
 
-  async searchSrdMonsters(): Promise<SrdMonsterSummary[]> {
-    return this.srdMonsterService.listMonsters();
+  /** Lista do bestiário (tabela `monster`, fichas do Manual dos Monstros) pra escolher o que catalogar. */
+  async listBestiary(): Promise<BestiaryMonsterSummary[]> {
+    return this.bestiary.listSummaries();
   }
 
-  async getSrdMonster(slug: string): Promise<Record<string, unknown>> {
-    return this.srdMonsterService.getMonster(slug);
+  async getBestiaryMonster(slug: string): Promise<Record<string, unknown>> {
+    return (await this.findBestiaryMonster(slug)).data;
+  }
+
+  private async findBestiaryMonster(slug: string): Promise<BestiaryMonster> {
+    const monster = await this.bestiary.findBySlug(slug);
+    if (!monster) throw new HttpErrors.NotFound(`Monstro "${slug}" não encontrado no bestiário`);
+    return monster;
   }
 
   /**
-   * Recataloga sempre a partir do SRD (não confia em stat block enviado pelo cliente) — o
+   * Cataloga sempre a partir do bestiário (não confia em stat block enviado pelo cliente) — o
    * cliente só manda o slug escolhido e um nome customizado opcional.
    */
   async catalogMonster(
@@ -42,11 +49,8 @@ export class MonsterCatalogService {
     slug: string,
     customName: string | null,
   ): Promise<MonsterCatalogEntry> {
-    const detail = (await this.srdMonsterService.getMonster(slug)) as SrdMonsterShape &
-      Record<string, unknown>;
-    const hpMax = detail.hit_points ?? 0;
-    const ac = detail.armor_class?.[0]?.value ?? 10;
-    return this.repository.create(userId, slug, customName, hpMax, ac, detail);
+    const monster = await this.findBestiaryMonster(slug);
+    return this.repository.create(userId, slug, customName, monster.hp_max, monster.ac, monster.data);
   }
 
   async listCatalog(

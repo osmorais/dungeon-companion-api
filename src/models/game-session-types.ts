@@ -128,7 +128,7 @@ export interface PlayerSession {
   character: PlayerCharacterSummary | null;
 }
 
-/** Chaves de atributo dentro de `MonsterSession.data_snapshot` (formato do SRD, em inglês). */
+/** Chaves de atributo dentro de `MonsterSession.data_snapshot` (chaves no formato da dnd5eapi, em inglês). */
 export type MonsterAbilityKey =
   | 'strength'
   | 'dexterity'

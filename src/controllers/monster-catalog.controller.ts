@@ -16,8 +16,11 @@ import {authenticate} from '@loopback/authentication';
 import {SecurityBindings, UserProfile} from '@loopback/security';
 import multer from 'multer';
 import {MonsterCatalogService} from '../services/monster-catalog.service';
-import {SrdMonsterSummary} from '../services/srd-monster.service';
-import {MonsterCatalogEntry, MonsterCatalogPagedList} from '../models/monster-catalog-types';
+import {
+  BestiaryMonsterSummary,
+  MonsterCatalogEntry,
+  MonsterCatalogPagedList,
+} from '../models/monster-catalog-types';
 
 const IMAGE_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
 
@@ -50,38 +53,38 @@ export class MonsterCatalogController {
     private monsterCatalogService: MonsterCatalogService,
   ) {}
 
-  @get('/api/monster-catalog/srd')
+  @get('/api/monster-catalog/bestiary')
   @response(200, {
-    description: 'Returns the list of monsters available in the D&D 5e SRD',
+    description: 'Returns the list of monsters in the bestiary (monster table) available to catalog',
     content: {'application/json': {schema: {type: 'array'}}},
   })
-  async listSrdMonsters(
+  async listBestiary(
     @inject(SecurityBindings.USER) _currentUser: UserProfile,
-  ): Promise<SrdMonsterSummary[]> {
-    return this.monsterCatalogService.searchSrdMonsters();
+  ): Promise<BestiaryMonsterSummary[]> {
+    return this.monsterCatalogService.listBestiary();
   }
 
-  @get('/api/monster-catalog/srd/{slug}')
+  @get('/api/monster-catalog/bestiary/{slug}')
   @response(200, {
-    description: 'Returns the full SRD stat block for a monster, for preview before cataloging',
+    description: 'Returns the full bestiary stat block for a monster, for preview before cataloging',
     content: {'application/json': {schema: {type: 'object'}}},
   })
-  async getSrdMonster(
+  async getBestiaryMonster(
     @param.path.string('slug') slug: string,
     @inject(SecurityBindings.USER) _currentUser: UserProfile,
   ): Promise<object> {
-    return this.monsterCatalogService.getSrdMonster(slug);
+    return this.monsterCatalogService.getBestiaryMonster(slug);
   }
 
   @post('/api/monster-catalog')
   @response(201, {
-    description: 'Catalogs a new monster (from the SRD) for the current DM',
+    description: 'Catalogs a new monster (from the bestiary) for the current DM',
     content: {'application/json': {schema: {type: 'object'}}},
   })
   async catalogMonster(
     @inject(SecurityBindings.USER) currentUser: UserProfile,
     @requestBody({
-      description: 'SRD slug of the monster to catalog, with an optional custom name',
+      description: 'Bestiary slug of the monster to catalog, with an optional custom name',
       required: true,
       content: {
         'application/json': {
@@ -160,7 +163,7 @@ export class MonsterCatalogController {
 
   @get('/api/monster-catalog/{id}')
   @response(200, {
-    description: 'Returns one cataloged monster, including its full SRD stat block',
+    description: 'Returns one cataloged monster, including its full stat block',
     content: {'application/json': {schema: {type: 'object'}}},
   })
   async getCatalogEntry(
