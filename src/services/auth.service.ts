@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import {injectable, BindingScope, inject} from '@loopback/core';
+import {injectable, BindingScope, inject, service} from '@loopback/core';
 import {HttpErrors} from '@loopback/rest';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -8,6 +8,7 @@ import {OAuth2Client} from 'google-auth-library';
 import {UserRepository} from '../repositories/user.repository';
 import {User, UserPublic} from '../models/user.model';
 import {getJwtSecret, verifyJwtToken} from '../strategies/jwt.util';
+import {isUniqueViolation, takenError, UsernameService} from './username.service';
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? '';
 
@@ -18,6 +19,8 @@ export class AuthService {
   constructor(
     @inject('repositories.UserRepository')
     private userRepository: UserRepository,
+    @service(UsernameService)
+    private usernameService: UsernameService,
   ) {}
 
   async hashPassword(password: string): Promise<string> {
@@ -42,15 +45,30 @@ export class AuthService {
     }
   }
 
-  async signup(email: string, password: string, fullName?: string): Promise<{token: string; user: UserPublic}> {
+  async signup(email: string, password: string, rawUsername: string): Promise<{token: string; user: UserPublic}> {
+    const username = await this.usernameService.assertAvailable(rawUsername);
     const existing = await this.userRepository.findByEmail(email);
     if (existing) {
       throw new HttpErrors.Conflict('E-mail já cadastrado');
     }
     const passwordHash = await this.hashPassword(password);
-    const user = await this.userRepository.create({email, password_hash: passwordHash, full_name: fullName});
+    let user: User;
+    try {
+      user = await this.userRepository.create({email, password_hash: passwordHash, username});
+    } catch (err) {
+      // Outra pessoa pegou o mesmo nome entre a conferência e a gravação.
+      if (isUniqueViolation(err)) throw takenError((await this.usernameService.check(username)).suggestions);
+      throw err;
+    }
     const token = this.generateToken(user);
-    return {token, user: {id: user.id, email: user.email, full_name: user.full_name}};
+    return {token, user: toPublic(user)};
+  }
+
+  /** Usuário logado, com o nome de usuário atual (`null` = ainda precisa escolher). */
+  async me(userId: string): Promise<UserPublic> {
+    const user = await this.userRepository.findById(userId);
+    if (!user) throw new HttpErrors.Unauthorized('Conta não encontrada');
+    return toPublic(user);
   }
 
   async login(email: string, password: string): Promise<{token: string; user: UserPublic}> {
@@ -63,7 +81,7 @@ export class AuthService {
       throw new HttpErrors.Unauthorized('Credenciais inválidas');
     }
     const token = this.generateToken(user);
-    return {token, user: {id: user.id, email: user.email, full_name: user.full_name}};
+    return {token, user: toPublic(user)};
   }
 
   async forgotPassword(email: string): Promise<string> {
@@ -124,17 +142,22 @@ export class AuthService {
         await this.userRepository.linkGoogleAccount(existing.id, payload.sub);
         user = {...existing, google_id: payload.sub};
       } else {
+        // O nome da conta Google (nome real) não é guardado: a pessoa escolhe o nome de usuário
+        // logo depois (o web leva pra tela de escolha enquanto `username` for null).
         user = await this.userRepository.createWithGoogle({
           email: payload.email,
-          full_name: payload.name,
           google_id: payload.sub,
         });
       }
     }
 
     const jwtToken = this.generateToken(user);
-    return {token: jwtToken, user: {id: user.id, email: user.email, full_name: user.full_name}};
+    return {token: jwtToken, user: toPublic(user)};
   }
+}
+
+function toPublic(user: User): UserPublic {
+  return {id: user.id, email: user.email, username: user.username ?? null};
 }
 
 /**

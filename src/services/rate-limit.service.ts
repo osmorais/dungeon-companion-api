@@ -22,6 +22,9 @@ export const RATE_LIMITS = {
   forgotPasswordEmail: {max: 3, windowMs: 60 * MINUTE},
   resetPasswordIp: {max: 10, windowMs: 15 * MINUTE},
   googleIp: {max: 30, windowMs: 15 * MINUTE},
+  // Conferência do nome de usuário enquanto a pessoa digita (cadastro): folgado pra digitação,
+  // mas trava varredura da lista de nomes.
+  usernameCheckIp: {max: 120, windowMs: 15 * MINUTE},
   accountDeleteUser: {max: 5, windowMs: 15 * MINUTE},
 } satisfies Record<string, RateLimitRule>;
 

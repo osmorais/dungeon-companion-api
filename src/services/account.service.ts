@@ -11,6 +11,7 @@ import {
 import {AuthService} from './auth.service';
 import {CharacterSheetService} from './character-sheet.service';
 import {ImageCleanupService} from './image-cleanup.service';
+import {UsernameService} from './username.service';
 
 const FULL_NAME_MAX_LENGTH = 255;
 export const EXPORT_SHEET_WARNING =
@@ -34,6 +35,8 @@ export class AccountService {
     private authService: AuthService,
     @service(ImageCleanupService)
     private imageCleanup: ImageCleanupService,
+    @service(UsernameService)
+    private usernameService: UsernameService,
   ) {}
 
   async getProfile(userId: string): Promise<AccountProfile> {
@@ -46,6 +49,12 @@ export class AccountService {
     userId: string,
     input: UpdateAccountInput,
   ): Promise<AccountProfile> {
+    // Escolha no primeiro acesso e troca em Minha Conta: único, com sugestões no 409.
+    if (input.username !== undefined) {
+      if (typeof input.username !== 'string')
+        throw new HttpErrors.UnprocessableEntity('Nome de usuário inválido');
+      await this.usernameService.setUsername(userId, input.username);
+    }
     if (input.full_name !== undefined) {
       const trimmed = input.full_name?.trim() ?? '';
       const fullName = trimmed.length ? trimmed : null;
@@ -140,6 +149,7 @@ function toProfile(
     id: row.id,
     email: row.email,
     full_name: row.full_name,
+    username: row.username ?? null,
     created_at: row.created_at,
     has_password: row.has_password,
     google_linked: row.google_linked,

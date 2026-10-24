@@ -121,6 +121,22 @@ describe('GameSessionService', () => {
       repository.stubs.countPlayers.resolves(0);
       repository.stubs.addPlayer.resolves({id_player_session: 'ps'} as never);
       repository.stubs.findCharacterOwnerId.resolves('u1');
+      repository.stubs.findUsername.resolves('gorak');
+    });
+
+    it('entra com o nome de usuário, não com o nome mandado pelo cliente', async () => {
+      await service.addPlayer(input, 'u1');
+      const [saved] = repository.stubs.addPlayer.firstCall.args;
+      expect(saved.player_name).to.equal('gorak');
+      expect(saved.user_id).to.equal('u1');
+    });
+
+    it('conta sem nome de usuário: 422 e não entra', async () => {
+      repository.stubs.findUsername.resolves(null);
+      await expect(
+        service.addPlayer({session_code: 'ABC', id_character: 7}, 'u1'),
+      ).to.be.rejectedWith({statusCode: 422});
+      expect(repository.stubs.addPlayer.called).to.be.false();
     });
 
     it('personagem de outro usuário: 403 e não entra', async () => {
@@ -161,6 +177,39 @@ describe('GameSessionService', () => {
       repository.stubs.findStartingKit.resolves(null);
       await service.addPlayer(input, 'u1');
       expect(repository.stubs.addPlayer.firstCall.args[2]).to.eql([]);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('createSession — mestre com o nome de usuário', () => {
+    const input = {
+      session_name: 'A Mina Perdida',
+      session_code: 'MINA1',
+      max_player_quantity: 4,
+    };
+    beforeEach(() => {
+      repository.stubs.createSession.resolves({} as never);
+      repository.stubs.findUsername.resolves('mestre_ana');
+    });
+
+    it('grava o nome de usuário como nome do mestre, ignorando o dm_name mandado', async () => {
+      await service.createSession({...input, dm_name: 'Outro Nome'}, 'u1');
+      const [saved, userId] = repository.stubs.createSession.firstCall.args;
+      expect(saved.dm_name).to.equal('mestre_ana');
+      expect(userId).to.equal('u1');
+    });
+
+    it('não exige mais o dm_name no corpo', async () => {
+      await service.createSession(input, 'u1');
+      expect(repository.stubs.createSession.calledOnce).to.be.true();
+    });
+
+    it('conta sem nome de usuário: 422 e não cria', async () => {
+      repository.stubs.findUsername.resolves(null);
+      await expect(service.createSession(input, 'u1')).to.be.rejectedWith({
+        statusCode: 422,
+      });
+      expect(repository.stubs.createSession.called).to.be.false();
     });
   });
 

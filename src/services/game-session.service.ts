@@ -108,7 +108,7 @@ export class GameSessionService {
     input: CreateGameSessionInput,
     userId: string,
   ): Promise<GameSessionCreated> {
-    const {session_name, session_code, max_player_quantity, dm_name} = input;
+    const {session_name, session_code, max_player_quantity} = input;
 
     if (!session_name?.trim())
       throw new HttpErrors.UnprocessableEntity('Nome da sessão é obrigatório');
@@ -116,15 +116,15 @@ export class GameSessionService {
       throw new HttpErrors.UnprocessableEntity(
         'Código da sessão é obrigatório',
       );
-    if (!dm_name?.trim())
-      throw new HttpErrors.UnprocessableEntity('Nome do mestre é obrigatório');
     if (!max_player_quantity || max_player_quantity < 1)
       throw new HttpErrors.UnprocessableEntity(
         'Quantidade máxima de jogadores deve ser pelo menos 1',
       );
+    // O mestre aparece com o nome de usuário (1.9.0); o que vier em dm_name é ignorado.
+    const dmName = await this.requireUsername(userId);
 
     try {
-      return await this.repository.createSession(input, userId);
+      return await this.repository.createSession({...input, dm_name: dmName}, userId);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (
@@ -136,6 +136,16 @@ export class GameSessionService {
       }
       throw err;
     }
+  }
+
+  /** Conta antiga ainda sem nome de usuário não cria nem entra em sessão (o web pede antes). */
+  private async requireUsername(userId: string): Promise<string> {
+    const username = await this.repository.findUsername(userId);
+    if (!username)
+      throw new HttpErrors.UnprocessableEntity(
+        'Escolha um nome de usuário antes de entrar ou criar uma sessão',
+      );
+    return username;
   }
 
   /**
@@ -158,8 +168,6 @@ export class GameSessionService {
       throw new HttpErrors.UnprocessableEntity(
         'Código da sessão é obrigatório',
       );
-    if (!input.player_name?.trim())
-      throw new HttpErrors.UnprocessableEntity('Nome do jogador é obrigatório');
     if (!input.id_character)
       throw new HttpErrors.UnprocessableEntity('id_character é obrigatório');
 
@@ -184,9 +192,11 @@ export class GameSessionService {
       );
     }
 
+    // O jogador aparece com o nome de usuário (1.9.0); o que vier em player_name é ignorado.
+    const playerName = await this.requireUsername(userId);
     const kit = await this.repository.findStartingKit(input.id_character);
     const player = await this.repository.addPlayer(
-      {...input, user_id: userId},
+      {...input, player_name: playerName, user_id: userId},
       session.id_game_session,
       kit ? startingInventory(kit.id_class, kit.id_background) : [],
     );

@@ -45,7 +45,7 @@ export class GameSessionRepository {
   ) {}
 
   async createSession(
-    input: CreateGameSessionInput,
+    input: CreateGameSessionInput & {dm_name: string},
     userId: string,
   ): Promise<GameSessionCreated> {
     const {
@@ -161,11 +161,23 @@ export class GameSessionRepository {
     return {status: 'ok', monster};
   }
 
+  /** Nome de usuário da conta (`null` se ainda não escolheu) — vira o nome de mestre/jogador. */
+  async findUsername(userId: string): Promise<string | null> {
+    const rows = await this.db.sql<{username: string | null}[]>`
+      SELECT username FROM users WHERE id = ${userId} LIMIT 1
+    `;
+    return rows[0]?.username ?? null;
+  }
+
+  // Nome de mestre e de jogador: o nome de usuário ATUAL da conta (troca em Minha Conta aparece em
+  // todo lugar); `dm_name`/`player_name` gravados ficam só de reserva (sessões de antes da 1.9.0).
   async findById(id: string): Promise<GameSessionDetail | null> {
     const sessions = await this.db.sql<GameSession[]>`
-      SELECT id_game_session, session_name, session_code, max_player_quantity, dm_name, user_id, created_at
-      FROM game_session
-      WHERE id_game_session = ${id}
+      SELECT gs.id_game_session, gs.session_name, gs.session_code, gs.max_player_quantity,
+        COALESCE(u.username, gs.dm_name) AS dm_name, gs.user_id, gs.created_at
+      FROM game_session gs
+      LEFT JOIN users u ON u.id = gs.user_id
+      WHERE gs.id_game_session = ${id}
       LIMIT 1
     `;
     if (!sessions.length) return null;
@@ -199,7 +211,7 @@ export class GameSessionRepository {
         ps.id_player_session,
         ps.id_game_session,
         ps.id_character,
-        ps.player_name,
+        COALESCE(pu.username, ps.player_name) AS player_name,
         ps.user_id,
         c.name          AS character_name,
         cl.name         AS character_class,
@@ -216,6 +228,7 @@ export class GameSessionRepository {
         c.id_class,
         c.active_effects
       FROM player_session ps
+      LEFT JOIN users     pu ON pu.id = ps.user_id
       LEFT JOIN character c  ON c.id_character = ps.id_character
       LEFT JOIN class     cl ON cl.id_class    = c.id_class
       LEFT JOIN race      r  ON r.id_race      = c.id_race
@@ -667,7 +680,7 @@ export class GameSessionRepository {
   }
 
   async addPlayer(
-    input: AddPlayerInput,
+    input: AddPlayerInput & {player_name: string},
     idGameSession: string,
     startingItems: StartingItem[] = [],
   ): Promise<PlayerSession> {
@@ -705,7 +718,7 @@ export class GameSessionRepository {
         ps.id_player_session,
         ps.id_game_session,
         ps.id_character,
-        ps.player_name,
+        COALESCE(pu.username, ps.player_name) AS player_name,
         ps.user_id,
         c.name          AS character_name,
         cl.name         AS character_class,
@@ -718,6 +731,7 @@ export class GameSessionRepository {
         c.image_url,
         c.avatar_preset
       FROM player_session ps
+      LEFT JOIN users     pu ON pu.id = ps.user_id
       LEFT JOIN character c  ON c.id_character = ps.id_character
       LEFT JOIN class     cl ON cl.id_class    = c.id_class
       LEFT JOIN race      r  ON r.id_race      = c.id_race
@@ -1466,9 +1480,10 @@ export class GameSessionRepository {
       return this.db.sql<GameSessionSummary[]>`
         SELECT
           gs.id_game_session, gs.session_name, gs.session_code, gs.max_player_quantity,
-          gs.dm_name, gs.user_id, gs.created_at,
+          COALESCE(u.username, gs.dm_name) AS dm_name, gs.user_id, gs.created_at,
           COUNT(*) OVER() AS total_count
         FROM game_session gs
+        LEFT JOIN users u ON u.id = gs.user_id
         WHERE gs.user_id = ${userId}
         ORDER BY gs.created_at DESC
         LIMIT ${pageSize}
@@ -1480,9 +1495,10 @@ export class GameSessionRepository {
       return this.db.sql<GameSessionSummary[]>`
         SELECT
           gs.id_game_session, gs.session_name, gs.session_code, gs.max_player_quantity,
-          gs.dm_name, gs.user_id, gs.created_at,
+          COALESCE(u.username, gs.dm_name) AS dm_name, gs.user_id, gs.created_at,
           COUNT(*) OVER() AS total_count
         FROM game_session gs
+        LEFT JOIN users u ON u.id = gs.user_id
         JOIN player_session ps ON ps.id_game_session = gs.id_game_session
         WHERE ps.user_id = ${userId}
         ORDER BY gs.created_at DESC
@@ -1503,12 +1519,16 @@ export class GameSessionRepository {
         created_at,
         COUNT(*) OVER() AS total_count
       FROM (
-        SELECT gs.id_game_session, gs.session_name, gs.session_code, gs.max_player_quantity, gs.dm_name, gs.user_id, gs.created_at
+        SELECT gs.id_game_session, gs.session_name, gs.session_code, gs.max_player_quantity,
+          COALESCE(u.username, gs.dm_name) AS dm_name, gs.user_id, gs.created_at
         FROM game_session gs
+        LEFT JOIN users u ON u.id = gs.user_id
         WHERE gs.user_id = ${userId}
         UNION
-        SELECT gs.id_game_session, gs.session_name, gs.session_code, gs.max_player_quantity, gs.dm_name, gs.user_id, gs.created_at
+        SELECT gs.id_game_session, gs.session_name, gs.session_code, gs.max_player_quantity,
+          COALESCE(u.username, gs.dm_name) AS dm_name, gs.user_id, gs.created_at
         FROM game_session gs
+        LEFT JOIN users u ON u.id = gs.user_id
         JOIN player_session ps ON ps.id_game_session = gs.id_game_session
         WHERE ps.user_id = ${userId}
       ) sessions

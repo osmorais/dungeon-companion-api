@@ -40,7 +40,9 @@ export class AccountController {
   }
 
   @patch('/api/account')
-  @response(200, {description: 'Atualiza o nome de exibição da conta'})
+  @response(200, {
+    description: 'Atualiza o nome de usuário e as preferências da conta',
+  })
   async updateProfile(
     @inject(SecurityBindings.USER) currentUser: UserProfile,
     @requestBody({
@@ -50,6 +52,7 @@ export class AccountController {
             type: 'object',
             properties: {
               full_name: {type: 'string', nullable: true},
+              username: {type: 'string'},
               show_in_ranking: {type: 'boolean'},
             },
           },

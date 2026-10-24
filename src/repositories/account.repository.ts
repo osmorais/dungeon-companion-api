@@ -23,7 +23,7 @@ export class AccountRepository {
     const rows = await this.db.sql<
       (AccountProfile & {password_hash: string | null})[]
     >`
-      SELECT id, email, full_name, created_at,
+      SELECT id, email, full_name, username, created_at,
              (password_hash IS NOT NULL) AS has_password,
              (google_id IS NOT NULL) AS google_linked,
              show_in_ranking,

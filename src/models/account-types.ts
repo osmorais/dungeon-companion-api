@@ -4,6 +4,8 @@ export interface AccountProfile {
   id: string;
   email: string;
   full_name: string | null;
+  /** Nome de usuário (1.9.0) — aparece pra mesa e no ranking. `null` até a pessoa escolher. */
+  username: string | null;
   created_at: Date | null;
   has_password: boolean;
   google_linked: boolean;
@@ -13,6 +15,7 @@ export interface AccountProfile {
 
 export interface UpdateAccountInput {
   full_name?: string | null;
+  username?: string;
   show_in_ranking?: boolean;
 }
 

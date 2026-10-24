@@ -28,7 +28,8 @@ export class RankingRepository {
       SELECT s.id_character,
              c.name AS character_name,
              c.avatar_preset,
-             ps.player_name,
+             -- Nome de usuário atual (1.9.0); o nome gravado na mesa só pra quem não tem.
+             COALESCE(u.username, ps.player_name) AS player_name,
              gs.session_name,
              (${value})::float AS value
       FROM character_session_stats s

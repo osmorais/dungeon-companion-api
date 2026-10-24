@@ -2,6 +2,7 @@
 import {inject, service} from '@loopback/core';
 import {
   get,
+  param,
   post,
   Request,
   requestBody,
@@ -13,6 +14,7 @@ import {UserProfile, SecurityBindings, securityId} from '@loopback/security';
 import {AuthService} from '../services/auth.service';
 import {EmailService} from '../services/email.service';
 import {clientIp, RateLimitService} from '../services/rate-limit.service';
+import {UsernameCheck, UsernameService} from '../services/username.service';
 
 /** Mínimo pra senha nova (cadastro e redefinição). Contas antigas com 6-7 continuam entrando. */
 export const PASSWORD_MIN_LENGTH = 8;
@@ -47,6 +49,7 @@ export class AuthController {
     @service(AuthService) private authService: AuthService,
     @service(EmailService) private emailService: EmailService,
     @service(RateLimitService) private rateLimit: RateLimitService,
+    @service(UsernameService) private usernameService: UsernameService,
   ) {}
 
   @authenticate.skip()
@@ -59,17 +62,17 @@ export class AuthController {
         'application/json': {
           schema: {
             type: 'object',
-            required: ['email', 'password'],
+            required: ['email', 'password', 'username'],
             properties: {
               email: {type: 'string', format: 'email'},
               password: {type: 'string', minLength: PASSWORD_MIN_LENGTH},
-              full_name: {type: 'string'},
+              username: {type: 'string'},
             },
           },
         },
       },
     })
-    body: {email: string; password: string; full_name?: string},
+    body: {email: string; password: string; username: string},
     @inject(RestBindings.Http.REQUEST) request: Request,
     @inject(RestBindings.Http.RESPONSE) response: Response,
   ) {
@@ -77,7 +80,7 @@ export class AuthController {
     const {token, user} = await this.authService.signup(
       body.email,
       body.password,
-      body.full_name,
+      body.username,
     );
     response.cookie(COOKIE_NAME, token, cookieOptions());
     return {token, user};
@@ -203,11 +206,28 @@ export class AuthController {
     return {token, user};
   }
 
+  /**
+   * O nome de usuário está livre? Se não, devolve sugestões. Pública porque o cadastro pergunta
+   * antes de existir conta; os nomes de usuário já são públicos (mesa, ranking), mas a rota tem
+   * limite pra não servir de varredura.
+   */
+  @authenticate.skip()
+  @get('/auth/username-available', {
+    responses: {'200': {description: 'Disponibilidade do nome de usuário'}},
+  })
+  async usernameAvailable(
+    @param.query.string('username') username: string,
+    @inject(RestBindings.Http.REQUEST) request: Request,
+  ): Promise<UsernameCheck> {
+    this.rateLimit.consume('usernameCheckIp', clientIp(request));
+    return this.usernameService.check(username ?? '');
+  }
+
   @authenticate('jwt')
   @get('/auth/me', {
     responses: {'200': {description: 'Current user profile'}},
   })
   async me(@inject(SecurityBindings.USER) currentUser: UserProfile) {
-    return {id: currentUser[securityId], email: currentUser.email};
+    return this.authService.me(currentUser[securityId]);
   }
 }

@@ -256,6 +256,14 @@ ADD COLUMN IF NOT EXISTS user_id UUID
 
 ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR(255) UNIQUE;
+
+-- Nome de usuário (1.9.0): aparece pra mesa (mestre e jogador) e no ranking, no lugar do
+-- dm_name/player_name digitados. Único sem diferenciar maiúsculas (índice em LOWER). Nulo em conta
+-- antiga ou criada com o Google até a pessoa escolher (o web pede no próximo acesso).
+-- Regras de formato em src/services/username.ts. full_name deixou de ser coletado e foi apagado
+-- em produção em 2026-10-24 (coluna mantida, sempre nula).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(20);
+CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_key ON users (LOWER(username));
 -- ====================================================================================
 -- AVATAR PRESET
 -- ====================================================================================

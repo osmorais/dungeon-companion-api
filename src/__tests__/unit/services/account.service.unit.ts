@@ -12,6 +12,7 @@ import {
 import {AuthService} from '../../../services/auth.service';
 import {CharacterSheetService} from '../../../services/character-sheet.service';
 import {ImageCleanupService} from '../../../services/image-cleanup.service';
+import {UsernameService} from '../../../services/username.service';
 import {AccountRepository} from '../../../repositories/account.repository';
 import {AccountProfile} from '../../../models/account-types';
 import {CharacterSheet} from '../../../models/character-sheet-types';
@@ -23,6 +24,7 @@ function profileRow(
     id: 'u1',
     email: 'Heroi@Aventura.com',
     full_name: 'Sir Aldric',
+    username: 'aldric',
     created_at: null,
     has_password: true,
     google_linked: false,
@@ -37,6 +39,7 @@ describe('AccountService', () => {
   let sheets: StubbedInstanceWithSinonAccessor<CharacterSheetService>;
   let auth: StubbedInstanceWithSinonAccessor<AuthService>;
   let imageCleanup: StubbedInstanceWithSinonAccessor<ImageCleanupService>;
+  let usernames: StubbedInstanceWithSinonAccessor<UsernameService>;
   let service: AccountService;
 
   beforeEach(() => {
@@ -44,10 +47,17 @@ describe('AccountService', () => {
     sheets = createStubInstance(CharacterSheetService);
     auth = createStubInstance(AuthService);
     imageCleanup = createStubInstance(ImageCleanupService);
+    usernames = createStubInstance(UsernameService);
     repository.stubs.findProfile.resolves(profileRow());
     repository.stubs.deleteAccount.resolves({imageUrls: ['https://x/a.png']});
     auth.stubs.comparePassword.resolves(true);
-    service = new AccountService(repository, sheets, auth, imageCleanup);
+    service = new AccountService(
+      repository,
+      sheets,
+      auth,
+      imageCleanup,
+      usernames,
+    );
   });
 
   afterEach(() => sinon.restore());
@@ -60,6 +70,7 @@ describe('AccountService', () => {
         id: 'u1',
         email: 'Heroi@Aventura.com',
         full_name: 'Sir Aldric',
+        username: 'aldric',
         created_at: null,
         has_password: true,
         google_linked: false,
@@ -93,6 +104,33 @@ describe('AccountService', () => {
       await service.updateProfile('u1', {});
       expect(repository.stubs.updateFullName.called).to.be.false();
       expect(repository.stubs.updateShowInRanking.called).to.be.false();
+      expect(usernames.stubs.setUsername.called).to.be.false();
+    });
+
+    it('troca o nome de usuário pela regra de unicidade (do próprio usuário)', async () => {
+      usernames.stubs.setUsername.resolves('gorak');
+      await service.updateProfile('u1', {username: 'gorak'});
+      sinon.assert.calledWith(usernames.stubs.setUsername, 'u1', 'gorak');
+    });
+
+    it('nome de usuário em uso: o 409 com sugestões passa adiante', async () => {
+      const taken = Object.assign(new Error('em uso'), {statusCode: 409});
+      usernames.stubs.setUsername.rejects(taken);
+      await expect(
+        service.updateProfile('u1', {username: 'gorak'}),
+      ).to.be.rejectedWith({statusCode: 409});
+    });
+
+    it('nome de usuário que não é texto: 422', async () => {
+      await expect(
+        service.updateProfile('u1', {username: 42 as never}),
+      ).to.be.rejectedWith({statusCode: 422});
+      expect(usernames.stubs.setUsername.called).to.be.false();
+    });
+
+    it('perfil sem nome de usuário (conta antiga) devolve null', async () => {
+      repository.stubs.findProfile.resolves(profileRow({username: null}));
+      expect((await service.getProfile('u1')).username).to.be.null();
     });
 
     it('sair e voltar pro ranking', async () => {

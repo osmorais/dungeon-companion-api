@@ -8,6 +8,7 @@ import {
 import {AuthService, hashResetToken} from '../../../services/auth.service';
 import {UserRepository} from '../../../repositories/user.repository';
 import {User} from '../../../models/user.model';
+import {UsernameService} from '../../../services/username.service';
 
 describe('AuthService — redefinição de senha', () => {
   let users: StubbedInstanceWithSinonAccessor<UserRepository>;
@@ -16,7 +17,7 @@ describe('AuthService — redefinição de senha', () => {
 
   beforeEach(() => {
     users = createStubInstance(UserRepository);
-    service = new AuthService(users);
+    service = new AuthService(users, createStubInstance(UsernameService));
   });
 
   afterEach(() => sinon.restore());
@@ -74,5 +75,72 @@ describe('AuthService — redefinição de senha', () => {
       service.resetPassword('tok', 'NovaSenha123'),
     ).to.be.rejectedWith(/Token inválido ou expirado/);
     expect(users.stubs.resetPassword.called).to.be.false();
+  });
+});
+
+describe('AuthService — cadastro com nome de usuário', () => {
+  let users: StubbedInstanceWithSinonAccessor<UserRepository>;
+  let usernames: StubbedInstanceWithSinonAccessor<UsernameService>;
+  let service: AuthService;
+
+  beforeEach(() => {
+    users = createStubInstance(UserRepository);
+    usernames = createStubInstance(UsernameService);
+    usernames.stubs.assertAvailable.resolves('gorak');
+    users.stubs.findByEmail.resolves(undefined);
+    users.stubs.create.resolves({
+      id: 'u1',
+      email: 'a@x.com',
+      username: 'gorak',
+    });
+    service = new AuthService(users, usernames);
+  });
+
+  afterEach(() => sinon.restore());
+
+  it('cria a conta com o nome de usuário e devolve ele (sem nome real)', async () => {
+    const {user} = await service.signup('a@x.com', 'senha-forte', ' gorak ');
+    sinon.assert.calledWith(usernames.stubs.assertAvailable, ' gorak ');
+    expect(users.stubs.create.firstCall.args[0]).to.containEql({
+      email: 'a@x.com',
+      username: 'gorak',
+    });
+    expect(user).to.eql({id: 'u1', email: 'a@x.com', username: 'gorak'});
+  });
+
+  it('nome em uso: não cria a conta', async () => {
+    usernames.stubs.assertAvailable.rejects(
+      Object.assign(new Error('em uso'), {statusCode: 409}),
+    );
+    await expect(
+      service.signup('a@x.com', 'senha-forte', 'gorak'),
+    ).to.be.rejectedWith({statusCode: 409});
+    expect(users.stubs.create.called).to.be.false();
+  });
+
+  it('corrida no índice único ao gravar vira 409 com sugestões', async () => {
+    users.stubs.create.rejects(
+      Object.assign(new Error('dup'), {code: '23505'}),
+    );
+    usernames.stubs.check.resolves({
+      username: 'gorak',
+      available: false,
+      error: null,
+      suggestions: ['gorak1'],
+    });
+    const err = await service
+      .signup('a@x.com', 'senha-forte', 'gorak')
+      .catch(e => e);
+    expect(err.statusCode).to.equal(409);
+    expect(err.details.suggestions).to.eql(['gorak1']);
+  });
+
+  it('/auth/me devolve o nome de usuário atual (null = ainda precisa escolher)', async () => {
+    users.stubs.findById.resolves({id: 'u1', email: 'a@x.com', username: null});
+    expect(await service.me('u1')).to.eql({
+      id: 'u1',
+      email: 'a@x.com',
+      username: null,
+    });
   });
 });

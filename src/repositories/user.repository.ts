@@ -11,7 +11,7 @@ export class UserRepository {
 
   async findByEmail(email: string): Promise<User | undefined> {
     const rows = await this.db.sql<User[]>`
-      SELECT id, email, password_hash, full_name, reset_token, reset_token_expires, created_at
+      SELECT id, email, password_hash, username, reset_token, reset_token_expires, created_at
       FROM users
       WHERE email = ${email}
       LIMIT 1
@@ -22,7 +22,7 @@ export class UserRepository {
   /** `tokenHash` é o SHA-256 do token do link (ver hashResetToken) — o token puro nunca é gravado. */
   async findByResetToken(tokenHash: string): Promise<User | undefined> {
     const rows = await this.db.sql<User[]>`
-      SELECT id, email, password_hash, full_name, reset_token, reset_token_expires, created_at
+      SELECT id, email, password_hash, username, reset_token, reset_token_expires, created_at
       FROM users
       WHERE reset_token = ${tokenHash}
         AND reset_token_expires > NOW()
@@ -33,7 +33,7 @@ export class UserRepository {
 
   async findByGoogleId(googleId: string): Promise<User | undefined> {
     const rows = await this.db.sql<User[]>`
-      SELECT id, email, password_hash, full_name, google_id, reset_token, reset_token_expires, created_at
+      SELECT id, email, password_hash, username, google_id, reset_token, reset_token_expires, created_at
       FROM users
       WHERE google_id = ${googleId}
       LIMIT 1
@@ -41,22 +41,49 @@ export class UserRepository {
     return rows[0];
   }
 
-  async create(data: {email: string; password_hash: string; full_name?: string}): Promise<User> {
+  async findById(id: string): Promise<User | undefined> {
     const rows = await this.db.sql<User[]>`
-      INSERT INTO users (email, password_hash, full_name)
-      VALUES (${data.email}, ${data.password_hash}, ${data.full_name ?? null})
-      RETURNING id, email, full_name, created_at
+      SELECT id, email, username FROM users WHERE id = ${id} LIMIT 1
     `;
     return rows[0];
   }
 
-  async createWithGoogle(data: {email: string; full_name?: string; google_id: string}): Promise<User> {
+  async create(data: {email: string; password_hash: string; username: string}): Promise<User> {
     const rows = await this.db.sql<User[]>`
-      INSERT INTO users (email, full_name, google_id)
-      VALUES (${data.email}, ${data.full_name ?? null}, ${data.google_id})
-      RETURNING id, email, full_name, google_id, created_at
+      INSERT INTO users (email, password_hash, username)
+      VALUES (${data.email}, ${data.password_hash}, ${data.username})
+      RETURNING id, email, username, created_at
     `;
     return rows[0];
+  }
+
+  /** Sem nome: o nome da conta Google não é guardado (minimização); a pessoa escolhe o usuário. */
+  async createWithGoogle(data: {email: string; google_id: string}): Promise<User> {
+    const rows = await this.db.sql<User[]>`
+      INSERT INTO users (email, google_id)
+      VALUES (${data.email}, ${data.google_id})
+      RETURNING id, email, username, google_id, created_at
+    `;
+    return rows[0];
+  }
+
+  /**
+   * Quais dos nomes já estão em uso (comparação sem maiúsculas, como o índice único). Devolve os
+   * nomes em minúsculas. `exceptUserId`: o nome atual da própria pessoa não conta como em uso.
+   */
+  async takenUsernames(usernames: string[], exceptUserId?: string): Promise<Set<string>> {
+    if (!usernames.length) return new Set();
+    const lowered = usernames.map(u => u.toLowerCase());
+    const rows = await this.db.sql<{name: string}[]>`
+      SELECT LOWER(username) AS name FROM users
+      WHERE LOWER(username) IN ${this.db.sql(lowered)}
+        ${exceptUserId ? this.db.sql`AND id <> ${exceptUserId}` : this.db.sql``}
+    `;
+    return new Set(rows.map(r => r.name));
+  }
+
+  async setUsername(id: string, username: string): Promise<void> {
+    await this.db.sql`UPDATE users SET username = ${username} WHERE id = ${id}`;
   }
 
   async linkGoogleAccount(id: string, googleId: string): Promise<void> {

@@ -40,7 +40,8 @@ export interface AddMonsterToSessionInput {
 
 export interface AddPlayerInput {
   session_code: string;
-  player_name: string;
+  /** Preenchido pelo service com o nome de usuário (1.9.0) — o que o cliente mandar é ignorado. */
+  player_name?: string;
   id_character: number;
   user_id?: string;
 }
@@ -83,7 +84,8 @@ export interface CreateGameSessionInput {
   session_name: string;
   session_code: string;
   max_player_quantity: number;
-  dm_name: string;
+  /** Preenchido pelo service com o nome de usuário (1.9.0) — o que o cliente mandar é ignorado. */
+  dm_name?: string;
   npcs?: NpcSessionInput[];
   monsters?: MonsterSessionInput[];
 }
