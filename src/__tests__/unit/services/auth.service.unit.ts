@@ -18,6 +18,8 @@ describe('AuthService — redefinição de senha', () => {
   beforeEach(() => {
     users = createStubInstance(UserRepository);
     service = new AuthService(users, createStubInstance(UsernameService));
+    // bcrypt de verdade leva ~1 s por hash e às vezes estourava o tempo do teste.
+    sinon.stub(service, 'hashPassword').resolves('hash');
   });
 
   afterEach(() => sinon.restore());
@@ -94,6 +96,8 @@ describe('AuthService — cadastro com nome de usuário', () => {
       username: 'gorak',
     });
     service = new AuthService(users, usernames);
+    // bcrypt de verdade leva ~1 s por hash e às vezes estourava o tempo do teste.
+    sinon.stub(service, 'hashPassword').resolves('hash');
   });
 
   afterEach(() => sinon.restore());
