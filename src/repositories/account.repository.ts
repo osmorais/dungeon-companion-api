@@ -84,7 +84,8 @@ export class AccountRepository {
             'hp_current', ms.hp_current,
             'hp_max', ms.hp_max,
             'ac', ms.ac,
-            'image_url', ms.image_url
+            'image_url', ms.image_url,
+            'action_state', ms.action_state
           ))
           FROM monster_session ms WHERE ms.id_game_session = gs.id_game_session
         ), '[]'::json) AS monsters,

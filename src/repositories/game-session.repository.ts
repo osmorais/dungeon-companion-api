@@ -32,6 +32,7 @@ import {
   ShownReferenceImage,
   SpellCardInfo,
 } from '../models/game-session-types';
+import {MonsterActionState} from '../services/monster-action-state';
 import {MAX_STATS, RANKING_STATS, StatDelta} from '../services/ranking-stats';
 
 /** Quantas rolagens ficam guardadas por sessão — não precisa de histórico ilimitado. */
@@ -112,7 +113,7 @@ export class GameSessionRepository {
         ${sql.json(monster.data_snapshot as any)},
         ${monster.image_url ?? null}
       )
-      RETURNING id_monster_session, id_game_session, monster_api_slug, custom_name, hp_current, hp_max, ac, data_snapshot, is_revealed, image_url
+      RETURNING id_monster_session, id_game_session, monster_api_slug, custom_name, hp_current, hp_max, ac, data_snapshot, is_revealed, image_url, action_state
     `;
     return row;
   }
@@ -343,9 +344,11 @@ export class GameSessionRepository {
           : null,
     }));
 
+    // lore: descrição do bestiário pela slug, pra carta do monstro revelado (1.11.0).
     const monsters = await this.db.sql<MonsterSession[]>`
       SELECT id_monster_session, id_game_session, monster_api_slug, custom_name,
-             hp_current, hp_max, ac, data_snapshot, is_revealed, image_url
+             hp_current, hp_max, ac, data_snapshot, is_revealed, image_url, action_state,
+             (SELECT m.lore FROM monster m WHERE m.slug = monster_session.monster_api_slug) AS lore
       FROM monster_session
       WHERE id_game_session = ${id}
     `;
@@ -1221,6 +1224,37 @@ export class GameSessionRepository {
     return {status: 'ok', idGameSession: id_game_session, dataSnapshot: mergedSnapshot};
   }
 
+  /** Ficha, usos gravados e dono da sessão de um monstro da mesa (usos das ações, 1.11.0). */
+  async findMonsterActionContext(idMonsterSession: string): Promise<{
+    id_game_session: string;
+    session_owner_id: string | null;
+    data_snapshot: Record<string, unknown>;
+    action_state: unknown;
+  } | null> {
+    const rows = await this.db.sql<
+      {
+        id_game_session: string;
+        session_owner_id: string | null;
+        data_snapshot: Record<string, unknown>;
+        action_state: unknown;
+      }[]
+    >`
+      SELECT ms.id_game_session, gs.user_id AS session_owner_id, ms.data_snapshot, ms.action_state
+      FROM monster_session ms
+      JOIN game_session gs ON gs.id_game_session = ms.id_game_session
+      WHERE ms.id_monster_session = ${idMonsterSession}
+      LIMIT 1
+    `;
+    return rows[0] ?? null;
+  }
+
+  async writeMonsterActionState(idMonsterSession: string, state: MonsterActionState): Promise<void> {
+    await this.db.sql`
+      UPDATE monster_session SET action_state = ${this.db.sql.json(state as never)}
+      WHERE id_monster_session = ${idMonsterSession}
+    `;
+  }
+
   /** Só o mestre da sessão pode revelar/esconder um monstro. */
   async setMonsterRevealed(
     idMonsterSession: string,
@@ -1232,6 +1266,7 @@ export class GameSessionRepository {
     customName?: string | null;
     dataSnapshot?: Record<string, unknown>;
     imageUrl?: string | null;
+    lore?: string | null;
   }> {
     const rows = await this.db.sql<
       {
@@ -1240,9 +1275,11 @@ export class GameSessionRepository {
         custom_name: string | null;
         data_snapshot: Record<string, unknown>;
         image_url: string | null;
+        lore: string | null;
       }[]
     >`
-      SELECT ms.id_game_session, gs.user_id AS session_owner_id, ms.custom_name, ms.data_snapshot, ms.image_url
+      SELECT ms.id_game_session, gs.user_id AS session_owner_id, ms.custom_name, ms.data_snapshot, ms.image_url,
+        (SELECT m.lore FROM monster m WHERE m.slug = ms.monster_api_slug) AS lore
       FROM monster_session ms
       JOIN game_session gs ON gs.id_game_session = ms.id_game_session
       WHERE ms.id_monster_session = ${idMonsterSession}
@@ -1256,6 +1293,7 @@ export class GameSessionRepository {
       custom_name,
       data_snapshot,
       image_url,
+      lore,
     } = rows[0];
     if (session_owner_id !== userId) return {status: 'unauthorized'};
 
@@ -1268,6 +1306,7 @@ export class GameSessionRepository {
       customName: custom_name,
       dataSnapshot: data_snapshot,
       imageUrl: image_url,
+      lore,
     };
   }
 
@@ -1302,7 +1341,7 @@ export class GameSessionRepository {
       UPDATE monster_session SET image_url = ${imageUrl}
       WHERE id_monster_session = ${idMonsterSession}
       RETURNING id_monster_session, id_game_session, monster_api_slug, custom_name,
-                hp_current, hp_max, ac, data_snapshot, is_revealed, image_url
+                hp_current, hp_max, ac, data_snapshot, is_revealed, image_url, action_state
     `;
     return {
       status: 'ok',
@@ -1326,6 +1365,7 @@ export class GameSessionRepository {
       custom_name: string | null;
       data_snapshot: Record<string, unknown>;
       image_url: string | null;
+      lore: string | null;
     }[]
   > {
     if (!idMonsterSessions.length) return [];
@@ -1335,6 +1375,7 @@ export class GameSessionRepository {
         custom_name: string | null;
         data_snapshot: Record<string, unknown>;
         image_url: string | null;
+        lore: string | null;
       }[]
     >`
       UPDATE monster_session
@@ -1342,7 +1383,8 @@ export class GameSessionRepository {
       WHERE id_game_session = ${idGameSession}
         AND id_monster_session = ANY(${idMonsterSessions})
         AND is_revealed = false
-      RETURNING id_monster_session, custom_name, data_snapshot, image_url
+      RETURNING id_monster_session, custom_name, data_snapshot, image_url,
+        (SELECT m.lore FROM monster m WHERE m.slug = monster_session.monster_api_slug) AS lore
     `;
   }
 

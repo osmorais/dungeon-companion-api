@@ -262,6 +262,7 @@ describe('CombatService', () => {
           custom_name: null,
           data_snapshot: {name: 'Goblin'},
           image_url: null,
+          lore: null,
         },
       ]);
 
@@ -397,6 +398,7 @@ describe('CombatService', () => {
           custom_name: 'Chefão',
           data_snapshot: {},
           image_url: 'x.png',
+          lore: null,
         },
       ]);
       await service.addParticipants(
@@ -503,6 +505,71 @@ describe('CombatService', () => {
         1,
       ]);
       expect(repository.stubs.clearDelayedFlags.called).to.be.false();
+      expect(eventTypes()).to.eql(['turn_ended']);
+    });
+
+    it('vez de um monstro: rola a recarga gasta, devolve lendárias e avisa o mestre', async () => {
+      repository.stubs.findParticipants.resolves([
+        participant('a', {turn_order: 0}),
+        participant('m', {
+          turn_order: 1,
+          participant_type: 'monster',
+          id_player_session: null,
+          id_monster_session: 'ms1',
+        }),
+      ]);
+      repository.stubs.findEncounterContext.resolves(
+        encounterContext({current_turn_participant_id: 'a'}),
+      );
+      gameSessionRepository.stubs.findMonsterActionContext.resolves({
+        id_game_session: 'gs',
+        session_owner_id: 'dm',
+        data_snapshot: {
+          actions: [{name: 'Sopro', usage: {type: 'recharge', min: 5}}],
+        },
+        action_state: {recharge: ['Sopro'], legendary_used: 2},
+      });
+      sinon.stub(Math, 'random').returns(0.9); // d6 = 6
+      await service.endTurn('enc', 'dm');
+      const [id, state] =
+        gameSessionRepository.stubs.writeMonsterActionState.firstCall.args;
+      expect(id).to.equal('ms1');
+      expect(state).to.containDeep({recharge: [], legendary_used: 0});
+      expect(eventTypes()).to.eql([
+        'monster_action_state_updated',
+        'turn_ended',
+      ]);
+      const update = events[0] as Extract<
+        SessionEvent,
+        {type: 'monster_action_state_updated'}
+      >;
+      expect(update.recharge_rolls).to.eql([
+        {ability: 'Sopro', roll: 6, min: 5, recharged: true},
+      ]);
+    });
+
+    it('vez de um monstro sem nada gasto: não grava nem avisa', async () => {
+      repository.stubs.findParticipants.resolves([
+        participant('a', {turn_order: 0}),
+        participant('m', {
+          turn_order: 1,
+          participant_type: 'monster',
+          id_monster_session: 'ms1',
+        }),
+      ]);
+      repository.stubs.findEncounterContext.resolves(
+        encounterContext({current_turn_participant_id: 'a'}),
+      );
+      gameSessionRepository.stubs.findMonsterActionContext.resolves({
+        id_game_session: 'gs',
+        session_owner_id: 'dm',
+        data_snapshot: {actions: []},
+        action_state: null,
+      });
+      await service.endTurn('enc', 'dm');
+      expect(
+        gameSessionRepository.stubs.writeMonsterActionState.called,
+      ).to.be.false();
       expect(eventTypes()).to.eql(['turn_ended']);
     });
 

@@ -2,6 +2,7 @@
 import {AvatarPreset} from './character-sheet-types';
 import {DamageDefenses} from '../services/character-sheet/combat-features';
 import {CombatEncounterDetail} from './combat-types';
+import {MonsterRevealCard} from '../services/monster-reveal';
 
 export interface GameSession {
   id_game_session: string;
@@ -148,10 +149,17 @@ export interface MonsterSession {
   data_snapshot: Record<string, unknown>;
   is_revealed: boolean;
   image_url: string | null;
+  /** Usos das ações (recarga, por dia, lendárias, reação, covil) — 1.11.0. Nulo = nada gasto. */
+  action_state?: unknown;
+  /** Descrição do bestiário (pela slug; nula em ficha antiga) — só no detalhe da sessão. */
+  lore?: string | null;
 }
 
-/** Versão pública de um monstro revelado — só o que os jogadores podem ver: nome, sem status/PV. */
-export interface RevealedMonster {
+/**
+ * Versão pública de um monstro revelado — só o que os jogadores podem ver: nome, imagem e a
+ * carta (tipo, tamanho, descrição), sem status/PV.
+ */
+export interface RevealedMonster extends MonsterRevealCard {
   id_monster_session: string;
   name: string;
   image_url: string | null;

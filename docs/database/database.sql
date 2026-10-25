@@ -792,3 +792,13 @@ CREATE TABLE IF NOT EXISTS monster (
     ac INTEGER NOT NULL,
     data JSONB NOT NULL
 );
+
+-- Usos das ações do monstro na mesa (1.11.0): recargas gastas, usos por dia/descanso, ações
+-- lendárias e reação gastas desde o turno dele, e se está no covil. Formato e regras em
+-- src/services/monster-action-state.ts; o início do turno do monstro (combate) rola as recargas.
+ALTER TABLE monster_session ADD COLUMN IF NOT EXISTS action_state JSONB;
+
+-- Descrição (lore) de cada monstro do bestiário (1.11.0): aparece na carta do aviso de
+-- monstro revelado, pra mesa inteira. Texto próprio, inspirado no livro. Achada pelo slug
+-- (monster_session.monster_api_slug), então vale também pra monstros que já estavam nas mesas.
+ALTER TABLE monster ADD COLUMN IF NOT EXISTS lore TEXT;

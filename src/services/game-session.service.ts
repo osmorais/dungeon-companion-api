@@ -42,6 +42,13 @@ import {
 import {bardicInspirationSides} from './character-sheet/combat-features';
 import {startingInventory} from './character-sheet/starting-items';
 import {applyHpAmount} from './hp-math';
+import {monsterRevealCard} from './monster-reveal';
+import {
+  MonsterActionState,
+  applyActionOp,
+  normalizeActionState,
+  parseActionOp,
+} from './monster-action-state';
 import {
   applyStats,
   manualHpStats,
@@ -136,6 +143,53 @@ export class GameSessionService {
       }
       throw err;
     }
+  }
+
+  /**
+   * Pode rolar/anunciar/aplicar por esse personagem? Mestre: qualquer um da sessão; jogador: só o
+   * próprio. Sem personagem (rolagem livre, monstro, magia do grimório do mestre): **só o mestre**
+   * — antes qualquer participante passava e podia registrar rolagem com qualquer nome (1.11.0).
+   */
+  private async canActFor(
+    idGameSession: string,
+    idCharacter: number | null,
+    userId: string,
+  ): Promise<boolean> {
+    if (idCharacter === null)
+      return this.repository.isSessionOwner(idGameSession, userId);
+    return this.repository.canPostRollFor(idGameSession, idCharacter, userId);
+  }
+
+  /**
+   * Usos das ações de um monstro da mesa (1.11.0): gastar recarga/uso por dia/descanso, ação
+   * lendária e reação; restaurar; descanso; covil. Só o mestre. A ficha (`data_snapshot`) diz os
+   * limites — a operação que passa do limite volta 422 sem mudar nada.
+   */
+  async updateMonsterActionState(
+    idMonsterSession: string,
+    body: unknown,
+    userId: string,
+  ): Promise<MonsterActionState> {
+    const op = parseActionOp(body);
+    if (!op) throw new HttpErrors.UnprocessableEntity('Operação inválida');
+    const ctx = await this.repository.findMonsterActionContext(idMonsterSession);
+    if (!ctx) throw new HttpErrors.NotFound('Monstro não encontrado');
+    if (ctx.session_owner_id !== userId)
+      throw new HttpErrors.Forbidden('Apenas o mestre controla os usos do monstro');
+    const result = applyActionOp(
+      ctx.data_snapshot,
+      normalizeActionState(ctx.action_state),
+      op,
+    );
+    if ('error' in result) throw new HttpErrors.UnprocessableEntity(result.error);
+    await this.repository.writeMonsterActionState(idMonsterSession, result.state);
+    this.events.publish({
+      type: 'monster_action_state_updated',
+      id_game_session: ctx.id_game_session,
+      id_monster_session: idMonsterSession,
+      action_state: result.state,
+    });
+    return result.state;
   }
 
   /** Conta antiga ainda sem nome de usuário não cria nem entra em sessão (o web pede antes). */
@@ -356,6 +410,7 @@ export class GameSessionService {
       id_monster_session: idMonsterSession,
       name: result.customName ?? this.monsterSnapshotName(result.dataSnapshot),
       image_url: result.imageUrl ?? null,
+      ...monsterRevealCard(result.dataSnapshot, null),
     });
   }
 
@@ -636,6 +691,7 @@ export class GameSessionService {
         id_monster_session: m.id_monster_session,
         name: m.custom_name ?? this.monsterSnapshotName(m.data_snapshot),
         image_url: m.image_url,
+        ...monsterRevealCard(m.data_snapshot, m.lore),
       }));
 
     const combat = await this.combatService.getActiveEncounterDetail(id);
@@ -674,7 +730,7 @@ export class GameSessionService {
     if (input.cast_id !== undefined && !isCastId(input.cast_id))
       throw new HttpErrors.UnprocessableEntity('cast_id inválido');
 
-    const canAct = await this.repository.canPostRollFor(
+    const canAct = await this.canActFor(
       idGameSession,
       input.id_character,
       userId,
@@ -1094,6 +1150,7 @@ export class GameSessionService {
       id_monster_session: idMonsterSession,
       name: result.customName ?? this.monsterSnapshotName(result.dataSnapshot),
       image_url: result.imageUrl ?? null,
+      ...monsterRevealCard(result.dataSnapshot, result.lore),
     });
     await this.joinActiveCombat(result.idGameSession!, idMonsterSession, userId);
   }
@@ -1178,7 +1235,7 @@ export class GameSessionService {
     }
 
     const idCharacter = input.id_character ?? null;
-    const canPost = await this.repository.canPostRollFor(
+    const canPost = await this.canActFor(
       idGameSession,
       idCharacter,
       userId,
@@ -1242,7 +1299,7 @@ export class GameSessionService {
     input: {id_character: number; id_player_session: string},
     userId: string,
   ): Promise<{sides: number; to: string}> {
-    const canAct = await this.repository.canPostRollFor(idGameSession, input.id_character, userId);
+    const canAct = await this.canActFor(idGameSession, input.id_character, userId);
     if (!canAct)
       throw new HttpErrors.Forbidden('Você não pode agir por esse personagem');
     const bard = await this.repository.findCharacterBasics(input.id_character);
@@ -1357,7 +1414,7 @@ export class GameSessionService {
     )
       throw new HttpErrors.UnprocessableEntity('save_ability inválido');
 
-    const canPost = await this.repository.canPostRollFor(
+    const canPost = await this.canActFor(
       idGameSession,
       input.id_character,
       userId,
@@ -1462,7 +1519,7 @@ export class GameSessionService {
     )
       throw new HttpErrors.UnprocessableEntity('save_ability inválido');
 
-    const canPost = await this.repository.canPostRollFor(
+    const canPost = await this.canActFor(
       idGameSession,
       input.id_character,
       userId,

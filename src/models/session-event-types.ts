@@ -13,6 +13,11 @@ import {
   SpellCardInfo,
   WeaponCardInfo,
 } from './game-session-types';
+import {
+  MonsterActionState,
+  RechargeRoll,
+} from '../services/monster-action-state';
+import {MonsterRevealCard} from '../services/monster-reveal';
 
 /**
  * Um tipo por chave = payload da mutação; SessionEvent é derivado como union discriminada
@@ -26,11 +31,12 @@ export interface SessionEventPayloadMap {
   npc_removed: {id_npc_session: string};
   monster_added: {monster: MonsterSession};
   monster_removed: {id_monster_session: string};
+  /** Com a carta (tipo e tamanho; sem lore) pra explosão no aviso de derrota (1.11.0). */
   monster_defeated: {
     id_monster_session: string;
     name: string;
     image_url: string | null;
-  };
+  } & MonsterRevealCard;
   /** Mestre apagou a sessão — quem está nela volta pro início. */
   session_deleted: Record<never, never>;
   /** Mestre declarou um descanso do grupo — só o aviso pra mesa (PV vai em *_hp_updated). */
@@ -70,11 +76,19 @@ export interface SessionEventPayloadMap {
     abilities?: Partial<Record<MonsterAbilityKey, number>>;
   };
   monster_image_updated: {id_monster_session: string; image_url: string};
+  /** Usos das ações do monstro mudaram (1.11.0). `recharge_rolls`: d6 de recarga rolados no
+   *  início do turno dele; `lair`: lembrete de ação de covil (contagem 20). Só o mestre recebe. */
+  monster_action_state_updated: {
+    id_monster_session: string;
+    action_state: MonsterActionState;
+    recharge_rolls?: RechargeRoll[];
+  };
+  /** Com tipo, tamanho e descrição pra carta do aviso (1.11.0) — ver monster-reveal.ts. */
   monster_revealed: {
     id_monster_session: string;
     name: string;
     image_url: string | null;
-  };
+  } & MonsterRevealCard;
   monster_hidden: {id_monster_session: string};
   /** `cast_id`: rolagem de um lançamento de magia — a mesa mostra no aviso do lançamento. */
   roll_added: {roll: RollLogEntry & {cast_id?: string}};
@@ -153,6 +167,7 @@ export const DM_ONLY_EVENT_TYPES: ReadonlySet<SessionEventType> = new Set([
   'monster_hp_updated',
   'monster_stats_updated',
   'monster_image_updated',
+  'monster_action_state_updated',
 ]);
 
 /**

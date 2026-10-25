@@ -603,16 +603,51 @@ describe('GameSessionService', () => {
       expect(detail.recent_rolls.length).to.equal(2);
     });
 
-    it('jogador não vê a lista de monstros, só os revelados (nome + imagem), e não vê rolagem oculta', async () => {
+    it('jogador não vê a lista de monstros, só os revelados (nome, imagem e carta), e não vê rolagem oculta', async () => {
       const detail = await service.getSession('gs', 'player');
       expect(detail.monsters).to.eql([]);
+      const noCard = {monster_type: null, size: null, lore: null};
       expect(detail.revealed_monsters).to.eql([
-        {id_monster_session: 'm1', name: 'Goblin', image_url: null},
-        {id_monster_session: 'm2', name: 'Chefão', image_url: 'c.png'},
+        {id_monster_session: 'm1', name: 'Goblin', image_url: null, ...noCard},
+        {
+          id_monster_session: 'm2',
+          name: 'Chefão',
+          image_url: 'c.png',
+          ...noCard,
+        },
       ]);
       expect(
         detail.recent_rolls.map(r => (r as unknown as {id: string}).id),
       ).to.eql(['r1']);
+    });
+
+    it('revelado do bestiário vem com a carta (tipo, tamanho, lore), sem PV nem CA', async () => {
+      repository.stubs.findById.resolves({
+        ...sessionDetail(),
+        monsters: [
+          monster('m1', {
+            is_revealed: true,
+            data_snapshot: {
+              name: 'Goblin',
+              type: 'humanoide',
+              size: 'Pequeno',
+              hit_points: 7,
+            },
+            lore: 'Pequenos e traiçoeiros.',
+          }),
+        ],
+      });
+      const detail = await service.getSession('gs', 'player');
+      expect(detail.revealed_monsters).to.eql([
+        {
+          id_monster_session: 'm1',
+          name: 'Goblin',
+          image_url: null,
+          monster_type: 'humanoide',
+          size: 'Pequeno',
+          lore: 'Pequenos e traiçoeiros.',
+        },
+      ]);
     });
 
     it('sessão inexistente ou sem acesso', async () => {
@@ -716,6 +751,64 @@ describe('GameSessionService', () => {
   });
 
   // -------------------------------------------------------------------------
+  describe('usos das ações do monstro (updateMonsterActionState)', () => {
+    const ctx = {
+      id_game_session: 'gs',
+      session_owner_id: 'dm',
+      data_snapshot: {
+        actions: [{name: 'Sopro', usage: {type: 'recharge', min: 5}}],
+      },
+      action_state: null,
+    };
+
+    it('mestre gasta a recarga: grava e avisa a mesa do mestre', async () => {
+      repository.stubs.findMonsterActionContext.resolves(ctx);
+      const state = await service.updateMonsterActionState(
+        'ms1',
+        {op: 'use', ability: 'Sopro'},
+        'dm',
+      );
+      expect(state.recharge).to.eql(['Sopro']);
+      sinon.assert.calledWith(
+        repository.stubs.writeMonsterActionState,
+        'ms1',
+        state,
+      );
+      expect(events.map(e => e.type)).to.eql(['monster_action_state_updated']);
+      expect(isDmOnlyEvent(events[0])).to.be.true();
+    });
+
+    it('outro usuário: 403; monstro inexistente: 404; operação inválida ou além do limite: 422', async () => {
+      repository.stubs.findMonsterActionContext.resolves(ctx);
+      await expect(
+        service.updateMonsterActionState(
+          'ms1',
+          {op: 'use', ability: 'Sopro'},
+          'jogador',
+        ),
+      ).to.be.rejectedWith({statusCode: 403});
+      await expect(
+        service.updateMonsterActionState('ms1', {op: 'voar'}, 'dm'),
+      ).to.be.rejectedWith({statusCode: 422});
+      repository.stubs.findMonsterActionContext.resolves({
+        ...ctx,
+        action_state: {recharge: ['Sopro']},
+      });
+      await expect(
+        service.updateMonsterActionState(
+          'ms1',
+          {op: 'use', ability: 'Sopro'},
+          'dm',
+        ),
+      ).to.be.rejectedWith({statusCode: 422});
+      repository.stubs.findMonsterActionContext.resolves(null);
+      await expect(
+        service.updateMonsterActionState('x', {op: 'rest'}, 'dm'),
+      ).to.be.rejectedWith({statusCode: 404});
+      expect(repository.stubs.writeMonsterActionState.called).to.be.false();
+    });
+  });
+
   describe('updateMonsterStats', () => {
     const valid = {hpCurrent: 5, hpMax: 10, ac: 13};
 
@@ -762,13 +855,19 @@ describe('GameSessionService', () => {
 
   // -------------------------------------------------------------------------
   describe('monstros', () => {
-    it('revelar anuncia nome (custom ou do snapshot) e imagem', async () => {
+    it('revelar anuncia nome (custom ou do snapshot), imagem e a carta (tipo, tamanho, lore)', async () => {
       repository.stubs.setMonsterRevealed.resolves({
         status: 'ok',
         idGameSession: 'gs',
         customName: null,
-        dataSnapshot: {name: 'Orc'},
+        dataSnapshot: {
+          name: 'Orc',
+          type: 'humanoide',
+          size: 'Médio',
+          armor_class: 13,
+        },
         imageUrl: 'o.png',
+        lore: 'Saqueadores das montanhas.',
       });
       await service.revealMonster('m', 'dm');
       expect(events).to.eql([
@@ -778,6 +877,9 @@ describe('GameSessionService', () => {
           id_monster_session: 'm',
           name: 'Orc',
           image_url: 'o.png',
+          monster_type: 'humanoide',
+          size: 'Médio',
+          lore: 'Saqueadores das montanhas.',
         },
       ]);
     });
@@ -852,6 +954,34 @@ describe('GameSessionService', () => {
         name: 'Monstro',
         image_url: null,
       });
+    });
+
+    it('derrotar anuncia a carta (tipo e tamanho), sem lore nem números', async () => {
+      repository.stubs.removeMonster.resolves({
+        status: 'ok',
+        idGameSession: 'gs',
+        customName: null,
+        dataSnapshot: {
+          name: 'Orc',
+          type: 'humanoide',
+          size: 'Médio',
+          hit_points: 15,
+        },
+        imageUrl: null,
+      });
+      await service.defeatMonster('m', 'dm');
+      expect(events).to.eql([
+        {
+          type: 'monster_defeated',
+          id_game_session: 'gs',
+          id_monster_session: 'm',
+          name: 'Orc',
+          image_url: null,
+          monster_type: 'humanoide',
+          size: 'Médio',
+          lore: null,
+        },
+      ]);
     });
 
     it('derrotar NÃO limpa a imagem (o modal de derrota ainda vai carregá-la)', async () => {
@@ -1429,6 +1559,21 @@ describe('GameSessionService', () => {
       await expect(service.addRoll('gs', ROLL, 'u')).to.be.rejectedWith(
         /não tem acesso/,
       );
+    });
+
+    it('sem personagem (monstro, rolagem livre) só o mestre registra — jogador não forja rolagem', async () => {
+      repository.stubs.isSessionOwner.withArgs('gs', 'dm').resolves(true);
+      repository.stubs.isSessionOwner.withArgs('gs', 'player').resolves(false);
+      const monsterRoll = {...ROLL, id_character: null, actor_name: 'Goblin'};
+      await expect(
+        service.addRoll('gs', monsterRoll, 'player'),
+      ).to.be.rejectedWith({statusCode: 403});
+      const roll = await service.addRoll('gs', monsterRoll, 'dm');
+      expect(roll.actor_name).to.equal('Goblin');
+      // Com personagem continua valendo a regra de antes (dono ou mestre).
+      expect(
+        repository.stubs.canPostRollFor.calledWith('gs', null),
+      ).to.be.false();
     });
 
     it('rolagem oculta só vale pro mestre; jogador tem o campo ignorado', async () => {

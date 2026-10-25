@@ -237,6 +237,26 @@ export class GameSessionController {
     });
   }
 
+  @patch('/api/game-session/monster-session/{id}/action-state')
+  @response(200, {
+    description:
+      'Uses of the monster actions (recharge, per day, legendary, reaction, lair) — DM only',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async updateMonsterActionState(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      description:
+        '{op: use|restore|legendary, ability} | {op: reaction|rest} | {op: lair, on: boolean}',
+      required: true,
+      content: {'application/json': {schema: {type: 'object'}}},
+    })
+    body: object,
+  ): Promise<object> {
+    return this.gameSessionService.updateMonsterActionState(id, body, currentUser.id);
+  }
+
   @post('/api/game-session/monster-session/{id}/reveal')
   @response(204, {
     description: 'Reveals a monster to the players (name only, no stats/HP)',

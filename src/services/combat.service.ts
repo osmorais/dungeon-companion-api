@@ -6,6 +6,8 @@ import {CharacterRepository} from '../repositories/character.repository';
 import {GameSessionRepository} from '../repositories/game-session.repository';
 import {SessionEventsService} from './session-events.service';
 import {FEATS} from './character-sheet/feats';
+import {normalizeActionState, startOfMonsterTurn} from './monster-action-state';
+import {monsterRevealCard} from './monster-reveal';
 import {
   CombatEncounter,
   CombatEncounterDetail,
@@ -126,6 +128,7 @@ export class CombatService {
    */
   private async activateWithComputedOrder(
     idCombatEncounter: string,
+    idGameSession: string,
   ): Promise<void> {
     const participants =
       await this.findParticipantsWithLiveInitiativeModifier(idCombatEncounter);
@@ -136,6 +139,45 @@ export class CombatService {
       idCombatEncounter,
       participants[0].id_combat_participant,
     );
+    await this.onTurnStart(idGameSession, participants[0]);
+  }
+
+  /**
+   * Início do turno de um monstro (1.11.0): rola o d6 das recargas gastas e devolve as ações
+   * lendárias e a reação. Só grava e avisa o mestre quando algo muda.
+   */
+  private async onTurnStart(
+    idGameSession: string,
+    participant: CombatParticipant,
+  ): Promise<void> {
+    if (
+      participant.participant_type !== 'monster' ||
+      !participant.id_monster_session
+    )
+      return;
+    const ctx = await this.gameSessionRepository.findMonsterActionContext(
+      participant.id_monster_session,
+    );
+    if (!ctx) return;
+    const before = normalizeActionState(ctx.action_state);
+    const {state, rolls} = startOfMonsterTurn(
+      ctx.data_snapshot,
+      before,
+      () => Math.floor(Math.random() * 6) + 1,
+    );
+    if (!rolls.length && before.legendary_used === 0 && !before.reaction_used)
+      return;
+    await this.gameSessionRepository.writeMonsterActionState(
+      participant.id_monster_session,
+      state,
+    );
+    this.events.publish({
+      type: 'monster_action_state_updated',
+      id_game_session: idGameSession,
+      id_monster_session: participant.id_monster_session,
+      action_state: state,
+      ...(rolls.length ? {recharge_rolls: rolls} : {}),
+    });
   }
 
   /** Avança current_turn_participant_id pro próximo da ordem efetiva, incrementando a rodada
@@ -145,6 +187,7 @@ export class CombatService {
     participants: CombatParticipant[],
     currentParticipantId: string,
     roundNumber: number,
+    idGameSession: string,
   ): Promise<void> {
     const order = this.effectiveTurnOrder(participants);
     const currentIndex = order.findIndex(
@@ -167,6 +210,7 @@ export class CombatService {
       isNewRound ? roundNumber + 1 : roundNumber,
     );
     if (isNewRound) await this.repository.clearDelayedFlags(idCombatEncounter);
+    await this.onTurnStart(idGameSession, next);
   }
 
   async getActiveEncounterDetail(
@@ -336,7 +380,10 @@ export class CombatService {
     );
 
     if (validPlayerIds.length === 0) {
-      await this.activateWithComputedOrder(encounter.id_combat_encounter);
+      await this.activateWithComputedOrder(
+        encounter.id_combat_encounter,
+        idGameSession,
+      );
     }
 
     // Entrar na luta já revela o monstro pros jogadores — anuncia (nome + imagem) antes do
@@ -354,6 +401,7 @@ export class CombatService {
           monster.custom_name ??
           this.monsterSnapshotName(monster.data_snapshot),
         image_url: monster.image_url,
+        ...monsterRevealCard(monster.data_snapshot, monster.lore),
       });
     }
 
@@ -437,6 +485,7 @@ export class CombatService {
           monster.custom_name ??
           this.monsterSnapshotName(monster.data_snapshot),
         image_url: monster.image_url,
+        ...monsterRevealCard(monster.data_snapshot, monster.lore),
       });
     }
 
@@ -497,7 +546,10 @@ export class CombatService {
         context.id_combat_encounter,
       );
       if (pending === 0) {
-        await this.activateWithComputedOrder(context.id_combat_encounter);
+        await this.activateWithComputedOrder(
+          context.id_combat_encounter,
+          context.id_game_session,
+        );
       }
     } else {
       // Combate já 'active' — quem chegou depois só entra no fim da ordem atual, sem
@@ -554,6 +606,7 @@ export class CombatService {
       participants,
       current.id_combat_participant,
       context.round_number,
+      context.id_game_session,
     );
 
     const combat = (await this.getActiveEncounterDetail(
@@ -681,6 +734,7 @@ export class CombatService {
       participants,
       current.id_combat_participant,
       context.round_number,
+      context.id_game_session,
     );
 
     const combat = (await this.getActiveEncounterDetail(
