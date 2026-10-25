@@ -5,6 +5,24 @@ export interface MonsterCatalogInput {
   custom_name?: string | null;
 }
 
+/** Item da lista do bestiário (tabela `monster`) mostrada antes de catalogar. */
+export interface BestiaryMonsterSummary {
+  index: string;
+  name: string;
+  challenge_rating: number;
+  size: string;
+  type: string;
+}
+
+/** Ficha do bestiário — `data` segue as chaves da dnd5eapi, com valores em português. */
+export interface BestiaryMonster {
+  slug: string;
+  name: string;
+  hp_max: number;
+  ac: number;
+  data: Record<string, unknown>;
+}
+
 export interface MonsterCatalogEntry {
   id_monster_catalog: string;
   user_id: string;
