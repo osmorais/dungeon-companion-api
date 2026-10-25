@@ -1,36 +1,54 @@
 import {injectable, BindingScope} from '@loopback/core';
-import nodemailer from 'nodemailer';
-import SMTPTransport from 'nodemailer/lib/smtp-transport';
-import {passwordResetTemplate} from './email-templates/password-reset.template';
+import crypto from 'crypto';
 
+/** Script no site (Hostinger) que envia o e-mail pelo SMTP de lá — ver recuperar-senha.php no web. */
+const DEFAULT_RELAY_URL = 'https://forjaarcana.com/mail/recuperar-senha.php';
+const RELAY_TIMEOUT_MS = 15_000;
+
+/** Assinatura que o script confere: HMAC-SHA256 hex de "<timestamp>.<corpo>". */
+export function signRelayRequest(
+  secret: string,
+  timestamp: string,
+  body: string,
+): string {
+  return crypto
+    .createHmac('sha256', secret)
+    .update(`${timestamp}.${body}`)
+    .digest('hex');
+}
+
+/**
+ * E-mail de recuperação de senha (1.12.1). O Render bloqueia SMTP, então a api não envia: chama
+ * por HTTPS o script PHP do site (mesmo servidor do e-mail da Hostinger), assinado com o segredo
+ * `MAIL_RELAY_SECRET` (o mesmo do forja-mail-config.php de lá). O script monta o link e o texto a
+ * partir do token — aqui só vão o endereço e o token.
+ */
 @injectable({scope: BindingScope.TRANSIENT})
 export class EmailService {
-  private transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST ?? 'smtp.hostinger.com',
-    port: Number(process.env.SMTP_PORT ?? 465),
-    secure: Number(process.env.SMTP_PORT ?? 465) === 465,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-    family: 4, // force IPv4 — Render has no IPv6 egress
-  } as SMTPTransport.Options);
+  /** Substituível nos testes. */
+  fetchFn: typeof fetch = (...args) => fetch(...args);
 
   async sendPasswordReset(email: string, token: string): Promise<void> {
-    const frontendUrl = process.env.FRONTEND_URL ?? 'https://forjaarcana.com';
-    const link = `${frontendUrl}/reset-password?token=${token}`;
-    const logoUrl = `${frontendUrl}/forja_arcana.png`;
+    // Sem fallback: sem o segredo o script recusa tudo, então falha aqui com um motivo claro.
+    const secret = process.env.MAIL_RELAY_SECRET;
+    if (!secret) throw new Error('MAIL_RELAY_SECRET não configurado');
+    const url = process.env.MAIL_RELAY_URL ?? DEFAULT_RELAY_URL;
 
-    // if (process.env.NODE_ENV !== 'production') {
-    //   console.log(`[EmailService] Password reset link for ${email}: ${link}`);
-    //   return;
-    // }
-
-    await this.transporter.sendMail({
-      from: process.env.SMTP_FROM ?? process.env.SMTP_USER,
-      to: email,
-      subject: '🗝️ Redefinição de Senha - Forja Arcana',
-      html: passwordResetTemplate(link, logoUrl),
+    const body = JSON.stringify({email, token});
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const response = await this.fetchFn(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Forja-Timestamp': timestamp,
+        'X-Forja-Signature': signRelayRequest(secret, timestamp, body),
+      },
+      body,
+      signal: AbortSignal.timeout(RELAY_TIMEOUT_MS),
     });
+    if (!response.ok) {
+      // Só o status (o corpo do script tem só um código de erro, sem o endereço).
+      throw new Error(`Envio do e-mail falhou (HTTP ${response.status})`);
+    }
   }
 }
