@@ -148,7 +148,16 @@ export class AuthController {
     this.rateLimit.consume('forgotPasswordEmail', body.email);
     const token = await this.authService.forgotPassword(body.email);
     if (token) {
-      await this.emailService.sendPasswordReset(body.email, token);
+      // Mesma resposta com ou sem conta: um erro só quando o e-mail existe revelaria quem tem
+      // conta. A falha fica no log, sem o endereço.
+      try {
+        await this.emailService.sendPasswordReset(body.email, token);
+      } catch (err) {
+        console.error(
+          '[auth] e-mail de recuperação não enviado:',
+          (err as Error).message,
+        );
+      }
     }
     return {message: 'Se o e-mail existir, você receberá as instruções em breve.'};
   }

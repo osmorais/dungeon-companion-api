@@ -11,6 +11,8 @@ import {
   SecretRollCheck,
   ShownReferenceImage,
   SpellCardInfo,
+  MonsterActionCardInfo,
+  MonsterCastInfo,
   WeaponCardInfo,
 } from './game-session-types';
 import {
@@ -114,11 +116,15 @@ export interface SessionEventPayloadMap {
   spell_cast_stage: {
     cast_id: string;
     user_id: string;
-    id_character: number;
+    /** `null` na ação de monstro (`monster`). */
+    id_character: number | null;
     actor_name: string;
-    /** Lançamento de magia (`weapon` null) ou ataque com arma (`spell` null, 1.6.1). */
+    /** Magia (1.5.0), ataque com arma (1.6.1) ou ação de monstro (1.13.0): só um não é null. */
     spell: SpellCardInfo | null;
     weapon: WeaponCardInfo | null;
+    monster_action: MonsterActionCardInfo | null;
+    /** Quem age na ação de monstro (só monstro revelado; nome e imagem vêm do servidor). */
+    monster: MonsterCastInfo | null;
     phase: 'open' | 'done' | 'cancel';
     rolls: CastStageRoll[];
     applied: CastStageApplied[];

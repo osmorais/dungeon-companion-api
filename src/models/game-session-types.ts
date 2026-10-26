@@ -298,13 +298,37 @@ export interface WeaponCardInfo {
   is_ranged: boolean;
 }
 
+/**
+ * Carta da ação do monstro na tela de lançamento (1.13.0): montada pelo mestre a partir da ficha
+ * (como a carta de arma vem do jogador). Os números são os que os dados já mostram.
+ */
+export interface MonsterActionCardInfo {
+  name: string;
+  kind: 'attack' | 'save' | 'damage';
+  /** Números do pergaminho ("ATAQUE" "+4", "DANO" "1d6+2 cortante", "CD" "13 DES"). */
+  stats: {label: string; value: string}[];
+}
+
+/** Monstro que age na tela de lançamento — o que a mesa já vê do monstro revelado. */
+export interface MonsterCastInfo {
+  id_monster_session: string;
+  name: string;
+  image_url: string | null;
+  monster_type: string | null;
+  size: string | null;
+}
+
 export interface SpellCastStageInput {
   cast_id: string;
-  id_character: number;
+  /** Personagem que lança — `null` quando é o monstro (`id_monster_session`). */
+  id_character: number | null;
   actor_name: string;
-  /** Magia lançada — ou `weapon` (ataque com arma), um dos dois. */
+  /** Uma das três: magia lançada, `weapon` (ataque com arma) ou `monster_action` (ação do monstro,
+   *  com `id_monster_session`, só o mestre e só monstro revelado). */
   id_spell?: number | null;
   weapon?: WeaponCardInfo | null;
+  monster_action?: MonsterActionCardInfo | null;
+  id_monster_session?: string | null;
   /** `open`: ainda decidindo (o aviso fica); `done`: acabou (o aviso some depois de alguns
    *  segundos); `cancel`: fechou sem rolar nada (o aviso some na hora). */
   phase: 'open' | 'done' | 'cancel';

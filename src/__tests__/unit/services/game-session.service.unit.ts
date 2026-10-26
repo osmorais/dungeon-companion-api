@@ -1915,6 +1915,8 @@ describe('GameSessionService', () => {
           actor_name: 'Merlin',
           spell: SPELL,
           weapon: null,
+          monster_action: null,
+          monster: null,
           phase: 'open',
           rolls: STAGE.rolls,
           applied: [],
@@ -1947,6 +1949,107 @@ describe('GameSessionService', () => {
       expect(repository.stubs.findSpellCard.called).to.be.false();
     });
 
+    describe('ação de monstro (1.13.0)', () => {
+      const ACTION = {
+        name: 'Cimitarra',
+        kind: 'attack' as const,
+        stats: [
+          {label: 'ATAQUE', value: '+4'},
+          {label: 'DANO', value: '1d6+2 cortante'},
+        ],
+      };
+      const MONSTER_STAGE = {
+        cast_id: 'cast-mon-1',
+        id_character: null,
+        actor_name: 'qualquer coisa',
+        id_monster_session: 'm1',
+        monster_action: ACTION,
+        phase: 'open' as const,
+        rolls: [],
+      };
+      const found = (over: object = {}) => ({
+        id_game_session: 'gs',
+        session_owner_id: 'dm',
+        is_revealed: true,
+        custom_name: null,
+        image_url: 'g.png',
+        data_snapshot: {name: 'Goblin', type: 'humanoide', size: 'Pequeno'},
+        ...over,
+      });
+
+      it('mestre publica com a carta da ação e o monstro (nome do servidor), sem ranking', async () => {
+        repository.stubs.findMonsterForCast.resolves(found());
+        await service.publishSpellCastStage(
+          'gs',
+          {...MONSTER_STAGE, phase: 'done'},
+          'dm',
+        );
+        expect(events[0]).to.containDeep({
+          type: 'spell_cast_stage',
+          id_character: null,
+          actor_name: 'Goblin',
+          spell: null,
+          weapon: null,
+          monster_action: ACTION,
+          monster: {
+            id_monster_session: 'm1',
+            name: 'Goblin',
+            image_url: 'g.png',
+            monster_type: 'humanoide',
+            size: 'Pequeno',
+          },
+        });
+        expect(repository.stubs.canPostRollFor.called).to.be.false();
+        expect(repository.stubs.bumpStats.called).to.be.false();
+      });
+
+      it('jogador não age pelo monstro (403); monstro de outra sessão (404)', async () => {
+        repository.stubs.findMonsterForCast.resolves(found());
+        await expect(
+          service.publishSpellCastStage('gs', MONSTER_STAGE, 'jogador'),
+        ).to.be.rejectedWith({statusCode: 403});
+        repository.stubs.findMonsterForCast.resolves(
+          found({id_game_session: 'outra'}),
+        );
+        await expect(
+          service.publishSpellCastStage('gs', MONSTER_STAGE, 'dm'),
+        ).to.be.rejectedWith({statusCode: 404});
+        expect(events).to.eql([]);
+      });
+
+      it('monstro escondido nunca vai pra mesa (422)', async () => {
+        repository.stubs.findMonsterForCast.resolves(
+          found({is_revealed: false}),
+        );
+        await expect(
+          service.publishSpellCastStage('gs', MONSTER_STAGE, 'dm'),
+        ).to.be.rejectedWith({statusCode: 422});
+        expect(events).to.eql([]);
+      });
+
+      it('valida a carta da ação e exige id_character nulo', async () => {
+        repository.stubs.findMonsterForCast.resolves(found());
+        for (const bad of [
+          {...MONSTER_STAGE, monster_action: {...ACTION, kind: 'magia'}},
+          {...MONSTER_STAGE, monster_action: {...ACTION, name: ''}},
+          {
+            ...MONSTER_STAGE,
+            monster_action: {
+              ...ACTION,
+              stats: Array(5).fill({label: 'X', value: '1'}),
+            },
+          },
+          {...MONSTER_STAGE, id_character: 1},
+          {...MONSTER_STAGE, id_spell: 9},
+        ]) {
+          await expect(
+            service.publishSpellCastStage('gs', bad as never, 'dm'),
+          ).to.be.rejectedWith({statusCode: 422});
+        }
+        expect(events).to.eql([]);
+      });
+    });
+
     it('exige magia ou arma (uma só) e valida a carta da arma', async () => {
       const weapon = {
         id_weapon: null,
@@ -1962,10 +2065,14 @@ describe('GameSessionService', () => {
       const {id_spell: _omit, ...base} = STAGE;
       await expect(
         service.publishSpellCastStage('gs', base, 'u'),
-      ).to.be.rejectedWith(/magia \(id_spell\) ou a arma/);
+      ).to.be.rejectedWith(
+        /magia \(id_spell\), a arma \(weapon\) ou a ação do monstro/,
+      );
       await expect(
         service.publishSpellCastStage('gs', {...STAGE, weapon}, 'u'),
-      ).to.be.rejectedWith(/magia \(id_spell\) ou a arma/);
+      ).to.be.rejectedWith(
+        /magia \(id_spell\), a arma \(weapon\) ou a ação do monstro/,
+      );
       await expect(
         service.publishSpellCastStage(
           'gs',
