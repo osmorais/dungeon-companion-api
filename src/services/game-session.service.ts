@@ -32,6 +32,8 @@ import {
   RollLogInput,
   RollType,
   SpellCastStageInput,
+  MonsterActionCardInfo,
+  MonsterCastInfo,
   WeaponCardInfo,
   CAST_ROLL_KINDS,
   CAST_ROLL_OUTCOMES,
@@ -1458,16 +1460,24 @@ export class GameSessionService {
 
     if (!isCastId(input.cast_id))
       throw new HttpErrors.UnprocessableEntity('cast_id inválido');
-    if (!Number.isInteger(input.id_character))
-      throw new HttpErrors.UnprocessableEntity('id_character inválido');
     if (!input.actor_name?.trim() || input.actor_name.length > 100)
       throw new HttpErrors.UnprocessableEntity('actor_name é obrigatório');
     const hasSpell = input.id_spell !== undefined && input.id_spell !== null;
     const hasWeapon = input.weapon !== undefined && input.weapon !== null;
-    if (hasSpell === hasWeapon)
+    const hasMonsterAction =
+      input.monster_action !== undefined && input.monster_action !== null;
+    if ([hasSpell, hasWeapon, hasMonsterAction].filter(Boolean).length !== 1)
       throw new HttpErrors.UnprocessableEntity(
-        'Informe a magia (id_spell) ou a arma (weapon)',
+        'Informe a magia (id_spell), a arma (weapon) ou a ação do monstro (monster_action)',
       );
+    // Ação de monstro: sem personagem (é o monstro da mesa); senão, o personagem de quem lança.
+    if (hasMonsterAction ? input.id_character !== null : !Number.isInteger(input.id_character))
+      throw new HttpErrors.UnprocessableEntity('id_character inválido');
+    const monsterAction = hasMonsterAction
+      ? validMonsterAction(input.monster_action)
+      : null;
+    if (hasMonsterAction && !monsterAction)
+      throw new HttpErrors.UnprocessableEntity('monster_action inválida');
     if (hasSpell && !Number.isInteger(input.id_spell))
       throw new HttpErrors.UnprocessableEntity('id_spell inválido');
     const weapon = hasWeapon ? validWeaponCard(input.weapon) : null;
@@ -1519,33 +1529,47 @@ export class GameSessionService {
     )
       throw new HttpErrors.UnprocessableEntity('save_ability inválido');
 
-    const canPost = await this.canActFor(
-      idGameSession,
-      input.id_character,
-      userId,
-    );
-    if (!canPost)
-      throw new HttpErrors.Forbidden(
-        'Você não pode lançar uma magia por esse personagem',
+    let monster: MonsterCastInfo | null = null;
+    if (monsterAction) {
+      monster = await this.monsterForCast(
+        idGameSession,
+        input.id_monster_session,
+        userId,
       );
+    } else {
+      const canPost = await this.canActFor(
+        idGameSession,
+        input.id_character as number,
+        userId,
+      );
+      if (!canPost)
+        throw new HttpErrors.Forbidden(
+          'Você não pode lançar uma magia por esse personagem',
+        );
+    }
     const spell = hasSpell
       ? await this.repository.findSpellCard(input.id_spell as number)
       : null;
     if (hasSpell && !spell)
       throw new HttpErrors.NotFound('Magia não encontrada');
 
-    // Conta a magia uma vez, quando o lançamento termina.
+    // Conta a magia uma vez, quando o lançamento termina (monstro não entra no ranking).
     if (hasSpell && input.phase === 'done')
-      await this.recordStats(idGameSession, input.id_character, {spells_cast: 1});
+      await this.recordStats(idGameSession, input.id_character as number, {
+        spells_cast: 1,
+      });
     this.events.publish({
       type: 'spell_cast_stage',
       id_game_session: idGameSession,
       cast_id: input.cast_id,
       user_id: userId,
-      id_character: input.id_character,
-      actor_name: input.actor_name,
+      id_character: monster ? null : input.id_character,
+      // Do monstro, o nome que a mesa conhece (apelido ou da ficha), não o que o cliente mandou.
+      actor_name: monster?.name ?? input.actor_name,
       spell,
       weapon,
+      monster_action: monsterAction,
+      monster,
       phase: input.phase,
       rolls: input.rolls.map(r => ({
         id_roll: r.id_roll,
@@ -1561,6 +1585,36 @@ export class GameSessionService {
       save_dc: saveDc,
       save_ability: saveAbility,
     });
+  }
+
+  /**
+   * Ação de monstro na tela de lançamento (1.13.0): só o mestre da sessão, e só com o monstro
+   * revelado — escondido, a rolagem é oculta e a mesa não recebe aviso nenhum (o web nem manda).
+   */
+  private async monsterForCast(
+    idGameSession: string,
+    idMonsterSession: string | null | undefined,
+    userId: string,
+  ): Promise<MonsterCastInfo> {
+    if (typeof idMonsterSession !== 'string' || !idMonsterSession)
+      throw new HttpErrors.UnprocessableEntity('id_monster_session inválido');
+    const found = await this.repository.findMonsterForCast(idMonsterSession);
+    if (!found || found.id_game_session !== idGameSession)
+      throw new HttpErrors.NotFound('Monstro não encontrado na sessão');
+    if (found.session_owner_id !== userId)
+      throw new HttpErrors.Forbidden('Apenas o mestre age pelo monstro');
+    if (!found.is_revealed)
+      throw new HttpErrors.UnprocessableEntity(
+        'Monstro escondido não aparece pra mesa',
+      );
+    const card = monsterRevealCard(found.data_snapshot, null);
+    return {
+      id_monster_session: idMonsterSession,
+      name: found.custom_name ?? this.monsterSnapshotName(found.data_snapshot),
+      image_url: found.image_url,
+      monster_type: card.monster_type,
+      size: card.size,
+    };
   }
 
   /**
@@ -1614,6 +1668,26 @@ const smallInt = (value: unknown, limit: number): value is number =>
   Number.isInteger(value) && Math.abs(value as number) <= limit;
 
 /** Carta da arma vinda do cliente: só campos de exibição, com tamanho e faixa limitados. */
+/** Carta da ação de monstro vinda do mestre: nome, tipo e até 4 números curtos. */
+function validMonsterAction(value: unknown): MonsterActionCardInfo | null {
+  const a = value as Partial<MonsterActionCardInfo> | null | undefined;
+  if (!a || typeof a !== 'object') return null;
+  if (!shortText(a.name, 100)) return null;
+  if (!['attack', 'save', 'damage'].includes(a.kind as string)) return null;
+  if (!Array.isArray(a.stats) || a.stats.length > 4) return null;
+  const stats = a.stats.map(s => ({label: s?.label, value: s?.value}));
+  if (!stats.every(s => shortText(s.label, 20) && shortText(s.value, 40)))
+    return null;
+  return {
+    name: (a.name as string).trim(),
+    kind: a.kind as MonsterActionCardInfo['kind'],
+    stats: stats.map(s => ({
+      label: (s.label as string).trim(),
+      value: (s.value as string).trim(),
+    })),
+  };
+}
+
 function validWeaponCard(value: unknown): WeaponCardInfo | null {
   const w = value as Partial<WeaponCardInfo> | null | undefined;
   if (!w || typeof w !== 'object') return null;

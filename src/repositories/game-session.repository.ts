@@ -1248,6 +1248,35 @@ export class GameSessionRepository {
     return rows[0] ?? null;
   }
 
+  /** Monstro que age na tela de lançamento (1.13.0): sessão, dono, se está revelado e o que a mesa vê. */
+  async findMonsterForCast(idMonsterSession: string): Promise<{
+    id_game_session: string;
+    session_owner_id: string | null;
+    is_revealed: boolean;
+    custom_name: string | null;
+    image_url: string | null;
+    data_snapshot: Record<string, unknown>;
+  } | null> {
+    const rows = await this.db.sql<
+      {
+        id_game_session: string;
+        session_owner_id: string | null;
+        is_revealed: boolean;
+        custom_name: string | null;
+        image_url: string | null;
+        data_snapshot: Record<string, unknown>;
+      }[]
+    >`
+      SELECT ms.id_game_session, gs.user_id AS session_owner_id, ms.is_revealed, ms.custom_name,
+             ms.image_url, ms.data_snapshot
+      FROM monster_session ms
+      JOIN game_session gs ON gs.id_game_session = ms.id_game_session
+      WHERE ms.id_monster_session = ${idMonsterSession}
+      LIMIT 1
+    `;
+    return rows[0] ?? null;
+  }
+
   async writeMonsterActionState(idMonsterSession: string, state: MonsterActionState): Promise<void> {
     await this.db.sql`
       UPDATE monster_session SET action_state = ${this.db.sql.json(state as never)}
