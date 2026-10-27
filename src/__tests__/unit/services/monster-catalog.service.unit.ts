@@ -126,6 +126,11 @@ describe('MonsterCatalogService (bestiário)', () => {
         challenge_rating: 10,
         size: 'Grande',
         type: 'aberração',
+        alignment: 'leal e mau',
+        hp_max: 135,
+        ac: 17,
+        legendary: true,
+        flies: false,
       },
     ];
     bestiary.stubs.listSummaries.resolves(list);

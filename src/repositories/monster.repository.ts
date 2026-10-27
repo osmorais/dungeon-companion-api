@@ -17,7 +17,11 @@ export class MonsterRepository {
   async listSummaries(): Promise<BestiaryMonsterSummary[]> {
     return this.db.sql<BestiaryMonsterSummary[]>`
       SELECT slug AS index, name, challenge_rating::float8 AS challenge_rating,
-        data->>'size' AS size, data->>'type' AS type
+        data->>'size' AS size, data->>'type' AS type, data->>'alignment' AS alignment,
+        hp_max, ac,
+        CASE WHEN jsonb_typeof(data->'legendary_actions') = 'array'
+          THEN jsonb_array_length(data->'legendary_actions') > 0 ELSE false END AS legendary,
+        (data->'speed'->>'voo') IS NOT NULL AS flies
       FROM monster
       ORDER BY name
     `;

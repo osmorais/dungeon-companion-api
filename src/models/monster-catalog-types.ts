@@ -5,13 +5,21 @@ export interface MonsterCatalogInput {
   custom_name?: string | null;
 }
 
-/** Item da lista do bestiário (tabela `monster`) mostrada antes de catalogar. */
+/** Item da lista do bestiário (tabela `monster`) mostrada antes de catalogar: o que a carta e os
+ *  filtros da tela de catalogar usam (1.13.4). */
 export interface BestiaryMonsterSummary {
   index: string;
   name: string;
   challenge_rating: number;
   size: string;
   type: string;
+  alignment: string | null;
+  hp_max: number;
+  ac: number;
+  /** Tem ações lendárias. */
+  legendary: boolean;
+  /** Tem deslocamento de voo. */
+  flies: boolean;
 }
 
 /** Ficha do bestiário — `data` segue as chaves da dnd5eapi, com valores em português. */
