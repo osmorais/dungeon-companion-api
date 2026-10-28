@@ -802,3 +802,8 @@ ALTER TABLE monster_session ADD COLUMN IF NOT EXISTS action_state JSONB;
 -- monstro revelado, pra mesa inteira. Texto próprio, inspirado no livro. Achada pelo slug
 -- (monster_session.monster_api_slug), então vale também pra monstros que já estavam nas mesas.
 ALTER TABLE monster ADD COLUMN IF NOT EXISTS lore TEXT;
+
+-- XP acumulado do combate (1.15.0): ao derrotar um monstro que participa de um combate em
+-- andamento, o XP dele soma aqui (GameSessionRepository.removeMonster com creditCombatXp); ao
+-- encerrar o combate, o mestre vê o total e escolhe se distribui.
+ALTER TABLE combat_encounter ADD COLUMN IF NOT EXISTS defeated_xp INTEGER NOT NULL DEFAULT 0;

@@ -797,16 +797,22 @@ export class GameSessionRepository {
    * Só o mestre da sessão pode remover um monstro. Devolve nome/snapshot além do id da sessão
    * porque `GameSessionService.defeatMonster` precisa montar o texto da notificação de
    * derrota sem uma segunda query.
+   *
+   * `creditCombatXp` (derrota, 1.15.0): se o monstro está num combate em andamento, o XP dele
+   * entra no acumulado do combate (`combat_encounter.defeated_xp`) na mesma transação, antes de
+   * apagar — depois a participação dele some junto (cascade).
    */
   async removeMonster(
     idMonsterSession: string,
     userId: string,
+    options: {creditCombatXp?: boolean} = {},
   ): Promise<{
     status: 'not_found' | 'unauthorized' | 'ok';
     idGameSession?: string;
     customName?: string | null;
     dataSnapshot?: Record<string, unknown>;
     imageUrl?: string | null;
+    combatXp?: {id_combat_encounter: string; defeated_xp: number} | null;
   }> {
     const rows = await this.db.sql<
       {
@@ -833,14 +839,34 @@ export class GameSessionRepository {
     } = rows[0];
     if (session_owner_id !== userId) return {status: 'unauthorized'};
 
-    await this.db
-      .sql`DELETE FROM monster_session WHERE id_monster_session = ${idMonsterSession}`;
+    const xp = Math.max(0, Math.round(Number(data_snapshot?.xp) || 0));
+    const combatXp = await this.db.sql.begin(async sql => {
+      let credited: {id_combat_encounter: string; defeated_xp: number} | null =
+        null;
+      if (options.creditCombatXp) {
+        const rows = await sql<
+          {id_combat_encounter: string; defeated_xp: number}[]
+        >`
+          UPDATE combat_encounter ce
+          SET defeated_xp = ce.defeated_xp + ${xp}
+          FROM combat_participant cp
+          WHERE cp.id_combat_encounter = ce.id_combat_encounter
+            AND cp.id_monster_session = ${idMonsterSession}
+            AND ce.status IN ('rolling_initiative', 'active')
+          RETURNING ce.id_combat_encounter, ce.defeated_xp
+        `;
+        credited = rows[0] ?? null;
+      }
+      await sql`DELETE FROM monster_session WHERE id_monster_session = ${idMonsterSession}`;
+      return credited;
+    });
     return {
       status: 'ok',
       idGameSession: id_game_session,
       customName: custom_name,
       dataSnapshot: data_snapshot,
       imageUrl: image_url,
+      combatXp,
     };
   }
 

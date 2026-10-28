@@ -38,7 +38,7 @@ export class CombatRepository {
     idGameSession: string,
   ): Promise<CombatEncounter | null> {
     const rows = await this.db.sql<CombatEncounter[]>`
-      SELECT id_combat_encounter, id_game_session, status, round_number, current_turn_participant_id, created_at
+      SELECT id_combat_encounter, id_game_session, status, round_number, current_turn_participant_id, created_at, defeated_xp
       FROM combat_encounter
       WHERE id_game_session = ${idGameSession} AND status = ANY(${ACTIVE_STATUSES})
       ORDER BY created_at DESC
@@ -51,7 +51,7 @@ export class CombatRepository {
     const [row] = await this.db.sql<CombatEncounter[]>`
       INSERT INTO combat_encounter (id_game_session)
       VALUES (${idGameSession})
-      RETURNING id_combat_encounter, id_game_session, status, round_number, current_turn_participant_id, created_at
+      RETURNING id_combat_encounter, id_game_session, status, round_number, current_turn_participant_id, created_at, defeated_xp
     `;
     return row;
   }

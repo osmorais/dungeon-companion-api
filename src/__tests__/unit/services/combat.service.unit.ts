@@ -73,6 +73,7 @@ const ENCOUNTER: CombatEncounter = {
   round_number: 1,
   current_turn_participant_id: 'a',
   created_at: new Date(0),
+  defeated_xp: 0,
 };
 
 describe('CombatService', () => {

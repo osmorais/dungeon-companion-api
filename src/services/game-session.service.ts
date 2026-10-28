@@ -399,6 +399,7 @@ export class GameSessionService {
     const result = await this.repository.removeMonster(
       idMonsterSession,
       userId,
+      {creditCombatXp: true},
     );
     if (result.status === 'not_found')
       throw new HttpErrors.NotFound('Monstro não encontrado na sessão');
@@ -412,6 +413,7 @@ export class GameSessionService {
       id_monster_session: idMonsterSession,
       name: result.customName ?? this.monsterSnapshotName(result.dataSnapshot),
       image_url: result.imageUrl ?? null,
+      combat_xp: result.combatXp ?? null,
       ...monsterRevealCard(result.dataSnapshot, null),
     });
   }

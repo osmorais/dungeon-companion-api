@@ -980,8 +980,42 @@ describe('GameSessionService', () => {
           monster_type: 'humanoide',
           size: 'Médio',
           lore: null,
+          combat_xp: null,
         },
       ]);
+    });
+
+    it('derrotar credita o XP no combate em andamento e anuncia o acumulado', async () => {
+      repository.stubs.removeMonster.resolves({
+        status: 'ok',
+        idGameSession: 'gs',
+        customName: null,
+        dataSnapshot: {name: 'Orc', xp: 100},
+        imageUrl: null,
+        combatXp: {id_combat_encounter: 'ce', defeated_xp: 150},
+      });
+      await service.defeatMonster('m', 'dm');
+      expect(repository.stubs.removeMonster.firstCall.args).to.eql([
+        'm',
+        'dm',
+        {creditCombatXp: true},
+      ]);
+      expect(events[0]).to.containDeep({
+        type: 'monster_defeated',
+        combat_xp: {id_combat_encounter: 'ce', defeated_xp: 150},
+      });
+    });
+
+    it('remover (sem derrota) não credita XP no combate', async () => {
+      repository.stubs.removeMonster.resolves({
+        status: 'ok',
+        idGameSession: 'gs',
+        customName: null,
+        dataSnapshot: {xp: 100},
+        imageUrl: null,
+      });
+      await service.removeMonster('m', 'dm');
+      expect(repository.stubs.removeMonster.firstCall.args).to.eql(['m', 'dm']);
     });
 
     it('derrotar NÃO limpa a imagem (o modal de derrota ainda vai carregá-la)', async () => {

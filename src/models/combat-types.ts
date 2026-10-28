@@ -12,6 +12,8 @@ export interface CombatEncounter {
    *  manuais do mestre e a atrasos de turno sem "pular" pra outro participante por engano. */
   current_turn_participant_id: string | null;
   created_at: Date;
+  /** XP somado dos monstros derrotados neste combate (1.15.0): sugerido ao encerrar. */
+  defeated_xp: number;
 }
 
 export interface CombatParticipant {
