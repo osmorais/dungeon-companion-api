@@ -280,14 +280,17 @@ export class GameSessionController {
   }
 
   @post('/api/game-session/monster-session/{id}/defeat')
-  @response(204, {
+  @response(200, {
     description:
-      'Marks a monster as defeated: removes it from the session and notifies everyone',
+      'Marks a monster as defeated: removes it from the session and notifies everyone. Returns the accumulated XP of the running combat it was in (combat_xp), or null',
+    content: {'application/json': {schema: {type: 'object'}}},
   })
   async defeatMonster(
     @param.path.string('id') id: string,
     @inject(SecurityBindings.USER) currentUser: UserProfile,
-  ): Promise<void> {
+  ): Promise<{
+    combat_xp: {id_combat_encounter: string; defeated_xp: number} | null;
+  }> {
     return this.gameSessionService.defeatMonster(id, currentUser.id);
   }
 

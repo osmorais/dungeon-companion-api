@@ -307,6 +307,8 @@ export interface MonsterActionCardInfo {
   kind: 'attack' | 'save' | 'damage';
   /** Números do pergaminho ("ATAQUE" "+4", "DANO" "1d6+2 cortante", "CD" "13 DES"). */
   stats: {label: string; value: string}[];
+  /** Ataque k de N de um multiataque (1.15.1): a mesa vê "MULTIATAQUE k/N". */
+  sequence?: {index: number; total: number} | null;
 }
 
 /** Monstro que age na tela de lançamento — o que a mesa já vê do monstro revelado. */

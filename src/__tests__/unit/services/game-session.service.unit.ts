@@ -994,7 +994,10 @@ describe('GameSessionService', () => {
         imageUrl: null,
         combatXp: {id_combat_encounter: 'ce', defeated_xp: 150},
       });
-      await service.defeatMonster('m', 'dm');
+      const response = await service.defeatMonster('m', 'dm');
+      expect(response).to.eql({
+        combat_xp: {id_combat_encounter: 'ce', defeated_xp: 150},
+      });
       expect(repository.stubs.removeMonster.firstCall.args).to.eql([
         'm',
         'dm',
@@ -2035,6 +2038,34 @@ describe('GameSessionService', () => {
         });
         expect(repository.stubs.canPostRollFor.called).to.be.false();
         expect(repository.stubs.bumpStats.called).to.be.false();
+      });
+
+      it('multiataque: a etapa leva o "k de N" pra mesa; sequência inválida é 422', async () => {
+        repository.stubs.findMonsterForCast.resolves(found());
+        const sequence = {index: 2, total: 3};
+        await service.publishSpellCastStage(
+          'gs',
+          {...MONSTER_STAGE, monster_action: {...ACTION, sequence}},
+          'dm',
+        );
+        expect(events[0]).to.containDeep({
+          monster_action: {...ACTION, sequence},
+        });
+        // `index` em texto chega do cliente sem tipo: o cast é só pro teste compilar.
+        for (const bad of [
+          {index: 0, total: 2},
+          {index: 3, total: 2},
+          {index: 1, total: 99},
+          {index: '1', total: 2} as unknown as {index: number; total: number},
+        ]) {
+          await expect(
+            service.publishSpellCastStage(
+              'gs',
+              {...MONSTER_STAGE, monster_action: {...ACTION, sequence: bad}},
+              'dm',
+            ),
+          ).to.be.rejectedWith({statusCode: 422});
+        }
       });
 
       it('jogador não age pelo monstro (403); monstro de outra sessão (404)', async () => {

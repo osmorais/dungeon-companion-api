@@ -395,7 +395,12 @@ export class GameSessionService {
    * derrota. A imagem **não** é limpa do storage aqui: o modal de derrota de todos os jogadores
    * carrega essa URL logo depois do evento. Se ficar órfã, sai na limpeza manual de órfãs.
    */
-  async defeatMonster(idMonsterSession: string, userId: string): Promise<void> {
+  async defeatMonster(
+    idMonsterSession: string,
+    userId: string,
+  ): Promise<{
+    combat_xp: {id_combat_encounter: string; defeated_xp: number} | null;
+  }> {
     const result = await this.repository.removeMonster(
       idMonsterSession,
       userId,
@@ -416,6 +421,9 @@ export class GameSessionService {
       combat_xp: result.combatXp ?? null,
       ...monsterRevealCard(result.dataSnapshot, null),
     });
+    // Também na resposta (1.15.1): quem derrotou já tem o acumulado sem esperar o socket — o
+    // encerrar combate pergunta do XP logo depois de derrotar os que sobraram.
+    return {combat_xp: result.combatXp ?? null};
   }
 
   async removePlayer(idPlayerSession: string, userId: string): Promise<void> {
@@ -1680,6 +1688,18 @@ function validMonsterAction(value: unknown): MonsterActionCardInfo | null {
   const stats = a.stats.map(s => ({label: s?.label, value: s?.value}));
   if (!stats.every(s => shortText(s.label, 20) && shortText(s.value, 40)))
     return null;
+  const seq = a.sequence;
+  if (
+    seq !== undefined &&
+    seq !== null &&
+    !(
+      smallInt(seq.total, 20) &&
+      smallInt(seq.index, 20) &&
+      seq.index >= 1 &&
+      seq.index <= seq.total
+    )
+  )
+    return null;
   return {
     name: (a.name as string).trim(),
     kind: a.kind as MonsterActionCardInfo['kind'],
@@ -1687,6 +1707,7 @@ function validMonsterAction(value: unknown): MonsterActionCardInfo | null {
       label: (s.label as string).trim(),
       value: (s.value as string).trim(),
     })),
+    ...(seq ? {sequence: {index: seq.index, total: seq.total}} : {}),
   };
 }
 
