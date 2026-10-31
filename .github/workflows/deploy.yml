@@ -1,0 +1,43 @@
+# Deploy da api na VPS (Hostinger) a cada push na main.
+# O job de deploy só roda se os testes unitários passarem. A chave do CI está presa, no
+# servidor, ao comando /usr/local/bin/forja-deploy (authorized_keys com restrict,command=...).
+name: Deploy API
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Um deploy por vez; um push novo espera o anterior terminar em vez de cancelá-lo no meio.
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run test:unit
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configurar SSH
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/forja_ci
+          chmod 600 ~/.ssh/forja_ci
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Deploy na VPS
+        run: ssh -o IdentitiesOnly=yes -i ~/.ssh/forja_ci deploy@187.41.108.179
