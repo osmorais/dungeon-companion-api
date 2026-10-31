@@ -4,6 +4,7 @@ import {Alignment, Armour, Background, CharacterClass, CharacterOptions, Race, S
 import {RACES, SUBRACES, CLASSES, BACKGROUNDS} from './character-sheet/rules';
 import {normalizeSkill} from './character-sheet/calculator';
 import {kitWeapons} from './character-sheet/starting-items';
+import {withCardDamage} from './character-sheet/spell-card-damage';
 
 /** Mesmo mapeamento de `character.repository.ts` (STAT_TO_PT), duplicado aqui só pra formatar texto de exibição. */
 const STAT_TO_PT: Record<string, string> = {
@@ -93,6 +94,16 @@ export class CharacterOptionsService {
       };
     });
 
-    return {attributes, skills, weapons, races, classes, backgrounds, alignments, spells, armours};
+    return {
+      attributes,
+      skills,
+      weapons,
+      races,
+      classes,
+      backgrounds,
+      alignments,
+      spells: spells.map(withCardDamage),
+      armours,
+    };
   }
 }

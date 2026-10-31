@@ -61,6 +61,7 @@ import {
   SecretRollRequestStore,
   secretRollRequests,
 } from './secret-roll-requests';
+import {withCardDamage} from './character-sheet/spell-card-damage';
 
 const ROLL_TYPES: RollType[] = [
   'dice',
@@ -1557,9 +1558,10 @@ export class GameSessionService {
           'Você não pode lançar uma magia por esse personagem',
         );
     }
-    const spell = hasSpell
+    const spellRow = hasSpell
       ? await this.repository.findSpellCard(input.id_spell as number)
       : null;
+    const spell = spellRow ? withCardDamage(spellRow) : null;
     if (hasSpell && !spell)
       throw new HttpErrors.NotFound('Magia não encontrada');
 

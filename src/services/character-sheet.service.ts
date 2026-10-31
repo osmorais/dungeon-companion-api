@@ -94,6 +94,7 @@ import {
 } from './character-sheet/rules';
 import {FEATS, TOOL_PROFICIENCY_OPTIONS} from './character-sheet/feats';
 import {buildSpellRoll, healingFeaturesFor} from './character-sheet/spell-mechanics';
+import {withCardDamage} from './character-sheet/spell-card-damage';
 import {abilityMechanicsFor} from './character-sheet/ability-mechanics';
 import {
   ACTIVATABLE_EFFECTS,
@@ -841,9 +842,9 @@ export class CharacterSheetService {
             spellcastingResult.spell_save_dc,
             healingFeatures,
           );
-          return roll ? {...s, roll} : s;
+          return withCardDamage(roll ? {...s, roll} : s);
         })
-      : spellList;
+      : spellList.map(withCardDamage);
 
     // Só consulta se a classe realmente precisa preparar magia — evita uma query à toa pras
     // outras (maioria das classes/personagens não-conjuradores).

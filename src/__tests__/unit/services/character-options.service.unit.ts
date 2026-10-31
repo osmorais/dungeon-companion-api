@@ -6,7 +6,7 @@ import {BACKGROUNDS} from '../../../services/character-sheet/rules';
 import {DB_SKILLS} from '../fixtures';
 
 describe('CharacterOptionsService', () => {
-  function givenOptions() {
+  function givenOptions(spells: unknown[] = []) {
     const repository = createStubInstance(CharacterOptionsRepository);
     repository.stubs.findAttributes.resolves([]);
     repository.stubs.findSkills.resolves(
@@ -33,7 +33,7 @@ describe('CharacterOptionsService', () => {
     );
     repository.stubs.findAlignments.resolves([]);
     repository.stubs.findWeapons.resolves([]);
-    repository.stubs.findSpells.resolves([]);
+    repository.stubs.findSpells.resolves(spells as never);
     repository.stubs.findArmours.resolves([]);
     return new CharacterOptionsService(repository).getCharacterOptions();
   }
@@ -69,5 +69,16 @@ describe('CharacterOptionsService', () => {
     expect(outlander.starting_weapons).to.eql(['Bordão']);
     const sage = backgrounds.find(b => b.id_background === 12)!;
     expect(sage.starting_weapons).to.eql([]);
+  });
+
+  it('magias vêm com o dano base pro selo da carta', async () => {
+    const {spells} = await givenOptions([
+      {id_spell: 44, name: 'Bola de Fogo', spellLevel: 3},
+      {id_spell: 188, name: 'Invisibilidade', spellLevel: 2},
+    ]);
+    expect(spells.map(s => s.card_damage)).to.eql([
+      {dice: '8d6', type: 'fogo', kind: 'damage'},
+      null,
+    ]);
   });
 });

@@ -3,6 +3,7 @@ import {injectable, BindingScope, service} from '@loopback/core';
 import {HttpErrors} from '@loopback/rest';
 import {SpellCatalogRepository} from '../repositories/spell-catalog.repository';
 import {SpellCatalogEntry, SpellCatalogPagedList} from '../models/spell-catalog-types';
+import {withCardDamage} from './character-sheet/spell-card-damage';
 
 @injectable({scope: BindingScope.TRANSIENT})
 export class SpellCatalogService {
@@ -18,7 +19,7 @@ export class SpellCatalogService {
   ): Promise<SpellCatalogPagedList> {
     const rows = await this.repository.findPaged(pageSize, page, search);
     return {
-      SpellCatalogPagedList: rows,
+      SpellCatalogPagedList: rows.map(withCardDamage),
       page,
       pageSize,
       total_count: rows[0]?.total_count ?? 0,
@@ -28,6 +29,6 @@ export class SpellCatalogService {
   async getSpell(id: number): Promise<SpellCatalogEntry> {
     const entry = await this.repository.findById(id);
     if (!entry) throw new HttpErrors.NotFound('Magia não encontrada');
-    return entry;
+    return withCardDamage(entry);
   }
 }

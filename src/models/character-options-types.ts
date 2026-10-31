@@ -122,6 +122,17 @@ export interface Spell {
   /** Rolagem ao lançar (ataque/dano), já calculada pro personagem — só na ficha e só pras magias
    *  com mecânica cadastrada em `spell-mechanics.ts`. */
   roll?: SpellRoll;
+  /** Dano/cura base pro selo da carta — ver `spell-card-damage.ts`. */
+  card_damage?: SpellCardDamage | null;
+}
+
+/** Dano (ou cura) base da magia pro selo da carta (1.17.0) — ver `spellCardDamage`. */
+export interface SpellCardDamage {
+  /** Ex.: "8d6", "3× 1d4+1", "+2d6" (soma no ataque), "1d8 + mod", "20", "MORTE". */
+  dice: string;
+  /** Tipo de dano como no livro ("fogo", "à escolha"); `null` na cura. */
+  type: string | null;
+  kind: 'damage' | 'heal' | 'temp_hp';
 }
 
 /** Rolagem de uma magia pro personagem — ver `buildSpellRoll`. */

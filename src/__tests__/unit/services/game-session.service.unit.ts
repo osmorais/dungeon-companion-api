@@ -1950,7 +1950,8 @@ describe('GameSessionService', () => {
           user_id: 'u1',
           id_character: 1,
           actor_name: 'Merlin',
-          spell: SPELL,
+          // Raio de Fogo do teste usa um id sem mecânica: carta sem selo de dano.
+          spell: {...SPELL, card_damage: null},
           weapon: null,
           monster_action: null,
           monster: null,

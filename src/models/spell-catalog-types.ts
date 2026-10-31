@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/naming-convention */
+import {SpellCardDamage} from './character-options-types';
 
 export interface SpellCatalogEntry {
   id_spell: number;
@@ -12,6 +13,8 @@ export interface SpellCatalogEntry {
   is_material: boolean;
   spellLevel: number;
   school: string | null;
+  /** Dano/cura base pro selo da carta (1.17.0). */
+  card_damage?: SpellCardDamage | null;
 }
 
 export interface SpellCatalogPagedList {

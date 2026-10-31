@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {AvatarPreset} from './character-sheet-types';
+import {SpellCardDamage} from './character-options-types';
 import {DamageDefenses} from '../services/character-sheet/combat-features';
 import {CombatEncounterDetail} from './combat-types';
 import {MonsterRevealCard} from '../services/monster-reveal';
@@ -256,6 +257,8 @@ export interface SpellCardInfo {
   is_material: boolean;
   spellLevel: number;
   school: string | null;
+  /** Dano/cura base pro selo da carta (1.17.0). */
+  card_damage?: SpellCardDamage | null;
 }
 
 export const CAST_ROLL_KINDS = ['attack', 'damage', 'heal'] as const;
