@@ -27,6 +27,7 @@ export class AccountRepository {
              (password_hash IS NOT NULL) AS has_password,
              (google_id IS NOT NULL) AS google_linked,
              show_in_ranking,
+             last_access_at,
              password_hash
       FROM users
       WHERE id = ${userId}

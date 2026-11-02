@@ -154,5 +154,6 @@ function toProfile(
     has_password: row.has_password,
     google_linked: row.google_linked,
     show_in_ranking: row.show_in_ranking ?? true,
+    last_access_at: row.last_access_at ?? null,
   };
 }

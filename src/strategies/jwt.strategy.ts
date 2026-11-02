@@ -1,12 +1,17 @@
-import {injectable} from '@loopback/core';
+import {injectable, service} from '@loopback/core';
 import {asAuthStrategy, AuthenticationStrategy} from '@loopback/authentication';
 import {UserProfile, securityId} from '@loopback/security';
 import {Request, HttpErrors} from '@loopback/rest';
 import {verifyJwtToken} from './jwt.util';
+import {LastAccessService} from '../services/last-access.service';
 
 @injectable({}, asAuthStrategy)
 export class JWTStrategy implements AuthenticationStrategy {
   name = 'jwt';
+
+  constructor(
+    @service(LastAccessService) private lastAccess: LastAccessService,
+  ) {}
 
   async authenticate(request: Request): Promise<UserProfile | undefined> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -21,16 +26,18 @@ export class JWTStrategy implements AuthenticationStrategy {
     if (!token) {
       throw new HttpErrors.Unauthorized('Cookie de autenticação ausente');
     }
+    let payload;
     try {
-      const payload = verifyJwtToken(token);
-      return {
-        [securityId]: payload.id,
-        id: payload.id,
-        email: payload.email,
-        name: payload.email,
-      };
+      payload = verifyJwtToken(token);
     } catch {
       throw new HttpErrors.Unauthorized('Token inválido ou expirado');
     }
+    this.lastAccess.record(payload.id);
+    return {
+      [securityId]: payload.id,
+      id: payload.id,
+      email: payload.email,
+      name: payload.email,
+    };
   }
 }

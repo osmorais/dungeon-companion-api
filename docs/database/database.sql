@@ -776,6 +776,12 @@ CREATE INDEX IF NOT EXISTS idx_character_session_stats_character
 -- O usuário pode sair do ranking global na página /conta (padrão: aparece).
 ALTER TABLE users ADD COLUMN IF NOT EXISTS show_in_ranking BOOLEAN NOT NULL DEFAULT TRUE;
 
+-- Último acesso (1.17.8): pra saber quantos usuários estão ativos. Gravado pelo LastAccessService
+-- (src/services/last-access.service.ts) a cada requisição autenticada, no máximo uma vez por hora
+-- por usuário. Nulo até o primeiro acesso depois da 1.17.8. Sai na exportação da conta (LGPD) e
+-- some com a conta.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_access_at TIMESTAMPTZ;
+
 -- ==========================================
 -- MONSTER (bestiário de referência: as 428 fichas do Manual dos Monstros em português)
 -- ==========================================

@@ -101,6 +101,13 @@ export class UserRepository {
   }
 
   /** Apaga tokens de redefinição já vencidos (de todos os usuários). Devolve quantos limpou. */
+  /** Último acesso (1.17.8) — chamado pelo LastAccessService, no máximo uma vez por hora. */
+  async touchLastAccess(userId: string): Promise<void> {
+    await this.db.sql`
+      UPDATE users SET last_access_at = NOW() WHERE id = ${userId}
+    `;
+  }
+
   async clearExpiredResetTokens(): Promise<number> {
     const result = await this.db.sql`
       UPDATE users

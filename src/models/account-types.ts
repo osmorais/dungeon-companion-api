@@ -11,6 +11,8 @@ export interface AccountProfile {
   google_linked: boolean;
   /** Aparece no ranking global (padrão sim; o usuário pode sair em /conta). */
   show_in_ranking: boolean;
+  /** Último acesso (1.17.8), gravado no máximo uma vez por hora. `null` antes do primeiro. */
+  last_access_at: Date | null;
 }
 
 export interface UpdateAccountInput {

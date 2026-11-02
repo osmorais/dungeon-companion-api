@@ -29,6 +29,7 @@ function profileRow(
     has_password: true,
     google_linked: false,
     show_in_ranking: true,
+    last_access_at: new Date('2026-11-01T10:00:00Z'),
     password_hash: 'hash',
     ...overrides,
   };
@@ -75,6 +76,7 @@ describe('AccountService', () => {
         has_password: true,
         google_linked: false,
         show_in_ranking: true,
+        last_access_at: new Date('2026-11-01T10:00:00Z'),
       });
       expect(profile).to.not.have.property('password_hash');
     });

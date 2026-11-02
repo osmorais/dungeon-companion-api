@@ -8,6 +8,10 @@ import {
 } from '../../../controllers/auth.controller';
 import {JWTStrategy} from '../../../strategies/jwt.strategy';
 import {verifyJwtToken} from '../../../strategies/jwt.util';
+import {LastAccessService} from '../../../services/last-access.service';
+
+// O registro de último acesso (1.17.8) não interessa aqui.
+const noLastAccess = {record: () => {}} as unknown as LastAccessService;
 
 describe('Segurança do login (1.17.5)', () => {
   const env = {...process.env};
@@ -39,7 +43,7 @@ describe('Segurança do login (1.17.5)', () => {
   });
 
   it('com header e cookie, vale o header', async () => {
-    const profile = await new JWTStrategy().authenticate(
+    const profile = await new JWTStrategy(noLastAccess).authenticate(
       requestWith({
         header: tokenFor('do-header'),
         cookie: tokenFor('do-cookie'),
@@ -49,7 +53,7 @@ describe('Segurança do login (1.17.5)', () => {
   });
 
   it('só com cookie ainda funciona (reserva)', async () => {
-    const profile = await new JWTStrategy().authenticate(
+    const profile = await new JWTStrategy(noLastAccess).authenticate(
       requestWith({cookie: tokenFor('do-cookie')}),
     );
     expect(profile?.[securityId]).to.equal('do-cookie');
