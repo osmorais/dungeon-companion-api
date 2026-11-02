@@ -1,5 +1,5 @@
 import {injectable, BindingScope} from '@loopback/core';
-import nodemailer from 'nodemailer';
+import nodemailer, {type Transporter} from 'nodemailer';
 import SMTPTransport from 'nodemailer/lib/smtp-transport';
 import {passwordResetTemplate} from './email-templates/password-reset.template';
 
@@ -15,7 +15,7 @@ export class EmailService {
   /** Substituível nos testes. */
   createTransport: (
     options: SMTPTransport.Options,
-  ) => Pick<nodemailer.Transporter, 'sendMail'> = options =>
+  ) => Pick<Transporter, 'sendMail'> = options =>
     nodemailer.createTransport(options);
 
   async sendPasswordReset(
