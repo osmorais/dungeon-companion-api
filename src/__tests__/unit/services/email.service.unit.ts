@@ -1,20 +1,23 @@
 import {expect, sinon} from '@loopback/testlab';
-import crypto from 'crypto';
-import {EmailService, signRelayRequest} from '../../../services/email.service';
+import {EmailService} from '../../../services/email.service';
 
-describe('EmailService (e-mail de recuperação pelo script da Hostinger)', () => {
+describe('EmailService (e-mail de recuperação pelo SMTP da Hostinger)', () => {
   const env = {...process.env};
   let service: EmailService;
-  let fetchStub: sinon.SinonStub;
+  let createStub: sinon.SinonStub;
+  let sendMailStub: sinon.SinonStub;
 
   beforeEach(() => {
-    process.env.MAIL_RELAY_SECRET = 'segredo-de-teste';
-    delete process.env.MAIL_RELAY_URL;
+    process.env.SMTP_USER = 'mensageiro@forjaarcana.com';
+    process.env.SMTP_PASS = 'senha-de-teste';
+    delete process.env.SMTP_HOST;
+    delete process.env.SMTP_PORT;
+    delete process.env.SMTP_FROM;
+    delete process.env.FRONTEND_URL;
     service = new EmailService();
-    fetchStub = sinon
-      .stub()
-      .resolves(new Response('{"ok":true}', {status: 200}));
-    service.fetchFn = fetchStub as unknown as typeof fetch;
+    sendMailStub = sinon.stub().resolves({messageId: 'x'});
+    createStub = sinon.stub().returns({sendMail: sendMailStub});
+    service.createTransport = createStub;
   });
 
   afterEach(() => {
@@ -22,65 +25,92 @@ describe('EmailService (e-mail de recuperação pelo script da Hostinger)', () =
     sinon.restore();
   });
 
-  it('assinatura: HMAC-SHA256 hex de "<timestamp>.<corpo>" (o mesmo que o PHP confere)', () => {
-    const sig = signRelayRequest('k', '1700000000', '{"a":1}');
-    expect(sig).to.match(/^[a-f0-9]{64}$/);
-    expect(sig).to.equal(
-      crypto
-        .createHmac('sha256', 'k')
-        .update('1700000000.{"a":1}')
-        .digest('hex'),
-    );
-    expect(signRelayRequest('k', '1700000001', '{"a":1}')).to.not.equal(sig);
-  });
-
-  it('manda só e-mail e token, assinados, pro script do site', async () => {
+  it('conecta no SMTP da Hostinger por SSL na 465, com a conta do site e timeout', async () => {
     await service.sendPasswordReset('heroi@x.com', 'a'.repeat(64));
-    sinon.assert.calledOnce(fetchStub);
-    const [url, init] = fetchStub.firstCall.args as [string, RequestInit];
-    expect(url).to.equal('https://forjaarcana.com/mail/recuperar-senha.php');
-    expect(init.method).to.equal('POST');
-    expect(JSON.parse(init.body as string)).to.eql({
-      email: 'heroi@x.com',
-      token: 'a'.repeat(64),
+    sinon.assert.calledOnce(createStub);
+    const options = createStub.firstCall.args[0];
+    expect(options).to.containDeep({
+      host: 'smtp.hostinger.com',
+      port: 465,
+      secure: true,
+      auth: {user: 'mensageiro@forjaarcana.com', pass: 'senha-de-teste'},
     });
-    const headers = init.headers as Record<string, string>;
-    expect(headers['X-Forja-Signature']).to.equal(
-      signRelayRequest(
-        'segredo-de-teste',
-        headers['X-Forja-Timestamp'],
-        init.body as string,
-      ),
-    );
-    const age = Date.now() / 1000 - Number(headers['X-Forja-Timestamp']);
-    expect(age).to.be.within(0, 5);
+    expect(options.connectionTimeout).to.be.greaterThan(0);
+    expect(options.socketTimeout).to.be.greaterThan(0);
   });
 
-  it('MAIL_RELAY_URL troca o endereço do script', async () => {
-    process.env.MAIL_RELAY_URL = 'https://teste.local/mail.php';
+  it('SMTP_HOST e SMTP_PORT trocam o servidor; fora da 465 usa STARTTLS (secure false)', async () => {
+    process.env.SMTP_HOST = 'smtp.teste.local';
+    process.env.SMTP_PORT = '587';
+    await service.sendPasswordReset('heroi@x.com', 'a'.repeat(64));
+    expect(createStub.firstCall.args[0]).to.containDeep({
+      host: 'smtp.teste.local',
+      port: 587,
+      secure: false,
+    });
+  });
+
+  it('manda o e-mail pro endereço pedido, com o link do token e o logo do site', async () => {
     await service.sendPasswordReset('heroi@x.com', 'b'.repeat(64));
-    expect(fetchStub.firstCall.args[0]).to.equal(
-      'https://teste.local/mail.php',
+    sinon.assert.calledOnce(sendMailStub);
+    const mail = sendMailStub.firstCall.args[0];
+    expect(mail.to).to.equal('heroi@x.com');
+    expect(mail.from).to.equal('mensageiro@forjaarcana.com');
+    expect(mail.subject).to.containEql('Redefinição de Senha');
+    expect(mail.html).to.containEql(
+      `https://forjaarcana.com/reset-password?token=${'b'.repeat(64)}`,
+    );
+    expect(mail.html).to.containEql('https://forjaarcana.com/forja_arcana.png');
+  });
+
+  it('SMTP_FROM troca o remetente; FRONTEND_URL troca o link (sem barra dobrada)', async () => {
+    process.env.SMTP_FROM = 'Forja Arcana <mensageiro@forjaarcana.com>';
+    process.env.FRONTEND_URL = 'https://teste.local/';
+    await service.sendPasswordReset('heroi@x.com', 'c'.repeat(64));
+    const mail = sendMailStub.firstCall.args[0];
+    expect(mail.from).to.equal('Forja Arcana <mensageiro@forjaarcana.com>');
+    expect(mail.html).to.containEql(
+      `https://teste.local/reset-password?token=${'c'.repeat(64)}`,
     );
   });
 
-  it('sem MAIL_RELAY_SECRET: falha sem chamar o script', async () => {
-    delete process.env.MAIL_RELAY_SECRET;
+  it('sem SMTP_USER ou SMTP_PASS: falha sem tentar conectar', async () => {
+    delete process.env.SMTP_PASS;
     await expect(
-      service.sendPasswordReset('heroi@x.com', 'c'.repeat(64)),
-    ).to.be.rejectedWith(/MAIL_RELAY_SECRET/);
-    sinon.assert.notCalled(fetchStub);
+      service.sendPasswordReset('heroi@x.com', 'd'.repeat(64)),
+    ).to.be.rejectedWith(/SMTP_USER\/SMTP_PASS/);
+    sinon.assert.notCalled(createStub);
+
+    process.env.SMTP_PASS = 'senha-de-teste';
+    delete process.env.SMTP_USER;
+    await expect(
+      service.sendPasswordReset('heroi@x.com', 'd'.repeat(64)),
+    ).to.be.rejectedWith(/SMTP_USER\/SMTP_PASS/);
+    sinon.assert.notCalled(createStub);
   });
 
-  it('script respondeu erro: falha com o status, sem o endereço na mensagem', async () => {
-    fetchStub.resolves(new Response('{"error":"smtp"}', {status: 502}));
+  it('falha do SMTP sobe só com os códigos, sem o endereço (o controller loga a mensagem)', async () => {
+    const smtpError = Object.assign(
+      new Error(
+        "Can't send mail - all recipients were rejected: 550 <heroi@x.com>",
+      ),
+      {code: 'EENVELOPE', responseCode: 550},
+    );
+    sendMailStub.rejects(smtpError);
     const err = await service
-      .sendPasswordReset('heroi@x.com', 'd'.repeat(64))
+      .sendPasswordReset('heroi@x.com', 'e'.repeat(64))
       .then(
         () => null,
         (e: Error) => e,
       );
-    expect(err?.message).to.equal('Envio do e-mail falhou (HTTP 502)');
+    expect(err?.message).to.equal('Envio do e-mail falhou (EENVELOPE 550)');
     expect(err?.message).to.not.containEql('heroi@x.com');
+  });
+
+  it('falha sem código: mensagem genérica', async () => {
+    sendMailStub.rejects(new Error('heroi@x.com qualquer coisa'));
+    await expect(
+      service.sendPasswordReset('heroi@x.com', 'f'.repeat(64)),
+    ).to.be.rejectedWith('Envio do e-mail falhou (erro desconhecido)');
   });
 });

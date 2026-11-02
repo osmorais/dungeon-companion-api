@@ -1,6 +1,6 @@
 {
   "name": "dungeon-companion-api",
-  "version": "1.17.2",
+  "version": "1.17.3",
   "description": "api",
   "keywords": [
     "loopback-application",
@@ -65,6 +65,7 @@
     "google-auth-library": "^10.6.2",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.3.0",
+    "nodemailer": "^8.0.11",
     "openai": "^6.34.0",
     "postgres": "^3.4.9",
     "socket.io": "^4.8.3",
@@ -76,6 +77,7 @@
     "@types/dotenv": "^6.1.1",
     "@types/mocha": "^10.0.10",
     "@types/node": "^20.19.39",
+    "@types/nodemailer": "^8.0.2",
     "eslint": "^8.57.1",
     "mocha": "^11.7.5",
     "nyc": "^18.0.0",

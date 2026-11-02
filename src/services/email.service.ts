@@ -1,54 +1,62 @@
 import {injectable, BindingScope} from '@loopback/core';
-import crypto from 'crypto';
+import nodemailer from 'nodemailer';
+import SMTPTransport from 'nodemailer/lib/smtp-transport';
+import {passwordResetTemplate} from './email-templates/password-reset.template';
 
-/** Script no site (Hostinger) que envia o e-mail pelo SMTP de lá — ver recuperar-senha.php no web. */
-const DEFAULT_RELAY_URL = 'https://forjaarcana.com/mail/recuperar-senha.php';
-const RELAY_TIMEOUT_MS = 15_000;
-
-/** Assinatura que o script confere: HMAC-SHA256 hex de "<timestamp>.<corpo>". */
-export function signRelayRequest(
-  secret: string,
-  timestamp: string,
-  body: string,
-): string {
-  return crypto
-    .createHmac('sha256', secret)
-    .update(`${timestamp}.${body}`)
-    .digest('hex');
-}
+const SMTP_TIMEOUT_MS = 15_000;
 
 /**
- * E-mail de recuperação de senha (1.12.1). O Render bloqueia SMTP, então a api não envia: chama
- * por HTTPS o script PHP do site (mesmo servidor do e-mail da Hostinger), assinado com o segredo
- * `MAIL_RELAY_SECRET` (o mesmo do forja-mail-config.php de lá). O script monta o link e o texto a
- * partir do token — aqui só vão o endereço e o token.
+ * E-mail de recuperação de senha, enviado direto pelo SMTP da Hostinger (conta de e-mail do site).
+ * Da 1.12.1 à 1.17.2 passava por um script PHP no site, porque o Render bloqueava SMTP; na VPS
+ * (1.17.3) as portas 465/587 saem. Configuração lida sob demanda, a cada envio.
  */
 @injectable({scope: BindingScope.TRANSIENT})
 export class EmailService {
   /** Substituível nos testes. */
-  fetchFn: typeof fetch = (...args) => fetch(...args);
+  createTransport: (
+    options: SMTPTransport.Options,
+  ) => Pick<nodemailer.Transporter, 'sendMail'> = options =>
+    nodemailer.createTransport(options);
 
   async sendPasswordReset(email: string, token: string): Promise<void> {
-    // Sem fallback: sem o segredo o script recusa tudo, então falha aqui com um motivo claro.
-    const secret = process.env.MAIL_RELAY_SECRET;
-    if (!secret) throw new Error('MAIL_RELAY_SECRET não configurado');
-    const url = process.env.MAIL_RELAY_URL ?? DEFAULT_RELAY_URL;
+    // Sem fallback: sem a conta o envio não tem como dar certo, então falha aqui com um motivo claro.
+    const user = process.env.SMTP_USER;
+    const pass = process.env.SMTP_PASS;
+    if (!user || !pass) throw new Error('SMTP_USER/SMTP_PASS não configurados');
 
-    const body = JSON.stringify({email, token});
-    const timestamp = Math.floor(Date.now() / 1000).toString();
-    const response = await this.fetchFn(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Forja-Timestamp': timestamp,
-        'X-Forja-Signature': signRelayRequest(secret, timestamp, body),
-      },
-      body,
-      signal: AbortSignal.timeout(RELAY_TIMEOUT_MS),
+    const port = Number(process.env.SMTP_PORT ?? 465);
+    const transporter = this.createTransport({
+      host: process.env.SMTP_HOST ?? 'smtp.hostinger.com',
+      port,
+      secure: port === 465,
+      auth: {user, pass},
+      connectionTimeout: SMTP_TIMEOUT_MS,
+      greetingTimeout: SMTP_TIMEOUT_MS,
+      socketTimeout: SMTP_TIMEOUT_MS,
     });
-    if (!response.ok) {
-      // Só o status (o corpo do script tem só um código de erro, sem o endereço).
-      throw new Error(`Envio do e-mail falhou (HTTP ${response.status})`);
+
+    const frontendUrl = (
+      process.env.FRONTEND_URL ?? 'https://forjaarcana.com'
+    ).replace(/\/+$/, '');
+    const link = `${frontendUrl}/reset-password?token=${token}`;
+
+    try {
+      await transporter.sendMail({
+        from: process.env.SMTP_FROM ?? user,
+        to: email,
+        subject: '🗝️ Redefinição de Senha - Forja Arcana',
+        html: passwordResetTemplate(link, `${frontendUrl}/forja_arcana.png`),
+      });
+    } catch (err) {
+      // A mensagem do nodemailer pode trazer o endereço (destinatário recusado); o controller
+      // loga o motivo, então só sobem os códigos.
+      const {code, responseCode} = err as {
+        code?: string;
+        responseCode?: number;
+      };
+      throw new Error(
+        `Envio do e-mail falhou (${[code, responseCode].filter(Boolean).join(' ') || 'erro desconhecido'})`,
+      );
     }
   }
 }
