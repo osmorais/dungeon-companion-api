@@ -105,6 +105,10 @@ import {
 } from './character-sheet/combat-features';
 import {CLASS_ARMOUR_RULES} from './character-sheet/armour-rules';
 
+// 403/404 (até a 1.17.4 eram Error comum e viravam 500). 401 não: fora de /auth/ desloga o usuário.
+const NOT_FOUND = 'Personagem não encontrado';
+const NOT_ALLOWED = 'Você não pode alterar este personagem';
+
 @injectable({scope: BindingScope.TRANSIENT})
 export class CharacterSheetService {
   constructor(
@@ -666,7 +670,7 @@ export class CharacterSheetService {
         raw.character.id_character,
         userId,
       );
-      if (!isSessionMate) throw new Error('Unauthorized');
+      if (!isSessionMate) throw new HttpErrors.Forbidden(NOT_ALLOWED);
     }
 
     const {character, attributes, skills, spells, weapons, items} = raw;
@@ -963,7 +967,7 @@ export class CharacterSheetService {
 
   async getCharacterPrintHtml(id: number, userId: string): Promise<string> {
     const sheet = await this.loadCharacter(id, userId);
-    if (!sheet) throw new Error('Character not found');
+    if (!sheet) throw new HttpErrors.NotFound(NOT_FOUND);
     return buildPrintHtml(sheet);
   }
 
@@ -1103,9 +1107,9 @@ export class CharacterSheetService {
   /** Resolução comum a preview/roll-hp/confirm: personagem, permissão, próximo nível e seus dados de classe. */
   private async resolveLevelUpContext(id: number, userId: string) {
     const raw = await this.repository.findCharacterById(id);
-    if (!raw) throw new Error('Character not found');
+    if (!raw) throw new HttpErrors.NotFound(NOT_FOUND);
     if (!(await this.userCanManageCharacter(raw.character.user_id, id, userId))) {
-      throw new Error('Unauthorized');
+      throw new HttpErrors.Forbidden(NOT_ALLOWED);
     }
     if (raw.character.level >= 20) throw new Error('Max level reached');
 
@@ -1484,8 +1488,8 @@ export class CharacterSheetService {
     userId: string,
   ): Promise<{success: boolean}> {
     const raw = await this.repository.findCharacterById(id);
-    if (!raw) throw new Error('Character not found');
-    if (raw.character.user_id !== userId) throw new Error('Unauthorized');
+    if (!raw) throw new HttpErrors.NotFound(NOT_FOUND);
+    if (raw.character.user_id !== userId) throw new HttpErrors.Forbidden(NOT_ALLOWED);
     await this.repository.updateCurrentHitPoints(id, currentHitPoints);
     return {success: true};
   }
@@ -1496,8 +1500,8 @@ export class CharacterSheetService {
     userId: string,
   ): Promise<{success: boolean}> {
     const raw = await this.repository.findCharacterById(id);
-    if (!raw) throw new Error('Character not found');
-    if (!(await this.userCanManageCharacter(raw.character.user_id, id, userId))) throw new Error('Unauthorized');
+    if (!raw) throw new HttpErrors.NotFound(NOT_FOUND);
+    if (!(await this.userCanManageCharacter(raw.character.user_id, id, userId))) throw new HttpErrors.Forbidden(NOT_ALLOWED);
     await this.repository.updateCurrency(id, totalPo);
     return {success: true};
   }
@@ -1508,8 +1512,8 @@ export class CharacterSheetService {
     userId: string,
   ): Promise<{success: boolean}> {
     const raw = await this.repository.findCharacterById(id);
-    if (!raw) throw new Error('Character not found');
-    if (raw.character.user_id !== userId) throw new Error('Unauthorized');
+    if (!raw) throw new HttpErrors.NotFound(NOT_FOUND);
+    if (raw.character.user_id !== userId) throw new HttpErrors.Forbidden(NOT_ALLOWED);
     await this.repository.updateAvatarPreset(id, preset);
     return {success: true};
   }
@@ -1537,9 +1541,9 @@ export class CharacterSheetService {
   /** Troca a armadura/escudo equipados — CA é recalculada na hora (não fica congelada, ver `loadCharacter`). */
   async updateEquipment(id: number, userId: string, input: EquipmentUpdateInput): Promise<{armor_class: number}> {
     const raw = await this.repository.findCharacterById(id);
-    if (!raw) throw new Error('Character not found');
+    if (!raw) throw new HttpErrors.NotFound(NOT_FOUND);
     if (!(await this.userCanManageCharacter(raw.character.user_id, id, userId))) {
-      throw new Error('Unauthorized');
+      throw new HttpErrors.Forbidden(NOT_ALLOWED);
     }
 
     const {character, attributes} = raw;
@@ -1566,8 +1570,8 @@ export class CharacterSheetService {
 
   async deleteCharacter(id: number, userId: string): Promise<{success: boolean}> {
     const raw = await this.repository.findCharacterById(id);
-    if (!raw) throw new Error('Character not found');
-    if (raw.character.user_id !== userId) throw new Error('Unauthorized');
+    if (!raw) throw new HttpErrors.NotFound(NOT_FOUND);
+    if (raw.character.user_id !== userId) throw new HttpErrors.Forbidden(NOT_ALLOWED);
     await this.repository.deleteCharacter(id);
     await this.imageCleanup.deleteIfUnreferenced([raw.character.image_url]);
     return {success: true};
@@ -1971,8 +1975,8 @@ export class CharacterSheetService {
     userId: string,
   ): Promise<{id_character: number; full_history: string}> {
     const raw = await this.repository.findBackgroundCharacterById(id);
-    if (!raw) throw new Error('Character not found');
-    if (raw.user_id !== userId) throw new Error('Unauthorized');
+    if (!raw) throw new HttpErrors.NotFound(NOT_FOUND);
+    if (raw.user_id !== userId) throw new HttpErrors.Forbidden(NOT_ALLOWED);
     return {id_character: raw.id_character, full_history: raw.full_history};
   }
 
@@ -1983,8 +1987,8 @@ export class CharacterSheetService {
     const raw = await this.repository.findBackgroundCharacterById(
       characterBackground.id_character,
     );
-    if (!raw) throw new Error('Character not found');
-    if (raw.user_id !== userId) throw new Error('Unauthorized');
+    if (!raw) throw new HttpErrors.NotFound(NOT_FOUND);
+    if (raw.user_id !== userId) throw new HttpErrors.Forbidden(NOT_ALLOWED);
     await this.repository.updateCharacterBackground(
       characterBackground.id_character,
       characterBackground.full_history,

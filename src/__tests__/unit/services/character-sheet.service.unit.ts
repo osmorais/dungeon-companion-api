@@ -286,16 +286,21 @@ describe('CharacterSheetService', () => {
   describe('level-up: travas comuns', () => {
     it('personagem inexistente', async () => {
       repository.stubs.findCharacterById.resolves(null);
-      await expect(service.getLevelUpPreview(1, 'owner')).to.be.rejectedWith(
-        /Character not found/,
+      const err = await service.getLevelUpPreview(1, 'owner').then(
+        () => null,
+        (e: {statusCode?: number; message: string}) => e,
       );
+      expect(err?.statusCode).to.equal(404);
+      expect(err?.message).to.equal('Personagem não encontrado');
     });
 
     it('só o dono ou o mestre da sessão podem subir de nível', async () => {
       givenCharacter();
-      await expect(service.getLevelUpPreview(1, 'outro')).to.be.rejectedWith(
-        /Unauthorized/,
+      const err = await service.getLevelUpPreview(1, 'outro').then(
+        () => null,
+        (e: {statusCode?: number}) => e,
       );
+      expect(err?.statusCode).to.equal(403);
       gameSessionRepository.stubs.isDmOfCharacter.resolves(true);
       await expect(service.getLevelUpPreview(1, 'mestre')).to.be.fulfilled();
     });
@@ -1478,9 +1483,13 @@ describe('CharacterSheetService', () => {
 
     it('outro usuário não exclui o personagem', async () => {
       givenCharacter();
-      await expect(service.deleteCharacter(1, 'outro')).to.be.rejectedWith(
-        'Unauthorized',
+      const err = await service.deleteCharacter(1, 'outro').then(
+        () => null,
+        (e: {statusCode?: number; message: string}) => e,
       );
+      // 403, não 500 (1.17.5) — e não 401, que desloga no frontend.
+      expect(err?.statusCode).to.equal(403);
+      expect(err?.message).to.equal('Você não pode alterar este personagem');
       expect(repository.stubs.deleteCharacter.called).to.be.false();
       expect(imageCleanup.stubs.deleteIfUnreferenced.called).to.be.false();
     });

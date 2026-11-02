@@ -7,7 +7,11 @@ import crypto from 'crypto';
 import {OAuth2Client} from 'google-auth-library';
 import {UserRepository} from '../repositories/user.repository';
 import {User, UserPublic} from '../models/user.model';
-import {getJwtSecret, verifyJwtToken} from '../strategies/jwt.util';
+import {
+  getJwtSecret,
+  JWT_ALGORITHM,
+  verifyJwtToken,
+} from '../strategies/jwt.util';
 import {isUniqueViolation, takenError, UsernameService} from './username.service';
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? '';
@@ -34,6 +38,7 @@ export class AuthService {
   generateToken(user: Pick<User, 'id' | 'email'>): string {
     return jwt.sign({id: user.id, email: user.email}, getJwtSecret(), {
       expiresIn: JWT_EXPIRES_IN,
+      algorithm: JWT_ALGORITHM,
     });
   }
 

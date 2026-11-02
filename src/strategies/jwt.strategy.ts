@@ -15,7 +15,9 @@ export class JWTStrategy implements AuthenticationStrategy {
     const tokenFromHeader = authHeader?.startsWith('Bearer ')
       ? authHeader.slice(7)
       : undefined;
-    const token = tokenFromCookie ?? tokenFromHeader;
+    // O site manda sempre o header; o cookie fica de reserva (header primeiro: é o que não vai
+    // sozinho numa requisição forjada por outro site).
+    const token = tokenFromHeader ?? tokenFromCookie;
     if (!token) {
       throw new HttpErrors.Unauthorized('Cookie de autenticação ausente');
     }

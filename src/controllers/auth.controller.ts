@@ -25,11 +25,14 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 // Cross-origin (Hostinger → Render) requires SameSite=None + Secure.
 // SameSite=None without Secure is rejected by all modern browsers.
 // In local dev we use Lax so cookies work over plain HTTP.
-function cookieOptions() {
+// Lax (1.17.5): a api (api.forjaarcana.com) e o site são o mesmo site desde a VPS, então o cookie
+// segue nas chamadas do site e deixa de ir em requisição disparada por outro site (CSRF). Com o
+// Render (outro domínio) precisava de None.
+export function cookieOptions() {
   return {
     httpOnly: true,
     secure: IS_PROD,
-    sameSite: IS_PROD ? ('none' as const) : ('lax' as const),
+    sameSite: 'lax' as const,
     maxAge: 8 * 60 * 60 * 1000, // 8h in ms
     path: '/',
   };
@@ -39,7 +42,7 @@ export function clearCookieOptions() {
   return {
     httpOnly: true,
     secure: IS_PROD,
-    sameSite: IS_PROD ? ('none' as const) : ('lax' as const),
+    sameSite: 'lax' as const,
     path: '/',
   };
 }

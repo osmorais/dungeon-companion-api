@@ -5,6 +5,9 @@ import jwt from 'jsonwebtoken';
 // público, qualquer pessoa conseguiria assinar tokens válidos pra qualquer usuário.
 const DEV_FALLBACK_SECRET = 'dev-only-insecure-jwt-secret';
 
+/** Algoritmo fixo na assinatura e na verificação: a verificação nunca aceita outro. */
+export const JWT_ALGORITHM = 'HS256';
+
 export interface JwtPayload {
   id: string;
   email: string;
@@ -33,5 +36,7 @@ export function assertJwtSecretConfigured(): void {
 
 /** Fonte de verdade única de verificação de JWT — usada pela rota REST (JWTStrategy) e pelo handshake do socket.io (socket-auth.middleware). */
 export function verifyJwtToken(token: string): JwtPayload {
-  return jwt.verify(token, getJwtSecret()) as JwtPayload;
+  return jwt.verify(token, getJwtSecret(), {
+    algorithms: [JWT_ALGORITHM],
+  }) as JwtPayload;
 }
