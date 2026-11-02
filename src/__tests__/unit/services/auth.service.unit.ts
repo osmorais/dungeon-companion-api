@@ -44,19 +44,32 @@ describe('AuthService — redefinição de senha', () => {
 
   it('esqueci a senha: e-mail desconhecido não gera token', async () => {
     users.stubs.findByEmail.resolves(undefined);
-    expect(await service.forgotPassword('x@x.com')).to.equal('');
+    expect(await service.forgotPassword('x@x.com')).to.be.null();
     expect(users.stubs.updateResetToken.called).to.be.false();
   });
 
   it('esqueci a senha: devolve o token puro (vai no e-mail) mas grava só o hash', async () => {
     users.stubs.findByEmail.resolves(user);
-    const token = await service.forgotPassword('a@x.com');
+    const reset = await service.forgotPassword('a@x.com');
+    const token = reset!.token;
     expect(token).to.match(/^[0-9a-f]{64}$/);
     const [id, stored, expires] = users.stubs.updateResetToken.firstCall.args;
     expect(id).to.equal('u1');
     expect(stored).to.equal(hashResetToken(token));
     expect(stored).to.not.equal(token);
     expect((expires as Date).getTime()).to.be.greaterThan(Date.now());
+  });
+
+  it('esqueci a senha: devolve o nome de usuário pra saudação (null se a conta não tem)', async () => {
+    users.stubs.findByEmail.resolves({...user, username: 'gorak'} as User);
+    expect((await service.forgotPassword('a@x.com'))!.username).to.equal(
+      'gorak',
+    );
+    users.stubs.findByEmail.resolves({
+      ...user,
+      username: null,
+    } as unknown as User);
+    expect((await service.forgotPassword('a@x.com'))!.username).to.be.null();
   });
 
   it('redefinir: procura e consome pelo hash do token recebido', async () => {

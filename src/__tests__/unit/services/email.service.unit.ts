@@ -63,6 +63,38 @@ describe('EmailService (e-mail de recuperação pelo SMTP da Hostinger)', () => 
     expect(mail.html).to.containEql('https://forjaarcana.com/forja_arcana.png');
   });
 
+  it('saúda pelo nome de usuário; sem nome, "aventureiro"', async () => {
+    await service.sendPasswordReset('heroi@x.com', 'b'.repeat(64), 'gorak');
+    expect(sendMailStub.firstCall.args[0].html).to.match(
+      /Saudações, <strong[^>]*>gorak<\/strong>/,
+    );
+    await service.sendPasswordReset('heroi@x.com', 'b'.repeat(64), null);
+    expect(sendMailStub.secondCall.args[0].html).to.match(
+      /Saudações, <strong[^>]*>aventureiro<\/strong>/,
+    );
+  });
+
+  it('nome no HTML sempre escapado', async () => {
+    await service.sendPasswordReset(
+      'heroi@x.com',
+      'b'.repeat(64),
+      '<img src=x>',
+    );
+    const html = sendMailStub.firstCall.args[0].html as string;
+    expect(html).to.containEql('&lt;img src=x&gt;');
+    expect(html).to.not.containEql('<img src=x>');
+  });
+
+  it('se declara só escuro e protege o fundo da inversão do modo escuro', async () => {
+    await service.sendPasswordReset('heroi@x.com', 'b'.repeat(64));
+    const html = sendMailStub.firstCall.args[0].html as string;
+    expect(html).to.containEql('<meta name="color-scheme" content="dark" />');
+    expect(html).to.containEql(
+      'background-image:linear-gradient(#1d0a0a,#1d0a0a)',
+    );
+    expect(html).to.containEql('u + .body .gm-screen');
+  });
+
   it('SMTP_FROM troca o remetente; FRONTEND_URL troca o link (sem barra dobrada)', async () => {
     process.env.SMTP_FROM = 'Forja Arcana <mensageiro@forjaarcana.com>';
     process.env.FRONTEND_URL = 'https://teste.local/';

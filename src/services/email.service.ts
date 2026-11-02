@@ -18,7 +18,11 @@ export class EmailService {
   ) => Pick<nodemailer.Transporter, 'sendMail'> = options =>
     nodemailer.createTransport(options);
 
-  async sendPasswordReset(email: string, token: string): Promise<void> {
+  async sendPasswordReset(
+    email: string,
+    token: string,
+    username?: string | null,
+  ): Promise<void> {
     // Sem fallback: sem a conta o envio não tem como dar certo, então falha aqui com um motivo claro.
     const user = process.env.SMTP_USER;
     const pass = process.env.SMTP_PASS;
@@ -45,7 +49,11 @@ export class EmailService {
         from: process.env.SMTP_FROM ?? user,
         to: email,
         subject: '🗝️ Redefinição de Senha - Forja Arcana',
-        html: passwordResetTemplate(link, `${frontendUrl}/forja_arcana.png`),
+        html: passwordResetTemplate(
+          link,
+          `${frontendUrl}/forja_arcana.png`,
+          username,
+        ),
       });
     } catch (err) {
       // A mensagem do nodemailer pode trazer o endereço (destinatário recusado); o controller

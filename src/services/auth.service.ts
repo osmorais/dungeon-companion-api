@@ -84,14 +84,17 @@ export class AuthService {
     return {token, user: toPublic(user)};
   }
 
-  async forgotPassword(email: string): Promise<string> {
+  /** Token puro (vai no e-mail) e o nome de usuário (saudação); `null` se o e-mail não tem conta. */
+  async forgotPassword(
+    email: string,
+  ): Promise<{token: string; username: string | null} | null> {
     // Retenção: token vencido não serve pra nada — some do banco na próxima solicitação de
     // qualquer usuário (rota com limite de tentativas, então o custo é baixo).
     await this.userRepository.clearExpiredResetTokens();
     const user = await this.userRepository.findByEmail(email);
     if (!user) {
       // Don't reveal whether the email exists
-      return '';
+      return null;
     }
     const token = crypto.randomBytes(32).toString('hex');
     const expires = new Date(Date.now() + 3600000);
@@ -101,7 +104,7 @@ export class AuthService {
       hashResetToken(token),
       expires,
     );
-    return token;
+    return {token, username: user.username ?? null};
   }
 
   async resetPassword(token: string, newPassword: string): Promise<void> {
