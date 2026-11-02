@@ -1,6 +1,8 @@
 import {injectable, BindingScope} from '@loopback/core';
 import {createClient, SupabaseClient} from '@supabase/supabase-js';
+import {HttpErrors} from '@loopback/rest';
 import {randomUUID} from 'crypto';
+import {detectImageType, IMAGE_TYPE_ERROR} from './image-type';
 
 const DEFAULT_BUCKET = 'monster-images';
 
@@ -39,8 +41,14 @@ export class SupabaseStorageService {
    * Sobe um arquivo pro bucket configurado e devolve a URL pública dele. O nome no bucket é só um
    * UUID + extensão — o nome original do arquivo pode carregar dado pessoal (ex.: "foto-joao.png")
    * e ficaria exposto na URL pública.
+   *
+   * O tipo gravado vem do conteúdo do arquivo (`detectImageType`); `declaredType` (o que o
+   * navegador mandou) é ignorado desde a 1.17.6 — só PNG, JPEG, WebP e GIF passam (422 nos outros).
    */
-  async uploadImage(buffer: Buffer, contentType: string): Promise<string> {
+  async uploadImage(buffer: Buffer, declaredType: string): Promise<string> {
+    const contentType = detectImageType(buffer);
+    if (!contentType)
+      throw new HttpErrors.UnprocessableEntity(IMAGE_TYPE_ERROR);
     const fileName = `${randomUUID()}.${extensionForContentType(contentType)}`;
     const client = this.getClient();
 

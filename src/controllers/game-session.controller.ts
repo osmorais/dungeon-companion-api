@@ -17,6 +17,10 @@ import {
 import {authenticate} from '@loopback/authentication';
 import {SecurityBindings, UserProfile} from '@loopback/security';
 import multer from 'multer';
+import {
+  IMAGE_TYPE_ERROR,
+  isAcceptedImageMimetype,
+} from '../services/image-type';
 import {GameSessionService} from '../services/game-session.service';
 import {
   AddMonsterToSessionInput,
@@ -59,8 +63,8 @@ const imageUpload = multer({
     file: MulterFile,
     cb: (error: Error | null, acceptFile?: boolean) => void,
   ) => {
-    if (!file.mimetype.startsWith('image/')) {
-      cb(new Error('O arquivo precisa ser uma imagem'));
+    if (!isAcceptedImageMimetype(file.mimetype)) {
+      cb(new Error(IMAGE_TYPE_ERROR));
       return;
     }
     cb(null, true);
