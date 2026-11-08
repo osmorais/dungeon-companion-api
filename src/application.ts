@@ -27,6 +27,7 @@ import {CombatRepository} from './repositories/combat.repository';
 import {PostgresDatasource} from './datasources';
 import {JWTStrategy} from './strategies/jwt.strategy';
 import {SessionSocketGateway} from './services/session-socket.gateway';
+import {SocialSocketGateway} from './services/social-socket.gateway';
 
 export {ApplicationConfig};
 
@@ -77,6 +78,8 @@ export class DungeonCompanionApiApplication extends BootMixin(
     // argumento: o LoopBack já deriva a key como `services.<NomeDaClasse>` sozinho — passar
     // 'services.SessionSocketGateway' aqui duplicaria o namespace ('services.services.…').
     this.service(SessionSocketGateway);
+    // Mesmo esquema: o gateway social (amigos, notificações, presença) também é .gateway.ts.
+    this.service(SocialSocketGateway);
 
     this.bind('db.Postgres').toDynamicValue(() =>
       PostgresDatasource.getInstance(),

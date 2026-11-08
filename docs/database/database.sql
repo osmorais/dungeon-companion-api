@@ -813,3 +813,115 @@ ALTER TABLE monster ADD COLUMN IF NOT EXISTS lore TEXT;
 -- andamento, o XP dele soma aqui (GameSessionRepository.removeMonster com creditCombatXp); ao
 -- encerrar o combate, o mestre vê o total e escolhe se distribui.
 ALTER TABLE combat_encounter ADD COLUMN IF NOT EXISTS defeated_xp INTEGER NOT NULL DEFAULT 0;
+
+-- ==========================================
+-- AMIGOS (1.18.0)
+-- ==========================================
+-- Sistema de amigos: solicitações, amizades e bloqueios entre usuários. Regras em
+-- src/services/friend.service.ts e src/services/user-block.service.ts; SQL em
+-- src/repositories/friend.repository.ts e src/repositories/user-block.repository.ts.
+-- Tudo some com a conta (ON DELETE CASCADE a partir de users) e sai na exportação.
+
+-- Preferências de privacidade (mudam em /conta):
+-- discoverable: aparece na busca de jogadores por parte do nome (se falso, só pelo nome exato).
+-- accept_friend_requests: outros jogadores podem enviar solicitação de amizade.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS discoverable BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS accept_friend_requests BOOLEAN NOT NULL DEFAULT TRUE;
+
+-- Solicitações de amizade. O histórico fica (status encerrado) — serve pra trava anti-spam:
+-- depois de uma recusa, o mesmo remetente espera FRIEND_REQUEST_COOLDOWN_DAYS pra mandar outra.
+-- Só uma pendente por par de usuários, nas duas direções (índice único parcial abaixo).
+-- status: 'pending' | 'accepted' | 'rejected' | 'cancelled'
+CREATE TABLE IF NOT EXISTS friend_request (
+    id_friend_request UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    receiver_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status VARCHAR(10) NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'accepted', 'rejected', 'cancelled')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    responded_at TIMESTAMPTZ,
+    CONSTRAINT ck_friend_request_not_self CHECK (sender_id <> receiver_id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_friend_request_pending_pair
+    ON friend_request (LEAST(sender_id, receiver_id), GREATEST(sender_id, receiver_id))
+    WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS ix_friend_request_receiver ON friend_request (receiver_id, status);
+CREATE INDEX IF NOT EXISTS ix_friend_request_sender ON friend_request (sender_id, status);
+
+-- Amizade (bidirecional): uma linha por par, com os ids em ordem canônica (user_low_id < user_high_id),
+-- então A-B e B-A são a mesma linha. Removida para os dois ao desfazer ou bloquear.
+CREATE TABLE IF NOT EXISTS friendship (
+    id_friendship UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_low_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_high_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT ck_friendship_order CHECK (user_low_id < user_high_id),
+    CONSTRAINT uq_friendship_pair UNIQUE (user_low_id, user_high_id)
+);
+CREATE INDEX IF NOT EXISTS ix_friendship_high ON friendship (user_high_id);
+
+-- Bloqueio (unidirecional): impede solicitação, convite e busca entre os dois, nas duas direções.
+-- Ao bloquear, a amizade é desfeita e as solicitações pendentes entre os dois são canceladas.
+CREATE TABLE IF NOT EXISTS user_block (
+    blocker_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    blocked_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (blocker_id, blocked_id),
+    CONSTRAINT ck_user_block_not_self CHECK (blocker_id <> blocked_id)
+);
+CREATE INDEX IF NOT EXISTS ix_user_block_blocked ON user_block (blocked_id);
+
+-- Presença (1.18.0): quem está online fica só em memória (src/services/presence.service.ts) —
+-- dado temporário, nunca gravado. Aqui só as preferências de privacidade (mudam em /conta):
+-- presence_visibility: 'friends' (amigos veem se está online/ausente/ocupado) | 'nobody'.
+-- show_last_seen: amigos veem a última atividade (users.last_access_at) quando está offline.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS presence_visibility VARCHAR(10) NOT NULL DEFAULT 'friends';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS show_last_seen BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Notificações (1.18.0): persistidas, com lida/não lida. Regras em
+-- src/services/notification.service.ts; SQL em src/repositories/notification.repository.ts.
+-- actor_id: quem causou (ex.: quem enviou a solicitação). CASCADE nos dois lados: some com a conta
+-- de quem recebe e com a de quem causou (o nome do ator é lido na hora, não fica no payload).
+-- dedupe_key: trava contra notificação repetida em retry (único por destinatário).
+-- type: 'friend_request_received' | 'friend_request_accepted'
+-- payload: só ids pra montar o link (ex.: {"id_friend_request": "..."}); o acesso é validado de
+-- novo ao abrir.
+CREATE TABLE IF NOT EXISTS notification (
+    id_notification UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    actor_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    type VARCHAR(40) NOT NULL,
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    dedupe_key VARCHAR(120),
+    read_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_notification_dedupe UNIQUE (user_id, dedupe_key)
+);
+CREATE INDEX IF NOT EXISTS ix_notification_user ON notification (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS ix_notification_unread ON notification (user_id) WHERE read_at IS NULL;
+
+-- Convites para mesa (1.18.0): o mestre convida um amigo pra uma sessão dele. Regras em
+-- src/services/session-invite.service.ts; SQL em src/repositories/session-invite.repository.ts.
+-- Aceitar passa pelo fluxo normal de entrada (GameSessionService.addPlayer: personagem do
+-- convidado, vaga, não estar na mesa). Some com a sessão e com a conta de qualquer um dos dois.
+-- status: 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'expired' (expira em
+-- SESSION_INVITE_TTL_DAYS; vencido vira 'expired' na próxima leitura/escrita do par).
+-- message: recado opcional do mestre (até 200 caracteres), visto só pelo convidado.
+CREATE TABLE IF NOT EXISTS session_invite (
+    id_session_invite UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id_game_session UUID NOT NULL REFERENCES game_session(id_game_session) ON DELETE CASCADE,
+    sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    receiver_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status VARCHAR(10) NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'accepted', 'rejected', 'cancelled', 'expired')),
+    message VARCHAR(200),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL,
+    responded_at TIMESTAMPTZ,
+    CONSTRAINT ck_session_invite_not_self CHECK (sender_id <> receiver_id)
+);
+-- No máximo um convite pendente por pessoa e mesa.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_session_invite_pending
+    ON session_invite (id_game_session, receiver_id) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS ix_session_invite_receiver ON session_invite (receiver_id, status);
+CREATE INDEX IF NOT EXISTS ix_session_invite_sender ON session_invite (sender_id, status);

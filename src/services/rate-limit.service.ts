@@ -26,6 +26,11 @@ export const RATE_LIMITS = {
   // mas trava varredura da lista de nomes.
   usernameCheckIp: {max: 120, windowMs: 15 * MINUTE},
   accountDeleteUser: {max: 5, windowMs: 15 * MINUTE},
+  // Amigos (1.18.0): envio de solicitações (spam) e busca de jogadores (varredura de nomes).
+  friendRequestUser: {max: 30, windowMs: 60 * MINUTE},
+  playerSearchUser: {max: 120, windowMs: 15 * MINUTE},
+  userBlockUser: {max: 60, windowMs: 15 * MINUTE},
+  sessionInviteUser: {max: 30, windowMs: 60 * MINUTE},
 } satisfies Record<string, RateLimitRule>;
 
 export type RateLimitName = keyof typeof RATE_LIMITS;

@@ -7,6 +7,7 @@ import {
   ExportedDmSession,
   ExportedParticipation,
   ExportedRoll,
+  ExportedSocial,
 } from '../models/account-types';
 
 /** Dados da conta do próprio usuário — perfil, exportação (LGPD art. 18) e exclusão da conta. */
@@ -28,6 +29,10 @@ export class AccountRepository {
              (google_id IS NOT NULL) AS google_linked,
              show_in_ranking,
              last_access_at,
+             discoverable,
+             accept_friend_requests,
+             presence_visibility,
+             show_last_seen,
              password_hash
       FROM users
       WHERE id = ${userId}
@@ -46,6 +51,86 @@ export class AccountRepository {
     await this.db.sql`
       UPDATE users SET show_in_ranking = ${show} WHERE id = ${userId}
     `;
+  }
+
+  /** Preferências de privacidade dos amigos (1.18.0); `undefined` mantém o valor atual. */
+  async updateSocialPreferences(
+    userId: string,
+    prefs: {
+      discoverable?: boolean;
+      accept_friend_requests?: boolean;
+      presence_visibility?: string;
+      show_last_seen?: boolean;
+    },
+  ): Promise<void> {
+    await this.db.sql`
+      UPDATE users
+      SET discoverable = COALESCE(${prefs.discoverable ?? null}::boolean, discoverable),
+          accept_friend_requests = COALESCE(
+            ${prefs.accept_friend_requests ?? null}::boolean, accept_friend_requests
+          ),
+          presence_visibility = COALESCE(
+            ${prefs.presence_visibility ?? null}::varchar, presence_visibility
+          ),
+          show_last_seen = COALESCE(${prefs.show_last_seen ?? null}::boolean, show_last_seen)
+      WHERE id = ${userId}
+    `;
+  }
+
+  /** Amizades, solicitações e bloqueios — da outra pessoa, só o nome de usuário. */
+  async findSocial(userId: string): Promise<ExportedSocial> {
+    const sql = this.db.sql;
+    const [friends, friendRequests, blocked, notifications, sessionInvites] =
+      await Promise.all([
+      sql<ExportedSocial['friends']>`
+        SELECT u.username, f.created_at AS friends_since
+        FROM friendship f
+        JOIN users u
+          ON u.id = CASE WHEN f.user_low_id = ${userId}::uuid THEN f.user_high_id ELSE f.user_low_id END
+        WHERE f.user_low_id = ${userId}::uuid OR f.user_high_id = ${userId}::uuid
+        ORDER BY f.created_at
+      `,
+      sql<ExportedSocial['friend_requests']>`
+        SELECT CASE WHEN fr.sender_id = ${userId}::uuid THEN 'sent' ELSE 'received' END AS direction,
+               u.username, fr.status, fr.created_at, fr.responded_at
+        FROM friend_request fr
+        JOIN users u
+          ON u.id = CASE WHEN fr.sender_id = ${userId}::uuid THEN fr.receiver_id ELSE fr.sender_id END
+        WHERE fr.sender_id = ${userId}::uuid OR fr.receiver_id = ${userId}::uuid
+        ORDER BY fr.created_at
+      `,
+      sql<ExportedSocial['blocked']>`
+        SELECT u.username, b.created_at AS blocked_at
+        FROM user_block b
+        JOIN users u ON u.id = b.blocked_id
+        WHERE b.blocker_id = ${userId}
+        ORDER BY b.created_at
+      `,
+      sql<ExportedSocial['notifications']>`
+        SELECT n.type, u.username, n.created_at, n.read_at
+        FROM notification n
+        LEFT JOIN users u ON u.id = n.actor_id
+        WHERE n.user_id = ${userId}
+        ORDER BY n.created_at
+      `,
+      sql<ExportedSocial['session_invites']>`
+        SELECT CASE WHEN si.sender_id = ${userId}::uuid THEN 'sent' ELSE 'received' END AS direction,
+               gs.session_name, u.username, si.status, si.message, si.created_at, si.responded_at
+        FROM session_invite si
+        JOIN game_session gs ON gs.id_game_session = si.id_game_session
+        JOIN users u
+          ON u.id = CASE WHEN si.sender_id = ${userId}::uuid THEN si.receiver_id ELSE si.sender_id END
+        WHERE si.sender_id = ${userId}::uuid OR si.receiver_id = ${userId}::uuid
+        ORDER BY si.created_at
+      `,
+    ]);
+    return {
+      friends: [...friends],
+      friend_requests: [...friendRequests],
+      blocked: [...blocked],
+      notifications: [...notifications],
+      session_invites: [...sessionInvites],
+    };
   }
 
   async findRankingStats(userId: string): Promise<object[]> {
@@ -151,7 +236,8 @@ export class AccountRepository {
 
   /**
    * Apaga a conta. `users` cascateia pra personagens (e tudo deles), sessões que o usuário mestra,
-   * participações como jogador (com inventário) e catálogo de monstros. A exceção são as rolagens
+   * participações como jogador (com inventário), catálogo de monstros e as relações de amigos
+   * (solicitações, amizades e bloqueios, nos dois lados). A exceção são as rolagens
    * dos personagens dele em sessões de **outros** mestres: o FK é `ON DELETE SET NULL` e o
    * `actor_name` sobreviveria — por isso são apagadas antes, explicitamente.
    *

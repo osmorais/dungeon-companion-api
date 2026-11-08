@@ -12,6 +12,8 @@ import {AuthService} from './auth.service';
 import {CharacterSheetService} from './character-sheet.service';
 import {ImageCleanupService} from './image-cleanup.service';
 import {UsernameService} from './username.service';
+import {PresenceService} from './presence.service';
+import {PRESENCE_VISIBILITIES} from '../models/social-event-types';
 
 const FULL_NAME_MAX_LENGTH = 255;
 export const EXPORT_SHEET_WARNING =
@@ -37,6 +39,8 @@ export class AccountService {
     private imageCleanup: ImageCleanupService,
     @service(UsernameService)
     private usernameService: UsernameService,
+    @service(PresenceService)
+    private presence: PresenceService,
   ) {}
 
   async getProfile(userId: string): Promise<AccountProfile> {
@@ -70,6 +74,38 @@ export class AccountService {
         throw new HttpErrors.UnprocessableEntity('show_in_ranking inválido');
       await this.repository.updateShowInRanking(userId, input.show_in_ranking);
     }
+    for (const key of [
+      'discoverable',
+      'accept_friend_requests',
+      'show_last_seen',
+    ] as const) {
+      if (input[key] !== undefined && typeof input[key] !== 'boolean')
+        throw new HttpErrors.UnprocessableEntity(`${key} inválido`);
+    }
+    if (
+      input.presence_visibility !== undefined &&
+      !PRESENCE_VISIBILITIES.includes(input.presence_visibility)
+    )
+      throw new HttpErrors.UnprocessableEntity('presence_visibility inválido');
+    if (
+      input.discoverable !== undefined ||
+      input.accept_friend_requests !== undefined ||
+      input.presence_visibility !== undefined ||
+      input.show_last_seen !== undefined
+    ) {
+      await this.repository.updateSocialPreferences(userId, {
+        discoverable: input.discoverable,
+        accept_friend_requests: input.accept_friend_requests,
+        presence_visibility: input.presence_visibility,
+        show_last_seen: input.show_last_seen,
+      });
+    }
+    // Os amigos passam a ver (ou deixam de ver) a presença na hora.
+    if (
+      input.presence_visibility !== undefined ||
+      input.show_last_seen !== undefined
+    )
+      this.presence.touch(userId);
     return this.getProfile(userId);
   }
 
@@ -95,12 +131,14 @@ export class AccountService {
       monsterCatalog,
       rolls,
       rankingStats,
+      social,
     ] = await Promise.all([
       this.repository.findDmSessions(userId),
       this.repository.findParticipations(userId),
       this.repository.findCatalogMonsters(userId),
       this.repository.findRolls(userId),
       this.repository.findRankingStats(userId),
+      this.repository.findSocial(userId),
     ]);
     return {
       exported_at: new Date().toISOString(),
@@ -111,6 +149,7 @@ export class AccountService {
       monster_catalog: monsterCatalog,
       rolls,
       ranking_stats: rankingStats,
+      social,
     };
   }
 
@@ -155,5 +194,9 @@ function toProfile(
     google_linked: row.google_linked,
     show_in_ranking: row.show_in_ranking ?? true,
     last_access_at: row.last_access_at ?? null,
+    discoverable: row.discoverable ?? true,
+    accept_friend_requests: row.accept_friend_requests ?? true,
+    presence_visibility: row.presence_visibility === 'nobody' ? 'nobody' : 'friends',
+    show_last_seen: row.show_last_seen ?? false,
   };
 }

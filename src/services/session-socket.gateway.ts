@@ -37,8 +37,11 @@ export class SessionSocketGateway {
     private gameSessionService: GameSessionService,
   ) {}
 
-  /** Chamado uma vez, depois que o LoopBack já subiu o http.Server (ver src/index.ts). */
-  attach(httpServer: http.Server, corsOrigins: string[]): void {
+  /**
+   * Chamado uma vez, depois que o LoopBack já subiu o http.Server (ver src/index.ts). Devolve o
+   * servidor socket.io, que o SocialSocketGateway reaproveita (namespace `/social`).
+   */
+  attach(httpServer: http.Server, corsOrigins: string[]): SocketIOServer {
     this.io = new SocketIOServer(httpServer, {
       cors: {origin: corsOrigins, credentials: true},
     });
@@ -50,6 +53,7 @@ export class SessionSocketGateway {
       });
     });
     this.events.subscribe(event => this.broadcast(event));
+    return this.io;
   }
 
   private async onConnection(socket: Socket): Promise<void> {

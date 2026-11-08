@@ -1,5 +1,6 @@
 import {ApplicationConfig, DungeonCompanionApiApplication} from './application';
 import {SessionSocketGateway} from './services/session-socket.gateway';
+import {SocialSocketGateway} from './services/social-socket.gateway';
 import {assertJwtSecretConfigured} from './strategies/jwt.util';
 
 export * from './application';
@@ -22,7 +23,11 @@ export async function main(options: ApplicationConfig = {}) {
     const gateway = await app.get<SessionSocketGateway>(
       'services.SessionSocketGateway',
     );
-    gateway.attach(httpServer, corsOrigins);
+    const io = gateway.attach(httpServer, corsOrigins);
+    const social = await app.get<SocialSocketGateway>(
+      'services.SocialSocketGateway',
+    );
+    social.attach(io);
   }
 
   const url = app.restServer.url;
