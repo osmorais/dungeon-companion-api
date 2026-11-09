@@ -66,6 +66,8 @@ export interface NotificationView {
   payload: Record<string, string>;
   /** Quem causou a notificação (nome lido na hora). */
   actor: SocialUser | null;
+  /** Solicitação de amizade que ainda dá pra responder por esta notificação; senão, null. */
+  pending_friend_request_id: string | null;
   read_at: Date | null;
   created_at: Date;
 }

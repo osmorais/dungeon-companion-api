@@ -107,6 +107,8 @@ export class FriendService {
       (await this.repository.removeFriendship(userId, friendId));
     if (!removed) throw new HttpErrors.NotFound('Amizade não encontrada');
     this.changed('friends', userId, friendId);
+    // Os convites para mesa pendentes entre os dois foram cancelados junto.
+    this.changed('invites', userId, friendId);
   }
 
   async listRequests(
@@ -215,7 +217,8 @@ export class FriendService {
       actor_id: senderId,
       type: 'friend_request_received',
       payload: {id_friend_request: request.id_friend_request},
-      dedupe_key: `friend_request_received:${request.id_friend_request}`,
+      // Por remetente e dia (UTC): cancelar e reenviar não vira uma notificação nova a cada vez.
+      dedupe_key: `friend_request_received:${senderId}:${new Date(this.now()).toISOString().slice(0, 10)}`,
     });
     this.changed('requests', senderId, receiverId);
     return {status: 'pending', request};
@@ -288,7 +291,10 @@ export class FriendService {
     this.changed('requests', request.sender_id, request.receiver_id);
   }
 
-  private changed(scope: 'friends' | 'requests', ...userIds: string[]): void {
+  private changed(
+    scope: 'friends' | 'requests' | 'invites',
+    ...userIds: string[]
+  ): void {
     for (const id of userIds)
       this.events.publish({type: 'social_changed', user_id: id, scope});
   }

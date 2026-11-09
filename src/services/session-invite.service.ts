@@ -22,13 +22,13 @@ export const SESSION_INVITE_TTL_DAYS = 7;
 export const SESSION_INVITE_MESSAGE_MAX = 200;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const INVITE_NOT_FOUND = 'Convite não encontrado';
-const PLAYER_NOT_FOUND = 'Jogador não encontrado';
 
 /**
  * Convites para mesa (1.18.0). Só o mestre convida, e só amigos. Aceitar não pula o fluxo de
  * entrada: chama `GameSessionService.addPlayer` com o código da mesa e o personagem escolhido,
  * que confere de novo o personagem, a vaga e se a pessoa já está na mesa. Convite de outra pessoa
- * é 404; bloqueio entre os dois também (não revela o bloqueio).
+ * é 404, e aceitar com bloqueio entre os dois também. Ao convidar, quem bloqueou o mestre dá a
+ * mesma resposta de quem só não é amigo (não revela o bloqueio).
  */
 @injectable({scope: BindingScope.TRANSIENT})
 export class SessionInviteService {
@@ -73,12 +73,12 @@ export class SessionInviteService {
       );
 
     const block = await this.blocks.blockStatus(senderId, receiverId);
-    if (block.byThem) throw new HttpErrors.NotFound(PLAYER_NOT_FOUND);
     if (block.byMe)
       throw new HttpErrors.UnprocessableEntity(
         'Desbloqueie esse jogador para convidá-lo',
       );
-    if (!(await this.friends.areFriends(senderId, receiverId)))
+    // Quem bloqueou o mestre dá a mesma resposta de quem só não é amigo: não revela o bloqueio.
+    if (block.byThem || !(await this.friends.areFriends(senderId, receiverId)))
       throw new HttpErrors.UnprocessableEntity('Só é possível convidar amigos');
     if (await this.repository.isInSession(idGameSession, receiverId))
       throw new HttpErrors.Conflict('Esse jogador já está na mesa');

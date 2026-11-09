@@ -2,8 +2,10 @@
 import {inject, injectable, BindingScope, service} from '@loopback/core';
 import {HttpErrors} from '@loopback/rest';
 import {GameSessionRepository} from '../repositories/game-session.repository';
+import {SessionInviteRepository} from '../repositories/session-invite.repository';
 import {CombatService} from './combat.service';
 import {SessionEventsService} from './session-events.service';
+import {SocialEventsService} from './social-events.service';
 import {MonsterCatalogService} from './monster-catalog.service';
 import {SupabaseStorageService} from './supabase-storage.service';
 import {ImageCleanupService} from './image-cleanup.service';
@@ -112,6 +114,10 @@ export class GameSessionService {
     // Registrado à mão no application.ts (dois bindings) — ver "Injeção de dependência" no CLAUDE.md.
     @inject('services.CharacterSheetService')
     private characterSheetService: CharacterSheetService,
+    @service(SessionInviteRepository)
+    private sessionInvites: SessionInviteRepository,
+    @service(SocialEventsService)
+    private socialEvents: SocialEventsService,
   ) {}
 
   async createSession(
@@ -262,7 +268,33 @@ export class GameSessionService {
       id_game_session: session.id_game_session,
       player,
     });
+    await this.closeInviteOnJoin(session.id_game_session, userId);
     return player;
+  }
+
+  /** Fecha o convite de quem acabou de entrar. Falha aqui só vai pro log: o jogador já entrou. */
+  private async closeInviteOnJoin(
+    idGameSession: string,
+    userId: string,
+  ): Promise<void> {
+    try {
+      const senderId = await this.sessionInvites.closePendingOnJoin(
+        idGameSession,
+        userId,
+      );
+      if (!senderId) return;
+      for (const id of [senderId, userId])
+        this.socialEvents.publish({
+          type: 'social_changed',
+          user_id: id,
+          scope: 'invites',
+        });
+    } catch (err) {
+      console.error(
+        '[session-invite] não fechou o convite ao entrar na mesa:',
+        (err as Error).message,
+      );
+    }
   }
 
   async removeNpc(idNpcSession: string, userId: string): Promise<void> {

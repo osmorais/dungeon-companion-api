@@ -45,6 +45,25 @@ export class SessionInviteRepository {
     return rows.length > 0;
   }
 
+  /**
+   * Quem entrou na mesa por outro caminho (código) não deixa convite pendente pra trás: ele nunca
+   * mais poderia ser aceito. Só existe um pendente por pessoa e mesa; devolve quem convidou.
+   */
+  async closePendingOnJoin(
+    idGameSession: string,
+    receiverId: string,
+  ): Promise<string | undefined> {
+    const rows = await this.db.sql<{sender_id: string}[]>`
+      UPDATE session_invite
+      SET status = 'accepted', responded_at = NOW()
+      WHERE id_game_session = ${idGameSession}
+        AND receiver_id = ${receiverId}
+        AND status = 'pending'
+      RETURNING sender_id
+    `;
+    return rows[0]?.sender_id;
+  }
+
   /** Pendentes vencidos de quem convida ou é convidado viram `expired`. */
   async expireStale(userId: string): Promise<void> {
     await this.db.sql`

@@ -168,10 +168,12 @@ describe('SessionInviteService', () => {
       });
     });
 
-    it('quem bloqueou o mestre: 404 (não revela o bloqueio)', async () => {
+    it('quem bloqueou o mestre: mesma resposta de quem não é amigo (não revela o bloqueio)', async () => {
       blocks.stubs.blockStatus.resolves({byMe: false, byThem: true});
+      friends.stubs.areFriends.resolves(true);
       await expect(service.send(DM, input)).to.be.rejectedWith({
-        statusCode: 404,
+        statusCode: 422,
+        message: 'Só é possível convidar amigos',
       });
       expect(repository.stubs.create.called).to.be.false();
     });

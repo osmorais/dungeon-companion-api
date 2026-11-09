@@ -12,7 +12,10 @@ import {MonsterCatalogService} from '../../../services/monster-catalog.service';
 import {SupabaseStorageService} from '../../../services/supabase-storage.service';
 import {ImageCleanupService} from '../../../services/image-cleanup.service';
 import {CharacterSheetService} from '../../../services/character-sheet.service';
+import {SocialEventsService} from '../../../services/social-events.service';
+import {SocialEvent} from '../../../models/social-event-types';
 import {GameSessionRepository} from '../../../repositories/game-session.repository';
+import {SessionInviteRepository} from '../../../repositories/session-invite.repository';
 import {
   GameSessionDetail,
   MonsterSession,
@@ -87,6 +90,8 @@ describe('GameSessionService', () => {
   let storage: StubbedInstanceWithSinonAccessor<SupabaseStorageService>;
   let imageCleanup: StubbedInstanceWithSinonAccessor<ImageCleanupService>;
   let characterSheet: StubbedInstanceWithSinonAccessor<CharacterSheetService>;
+  let sessionInvites: StubbedInstanceWithSinonAccessor<SessionInviteRepository>;
+  let socialEvents: SocialEvent[];
   let service: GameSessionService;
 
   beforeEach(() => {
@@ -96,6 +101,9 @@ describe('GameSessionService', () => {
     const bus = new SessionEventsService();
     events = [];
     bus.subscribe(e => events.push(e));
+    const socialBus = new SocialEventsService();
+    socialEvents = [];
+    socialBus.subscribe(e => socialEvents.push(e));
     service = new GameSessionService(
       repository,
       combatService,
@@ -104,6 +112,8 @@ describe('GameSessionService', () => {
       (storage = createStubInstance(SupabaseStorageService)),
       (imageCleanup = createStubInstance(ImageCleanupService)),
       (characterSheet = createStubInstance(CharacterSheetService)),
+      (sessionInvites = createStubInstance(SessionInviteRepository)),
+      socialBus,
     );
   });
 
@@ -122,6 +132,42 @@ describe('GameSessionService', () => {
       repository.stubs.addPlayer.resolves({id_player_session: 'ps'} as never);
       repository.stubs.findCharacterOwnerId.resolves('u1');
       repository.stubs.findUsername.resolves('gorak');
+    });
+
+    it('entrar pelo código fecha o convite pendente e atualiza as listas dos dois', async () => {
+      sessionInvites.stubs.closePendingOnJoin.resolves('dm');
+      await service.addPlayer(input, 'u1');
+      sinon.assert.calledOnceWithExactly(
+        sessionInvites.stubs.closePendingOnJoin,
+        'gs',
+        'u1',
+      );
+      expect(socialEvents).to.eql([
+        {type: 'social_changed', user_id: 'dm', scope: 'invites'},
+        {type: 'social_changed', user_id: 'u1', scope: 'invites'},
+      ]);
+    });
+
+    it('sem convite pendente, ninguém é avisado', async () => {
+      sessionInvites.stubs.closePendingOnJoin.resolves(undefined);
+      await service.addPlayer(input, 'u1');
+      expect(socialEvents).to.eql([]);
+    });
+
+    it('falha ao fechar o convite não derruba a entrada na mesa', async () => {
+      sessionInvites.stubs.closePendingOnJoin.rejects(new Error('x'));
+      const logged = sinon.stub(console, 'error');
+      const player = await service.addPlayer(input, 'u1');
+      logged.restore();
+      expect(player.id_player_session).to.equal('ps');
+    });
+
+    it('entrada recusada não fecha o convite', async () => {
+      repository.stubs.isUserInSession.resolves(true);
+      await expect(service.addPlayer(input, 'u1')).to.be.rejectedWith({
+        statusCode: 409,
+      });
+      expect(sessionInvites.stubs.closePendingOnJoin.called).to.be.false();
     });
 
     it('entra com o nome de usuário, não com o nome mandado pelo cliente', async () => {

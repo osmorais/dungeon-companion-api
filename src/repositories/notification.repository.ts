@@ -34,7 +34,9 @@ export class NotificationRepository {
       )
       SELECT ins.id_notification, ins.type, ins.payload, ins.read_at, ins.created_at,
              CASE WHEN u.id IS NULL THEN NULL
-                  ELSE json_build_object('id', u.id, 'username', u.username) END AS actor
+                  ELSE json_build_object('id', u.id, 'username', u.username) END AS actor,
+             ${n.type === 'friend_request_received' ? n.payload.id_friend_request : null}::uuid
+               AS pending_friend_request_id
       FROM ins
       LEFT JOIN users u ON u.id = ins.actor_id
     `;
@@ -52,6 +54,14 @@ export class NotificationRepository {
       SELECT n.id_notification, n.type, n.payload, n.read_at, n.created_at,
              CASE WHEN u.id IS NULL THEN NULL
                   ELSE json_build_object('id', u.id, 'username', u.username) END AS actor,
+             -- A pendente de agora entre os dois, não a do payload: com um aviso por dia, cancelar
+             -- e reenviar cria outra solicitação sem criar outra notificação.
+             (SELECT fr.id_friend_request FROM friend_request fr
+              WHERE n.type = 'friend_request_received'
+                AND fr.sender_id = n.actor_id
+                AND fr.receiver_id = n.user_id
+                AND fr.status = 'pending'
+              LIMIT 1) AS pending_friend_request_id,
              COUNT(*) OVER() AS total_count
       FROM notification n
       LEFT JOIN users u ON u.id = n.actor_id

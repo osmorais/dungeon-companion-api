@@ -100,13 +100,27 @@ export class FriendRepository {
   }
 
   /** Desfaz a amizade para os dois. Devolve se havia amizade. */
+  /**
+   * Desfaz a amizade e, na mesma transação, cancela os convites para mesa pendentes entre os dois
+   * (nas duas direções): convite é só entre amigos. Devolve se havia amizade.
+   */
   async removeFriendship(a: string, b: string): Promise<boolean> {
-    const result = await this.db.sql`
-      DELETE FROM friendship
-      WHERE user_low_id = LEAST(${a}::uuid, ${b}::uuid)
-        AND user_high_id = GREATEST(${a}::uuid, ${b}::uuid)
-    `;
-    return result.count > 0;
+    return this.db.sql.begin(async sql => {
+      const removed = await sql`
+        DELETE FROM friendship
+        WHERE user_low_id = LEAST(${a}::uuid, ${b}::uuid)
+          AND user_high_id = GREATEST(${a}::uuid, ${b}::uuid)
+      `;
+      if (removed.count === 0) return false;
+      await sql`
+        UPDATE session_invite
+        SET status = 'cancelled', responded_at = NOW()
+        WHERE status = 'pending'
+          AND ((sender_id = ${a} AND receiver_id = ${b})
+            OR (sender_id = ${b} AND receiver_id = ${a}))
+      `;
+      return true;
+    });
   }
 
   async findRequestById(id: string): Promise<FriendRequest | undefined> {

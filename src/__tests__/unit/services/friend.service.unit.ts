@@ -167,9 +167,24 @@ describe('FriendService', () => {
         actor_id: ME,
         type: 'friend_request_received',
         payload: {id_friend_request: REQ},
-        dedupe_key: `friend_request_received:${REQ}`,
+        dedupe_key: `friend_request_received:${ME}:2026-11-03`,
       });
       expect(changed('requests')).to.eql([ME, OTHER].sort());
+    });
+
+    it('cancelar e reenviar: um aviso por dia, mesmo com solicitações diferentes', async () => {
+      const keys = () =>
+        notifications.stubs.notify.getCalls().map(c => c.args[0].dedupe_key);
+      await service.sendRequest(ME, {receiver_id: OTHER});
+      repository.stubs.createRequest.resolves(
+        request({id_friend_request: 'outra', sender_id: ME}),
+      );
+      await service.sendRequest(ME, {receiver_id: OTHER});
+      expect(new Set(keys()).size).to.equal(1);
+
+      service.now = () => NOW + DAY;
+      await service.sendRequest(ME, {receiver_id: OTHER});
+      expect(new Set(keys()).size).to.equal(2);
     });
 
     it('solicitação barrada na validação não notifica ninguém', async () => {
@@ -550,6 +565,18 @@ describe('FriendService', () => {
       repository.stubs.removeFriendship.resolves(true);
       await service.removeFriend(ME, OTHER);
       expect(changed('friends')).to.eql([ME, OTHER].sort());
+    });
+
+    it('remover amizade atualiza os convites para mesa dos dois', async () => {
+      repository.stubs.removeFriendship.resolves(true);
+      await service.removeFriend(ME, OTHER);
+      expect(changed('invites')).to.eql([ME, OTHER].sort());
+    });
+
+    it('remover quem não é amigo não mexe nos convites', async () => {
+      repository.stubs.removeFriendship.resolves(false);
+      await expect(service.removeFriend(ME, OTHER)).to.be.rejected();
+      expect(changed('invites')).to.eql([]);
     });
 
     it('presença: avisa cada amigo com a privacidade aplicada', async () => {

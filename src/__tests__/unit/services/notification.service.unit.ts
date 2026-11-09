@@ -22,6 +22,7 @@ function view(): NotificationView {
     type: 'friend_request_received',
     payload: {id_friend_request: 'r1'},
     actor: {id: 'u2', username: 'gorak'},
+    pending_friend_request_id: null,
     read_at: null,
     created_at: new Date(0),
   };
