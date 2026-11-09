@@ -497,7 +497,7 @@ describe('FriendService', () => {
         'gor',
         10,
         2,
-        undefined,
+        [],
       );
       expect(list).to.eql({
         items: [
@@ -545,17 +545,24 @@ describe('FriendService', () => {
       expect(friend.last_seen_at).to.eql(new Date(1000));
     });
 
-    it('aba Online: ninguém conectado não consulta o banco', async () => {
-      const list = await service.listFriends(ME, undefined, 1, 10, 'online');
-      expect(list.items).to.eql([]);
-      expect(repository.stubs.findFriends.called).to.be.false();
+    it('ninguém conectado: lista normal, sem ninguém pra adiantar', async () => {
+      repository.stubs.findFriends.resolves([]);
+      await service.listFriends(ME, undefined, 1, 10);
+      sinon.assert.calledWith(
+        repository.stubs.findFriends,
+        ME,
+        null,
+        10,
+        1,
+        [],
+      );
     });
 
-    it('aba Online: filtra pelos conectados (sem o próprio usuário)', async () => {
+    it('passa os conectados (sem o próprio usuário) pra virem primeiro', async () => {
       presence.connect(ME, 's0');
       presence.connect(OTHER, 's1');
       repository.stubs.findFriends.resolves([]);
-      await service.listFriends(ME, undefined, 1, 10, 'online');
+      await service.listFriends(ME, undefined, 1, 10);
       sinon.assert.calledWith(repository.stubs.findFriends, ME, null, 10, 1, [
         OTHER,
       ]);

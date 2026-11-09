@@ -30,15 +30,15 @@ export class FriendRepository {
   ) {}
 
   /**
-   * Amigos com as preferências de privacidade da presença (o service aplica). `onlyIds`: restringe
-   * a esses usuários (aba Online, com os ids conectados) e já tira quem esconde a presença.
+   * Amigos com as preferências de privacidade da presença (o service aplica). `onlineIds`: quem
+   * está conectado vem primeiro, menos quem esconde a presença (a ordem não pode entregá-lo).
    */
   async findFriends(
     userId: string,
     search: string | null,
     pageSize: number,
     page: number,
-    onlyIds?: string[],
+    onlineIds: string[],
   ): Promise<WithTotal<FriendRow>[]> {
     const sql = this.db.sql;
     return sql<WithTotal<FriendRow>[]>`
@@ -50,12 +50,13 @@ export class FriendRepository {
         ON u.id = CASE WHEN f.user_low_id = ${userId}::uuid THEN f.user_high_id ELSE f.user_low_id END
       WHERE (f.user_low_id = ${userId}::uuid OR f.user_high_id = ${userId}::uuid)
         ${search ? sql`AND LOWER(u.username) LIKE ${likeContains(search)}` : sql``}
+      ORDER BY
         ${
-          onlyIds
-            ? sql`AND u.id IN ${sql(onlyIds)} AND u.presence_visibility <> 'nobody'`
+          onlineIds.length
+            ? sql`(u.id IN ${sql(onlineIds)} AND u.presence_visibility <> 'nobody') DESC,`
             : sql``
         }
-      ORDER BY LOWER(u.username)
+        LOWER(u.username)
       LIMIT ${pageSize}
       OFFSET (${page} - 1) * ${pageSize}
     `;

@@ -58,26 +58,20 @@ export class FriendService {
     private presence: PresenceService,
   ) {}
 
-  /** `status = 'online'`: só os conectados agora que não escondem a presença (aba Online). */
+  /** Amigos conectados primeiro, depois os demais, em ordem de nome. */
   async listFriends(
     userId: string,
     search?: string,
     page?: number,
     pageSize?: number,
-    status?: string,
   ): Promise<PagedList<Friend>> {
     const paging = resolvePaging(page, pageSize);
-    let onlyIds: string[] | undefined;
-    if (status === 'online') {
-      onlyIds = this.presence.onlineUserIds().filter(id => id !== userId);
-      if (!onlyIds.length) return {items: [], ...paging, total_count: 0};
-    }
     const rows = await this.repository.findFriends(
       userId,
       normalizeFilter(search),
       paging.pageSize,
       paging.page,
-      onlyIds,
+      this.presence.onlineUserIds().filter(id => id !== userId),
     );
     return toPagedList(
       rows.map(row => ({...this.toFriend(row), total_count: row.total_count})),

@@ -33,15 +33,12 @@ export class FriendController {
     @param.query.string('search') search?: string,
     @param.query.number('page') page?: number,
     @param.query.number('pageSize') pageSize?: number,
-    // 'online': só os amigos conectados agora (aba Online).
-    @param.query.string('status') status?: string,
   ): Promise<PagedList<Friend>> {
     return this.friendService.listFriends(
       currentUser.id,
       search,
       page,
       pageSize,
-      status,
     );
   }
 
