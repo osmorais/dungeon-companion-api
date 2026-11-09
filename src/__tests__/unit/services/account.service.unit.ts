@@ -13,6 +13,7 @@ import {AuthService} from '../../../services/auth.service';
 import {CharacterSheetService} from '../../../services/character-sheet.service';
 import {ImageCleanupService} from '../../../services/image-cleanup.service';
 import {UsernameService} from '../../../services/username.service';
+import {PresenceService} from '../../../services/presence.service';
 import {AccountRepository} from '../../../repositories/account.repository';
 import {AccountProfile} from '../../../models/account-types';
 import {CharacterSheet} from '../../../models/character-sheet-types';
@@ -30,6 +31,10 @@ function profileRow(
     google_linked: false,
     show_in_ranking: true,
     last_access_at: new Date('2026-11-01T10:00:00Z'),
+    discoverable: true,
+    accept_friend_requests: true,
+    presence_visibility: 'friends',
+    show_last_seen: false,
     password_hash: 'hash',
     ...overrides,
   };
@@ -41,6 +46,7 @@ describe('AccountService', () => {
   let auth: StubbedInstanceWithSinonAccessor<AuthService>;
   let imageCleanup: StubbedInstanceWithSinonAccessor<ImageCleanupService>;
   let usernames: StubbedInstanceWithSinonAccessor<UsernameService>;
+  let presence: StubbedInstanceWithSinonAccessor<PresenceService>;
   let service: AccountService;
 
   beforeEach(() => {
@@ -49,6 +55,7 @@ describe('AccountService', () => {
     auth = createStubInstance(AuthService);
     imageCleanup = createStubInstance(ImageCleanupService);
     usernames = createStubInstance(UsernameService);
+    presence = createStubInstance(PresenceService);
     repository.stubs.findProfile.resolves(profileRow());
     repository.stubs.deleteAccount.resolves({imageUrls: ['https://x/a.png']});
     auth.stubs.comparePassword.resolves(true);
@@ -58,6 +65,7 @@ describe('AccountService', () => {
       auth,
       imageCleanup,
       usernames,
+      presence,
     );
   });
 
@@ -77,6 +85,10 @@ describe('AccountService', () => {
         google_linked: false,
         show_in_ranking: true,
         last_access_at: new Date('2026-11-01T10:00:00Z'),
+        discoverable: true,
+        accept_friend_requests: true,
+        presence_visibility: 'friends',
+        show_last_seen: false,
       });
       expect(profile).to.not.have.property('password_hash');
     });
@@ -153,6 +165,80 @@ describe('AccountService', () => {
       ).to.be.rejectedWith({statusCode: 422});
       expect(repository.stubs.updateShowInRanking.called).to.be.false();
     });
+
+    it('privacidade dos amigos: grava só o que veio no corpo', async () => {
+      await service.updateProfile('u1', {discoverable: false});
+      sinon.assert.calledWith(repository.stubs.updateSocialPreferences, 'u1', {
+        discoverable: false,
+        accept_friend_requests: undefined,
+        presence_visibility: undefined,
+        show_last_seen: undefined,
+      });
+      await service.updateProfile('u1', {accept_friend_requests: false});
+      sinon.assert.calledWith(repository.stubs.updateSocialPreferences, 'u1', {
+        discoverable: undefined,
+        accept_friend_requests: false,
+        presence_visibility: undefined,
+        show_last_seen: undefined,
+      });
+      expect(presence.stubs.touch.called).to.be.false();
+    });
+
+    it('privacidade da presença: grava e avisa os amigos na hora', async () => {
+      await service.updateProfile('u1', {presence_visibility: 'nobody'});
+      sinon.assert.calledWith(repository.stubs.updateSocialPreferences, 'u1', {
+        discoverable: undefined,
+        accept_friend_requests: undefined,
+        presence_visibility: 'nobody',
+        show_last_seen: undefined,
+      });
+      sinon.assert.calledOnceWithExactly(presence.stubs.touch, 'u1');
+      await service.updateProfile('u1', {show_last_seen: true});
+      sinon.assert.calledTwice(presence.stubs.touch);
+    });
+
+    it('presence_visibility fora da lista é recusado', async () => {
+      await expect(
+        service.updateProfile('u1', {
+          presence_visibility: 'todos' as never,
+        }),
+      ).to.be.rejectedWith({statusCode: 422});
+      await expect(
+        service.updateProfile('u1', {show_last_seen: 'sim' as never}),
+      ).to.be.rejectedWith({statusCode: 422});
+      expect(repository.stubs.updateSocialPreferences.called).to.be.false();
+    });
+
+    it('sem preferência de amigos no corpo não grava', async () => {
+      await service.updateProfile('u1', {show_in_ranking: true});
+      expect(repository.stubs.updateSocialPreferences.called).to.be.false();
+    });
+
+    it('preferência de amigos que não é booleana é recusada', async () => {
+      await expect(
+        service.updateProfile('u1', {
+          discoverable: 'sim' as unknown as boolean,
+        }),
+      ).to.be.rejectedWith({statusCode: 422});
+      await expect(
+        service.updateProfile('u1', {
+          accept_friend_requests: 1 as unknown as boolean,
+        }),
+      ).to.be.rejectedWith({statusCode: 422});
+      expect(repository.stubs.updateSocialPreferences.called).to.be.false();
+    });
+
+    it('conta antiga sem as colunas novas: padrão é encontrável e aceitando pedidos', async () => {
+      repository.stubs.findProfile.resolves(
+        profileRow({
+          discoverable: undefined as unknown as boolean,
+          accept_friend_requests: undefined as unknown as boolean,
+        }),
+      );
+      const profile = await service.getProfile('u1');
+      expect(profile.discoverable).to.be.true();
+      expect(profile.accept_friend_requests).to.be.true();
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -169,8 +255,17 @@ describe('AccountService', () => {
       repository.stubs.findCatalogMonsters.resolves([]);
       repository.stubs.findRolls.resolves([]);
       repository.stubs.findRankingStats.resolves([{id_character: 1, nat20: 3}]);
+      const social = {
+        friends: [{username: 'gorak', friends_since: new Date(0)}],
+        friend_requests: [],
+        blocked: [],
+        notifications: [],
+        session_invites: [],
+      };
+      repository.stubs.findSocial.resolves(social);
 
       const data = await service.exportData('u1');
+      expect(data.social).to.eql(social);
       expect(data.ranking_stats).to.eql([{id_character: 1, nat20: 3}]);
       expect(data.account.email).to.equal('Heroi@Aventura.com');
       expect(data.account).to.not.have.property('password_hash');
