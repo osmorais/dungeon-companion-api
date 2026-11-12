@@ -52,6 +52,7 @@ function sessionDetail(): GameSessionDetail {
     game_session: {user_id: 'dm'} as GameSessionDetail['game_session'],
     players: [],
     npcs: [],
+    companions: [],
     monsters: [
       monster('m1', {is_revealed: true}),
       monster('m2', {
@@ -348,6 +349,86 @@ describe('GameSessionService', () => {
         target_label: 'Thorin',
         amount: 5,
         kind: 'heal',
+      });
+    });
+
+    it('companheiro: dano no PV dele e a mesa recebe o PV novo', async () => {
+      repository.stubs.findApplyTarget.resolves({
+        id_character: null,
+        label: 'Lobo',
+        current: 12,
+        max: 12,
+        temp: 0,
+        is_revealed: true,
+      });
+      const result = await service.applyAmount(
+        'gs',
+        input({
+          target_kind: 'companion',
+          target_id: 'c1',
+          kind: 'damage',
+          amount: 5,
+        }),
+        'u1',
+      );
+      expect(result).to.eql({current_hit_points: 7});
+      sinon.assert.calledWith(repository.stubs.writeCompanionHp, 'c1', 7);
+      expect(events[0]).to.eql({
+        type: 'companion_hp_updated',
+        id_game_session: 'gs',
+        id_session_companion: 'c1',
+        hp_current: 7,
+      });
+      await expect(
+        service.applyAmount(
+          'gs',
+          input({target_kind: 'companion', target_id: 'c1', kind: 'temp_hp'}),
+          'u1',
+        ),
+      ).to.be.rejectedWith(/PV temporários/);
+    });
+
+    it('druida em Forma Selvagem: o dano vai na forma e o que sobra passa pro druida', async () => {
+      const effects = {
+        active: [],
+        turn_uses: {},
+        wild_shape: {hp_current: 4, hp_max: 11, name: 'Lobo'},
+      } as never;
+      repository.stubs.findApplyTarget.resolves({
+        ...ally,
+        current: 4,
+        max: 11,
+        temp: 1,
+        wildShape: {effects, druid: {current: 25, max: 30}},
+      });
+      repository.stubs.writeWildShapeHp.resolves({
+        current: 20,
+        max: 30,
+        name: null,
+        relentlessEndurance: null,
+      });
+      const result = await service.applyAmount(
+        'gs',
+        input({kind: 'damage', amount: 10}),
+        'u1',
+      );
+      // 10 de dano: 1 na vida temporária, 4 na forma, 5 passam pro druida
+      sinon.assert.calledWith(
+        repository.stubs.writeWildShapeHp,
+        20,
+        effects,
+        {current: 25, max: 30},
+        0,
+        5,
+        0,
+      );
+      sinon.assert.notCalled(repository.stubs.writeCharacterHp);
+      expect(result).to.eql({current_hit_points: 20, temporary_hit_points: 0});
+      expect(events[0]).to.containDeep({
+        type: 'player_hp_updated',
+        current_hit_points: 20,
+        max_hit_points: 30,
+        wild_shape_name: null,
       });
     });
 
@@ -653,13 +734,22 @@ describe('GameSessionService', () => {
       const detail = await service.getSession('gs', 'player');
       expect(detail.monsters).to.eql([]);
       const noCard = {monster_type: null, size: null, lore: null};
+      // Slug do bestiário pra arte padrão no site (1.23.0).
+      const goblinArt = {monster_slug: 'goblin'};
       expect(detail.revealed_monsters).to.eql([
-        {id_monster_session: 'm1', name: 'Goblin', image_url: null, ...noCard},
+        {
+          id_monster_session: 'm1',
+          name: 'Goblin',
+          image_url: null,
+          ...noCard,
+          ...goblinArt,
+        },
         {
           id_monster_session: 'm2',
           name: 'Chefão',
           image_url: 'c.png',
           ...noCard,
+          ...goblinArt,
         },
       ]);
       expect(
@@ -692,6 +782,7 @@ describe('GameSessionService', () => {
           monster_type: 'humanoide',
           size: 'Pequeno',
           lore: 'Pequenos e traiçoeiros.',
+          monster_slug: 'goblin',
         },
       ]);
     });
@@ -743,6 +834,38 @@ describe('GameSessionService', () => {
           temporary_hit_points: 3,
         },
       ]);
+    });
+
+    it('Forma Selvagem: repassa o dano que sobrou e avisa a mesa do PV máximo e da forma', async () => {
+      await expect(
+        service.updateCharacterHp('ps', 0, 0, 'u', -2),
+      ).to.be.rejectedWith(/overflow/);
+      repository.stubs.updateCharacterHp.resolves({
+        status: 'ok',
+        idGameSession: 'gs',
+        currentHitPoints: 18,
+        wildShape: {maxHitPoints: 30, name: null},
+      });
+      const result = await service.updateCharacterHp('ps', 0, 0, 'u', 7);
+      sinon.assert.calledWith(
+        repository.stubs.updateCharacterHp,
+        'ps',
+        0,
+        0,
+        'u',
+        7,
+      );
+      expect(result).to.eql({
+        current_hit_points: 18,
+        max_hit_points: 30,
+        wild_shape_name: null,
+      });
+      expect(events[0]).to.containDeep({
+        type: 'player_hp_updated',
+        current_hit_points: 18,
+        max_hit_points: 30,
+        wild_shape_name: null,
+      });
     });
 
     it('Resistência Implacável: grava 1 em vez de 0, devolve o PV final e avisa a mesa', async () => {
@@ -914,6 +1037,7 @@ describe('GameSessionService', () => {
         },
         imageUrl: 'o.png',
         lore: 'Saqueadores das montanhas.',
+        monsterSlug: 'orc',
       });
       await service.revealMonster('m', 'dm');
       expect(events).to.eql([
@@ -926,6 +1050,7 @@ describe('GameSessionService', () => {
           monster_type: 'humanoide',
           size: 'Médio',
           lore: 'Saqueadores das montanhas.',
+          monster_slug: 'orc',
         },
       ]);
     });
@@ -1014,6 +1139,7 @@ describe('GameSessionService', () => {
           hit_points: 15,
         },
         imageUrl: null,
+        monsterSlug: 'orc',
       });
       await service.defeatMonster('m', 'dm');
       expect(events).to.eql([
@@ -1026,6 +1152,7 @@ describe('GameSessionService', () => {
           monster_type: 'humanoide',
           size: 'Médio',
           lore: null,
+          monster_slug: 'orc',
           combat_xp: null,
         },
       ]);
@@ -1456,6 +1583,18 @@ describe('GameSessionService', () => {
       );
     });
 
+    it('a mesa recebe a rolagem sem esperar a estatística do ranking gravar', async () => {
+      repository.stubs.bumpStats.returns(new Promise<void>(() => {}));
+      const roll = await service.addRoll(
+        'gs',
+        {...ROLL, id_character: 7, dice_notation: '1d20', rolls: [12]},
+        'u',
+      );
+      expect(roll).to.be.ok();
+      expect(events.map(e => e.type)).to.containEql('roll_added');
+      sinon.assert.calledOnce(repository.stubs.bumpStats);
+    });
+
     it('rolagem de d20 com 20 natural soma crítico pra quem rolou', async () => {
       await service.addRoll(
         'gs',
@@ -1732,11 +1871,30 @@ describe('GameSessionService', () => {
         async (_gs, user) => user === 'dm',
       );
       repository.stubs.findById.resolves({...sessionDetail(), players});
+      repository.stubs.findPlayersForRequest.callsFake(async (_gs, ids) =>
+        players
+          .filter(p => ids.includes(p.id_player_session) && p.character)
+          .map(p => ({
+            id_player_session: p.id_player_session,
+            user_id: p.user_id ?? null,
+            id_character: p.id_character,
+          })),
+      );
       repository.stubs.hasSessionAccess.resolves(true);
       repository.stubs.canPostRollFor.resolves(true);
       repository.stubs.addRoll.callsFake(
         async (_gs, input) => ({...input}) as unknown as RollLogEntry,
       );
+    });
+
+    it('confere os jogadores numa consulta só, sem carregar a sessão inteira', async () => {
+      await service.requestSecretRoll('gs', perception, 'dm');
+      sinon.assert.calledOnceWithExactly(
+        repository.stubs.findPlayersForRequest,
+        'gs',
+        ['p1'],
+      );
+      sinon.assert.notCalled(repository.stubs.findById);
     });
 
     it('só o mestre pede', async () => {
@@ -2172,6 +2330,7 @@ describe('GameSessionService', () => {
         custom_name: null,
         image_url: 'g.png',
         data_snapshot: {name: 'Goblin', type: 'humanoide', size: 'Pequeno'},
+        monster_api_slug: 'goblin',
         ...over,
       });
 
@@ -2195,6 +2354,7 @@ describe('GameSessionService', () => {
             image_url: 'g.png',
             monster_type: 'humanoide',
             size: 'Pequeno',
+            monster_slug: 'goblin',
           },
         });
         expect(repository.stubs.canPostRollFor.called).to.be.false();

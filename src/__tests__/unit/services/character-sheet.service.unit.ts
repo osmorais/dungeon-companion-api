@@ -14,6 +14,8 @@ import {SupabaseStorageService} from '../../../services/supabase-storage.service
 import {ImageCleanupService} from '../../../services/image-cleanup.service';
 import {XP_THRESHOLDS} from '../../../services/character-sheet/rules';
 import {CharacterRawData} from '../../../models/character-sheet-types';
+import {buildWildShape} from '../../../services/character-sheet/wild-shape';
+import {WOLF} from '../character-sheet/wild-shape.unit';
 import {armour, characterInput, rawCharacter, skill, spell} from '../fixtures';
 
 describe('CharacterSheetService', () => {
@@ -1047,6 +1049,136 @@ describe('CharacterSheetService', () => {
       await expect(
         service.expendSpellSlot(1, 1, 1, 'owner'),
       ).to.be.rejectedWith(/não possui espaços/);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('Forma Selvagem', () => {
+    const druid = (
+      level: number,
+      extra: Partial<CharacterRawData['character']> = {},
+    ) =>
+      rawCharacter({
+        character: {id_class: 5, level, chosen_fighting_style: null, ...extra},
+      });
+
+    it('transforma, gasta um uso e guarda a forma no personagem', async () => {
+      repository.stubs.findCharacterById.resolves(druid(2));
+      const {active_effects} = await service.setWildShape(1, 'owner', WOLF);
+      expect(active_effects.wild_shape).to.containDeep({
+        name: 'Lobo',
+        hp_current: 11,
+      });
+      sinon.assert.calledWith(repository.stubs.updateResourceUsesExpended, 1, {
+        'Forma Selvagem': 1,
+      });
+      sinon.assert.calledWith(
+        repository.stubs.updateActiveEffects,
+        1,
+        sinon.match({wild_shape: sinon.match({slug: 'lobo'})}),
+      );
+    });
+
+    it('recusa besta forte demais, sem usos, outra forma por cima, não druida e quem não controla', async () => {
+      repository.stubs.findCharacterById.resolves(druid(2));
+      await expect(
+        service.setWildShape(1, 'owner', {...WOLF, challenge_rating: 1}),
+      ).to.be.rejectedWith({statusCode: 422});
+      repository.stubs.findCharacterById.resolves(
+        druid(2, {resource_uses_expended: {'Forma Selvagem': 2}}),
+      );
+      await expect(service.setWildShape(1, 'owner', WOLF)).to.be.rejectedWith(
+        /Sem usos/,
+      );
+      repository.stubs.findCharacterById.resolves(
+        druid(2, {
+          active_effects: {
+            active: [],
+            turn_uses: {},
+            wild_shape: buildWildShape(WOLF),
+          },
+        }),
+      );
+      await expect(service.setWildShape(1, 'owner', WOLF)).to.be.rejectedWith({
+        statusCode: 409,
+      });
+      repository.stubs.findCharacterById.resolves(
+        rawCharacter({character: {level: 5}}),
+      );
+      await expect(service.setWildShape(1, 'owner', WOLF)).to.be.rejectedWith(
+        /Só druida/,
+      );
+      repository.stubs.findCharacterById.resolves(druid(2));
+      await expect(service.setWildShape(1, 'outro', WOLF)).to.be.rejectedWith({
+        statusCode: 403,
+      });
+      sinon.assert.notCalled(repository.stubs.updateActiveEffects);
+    });
+
+    it('Círculo da Lua vira besta de ND 1 já no nível 2', async () => {
+      repository.stubs.findCharacterById.resolves(
+        druid(2, {id_subclass: 'lua'}),
+      );
+      const {active_effects} = await service.setWildShape(1, 'owner', {
+        ...WOLF,
+        challenge_rating: 1,
+      });
+      expect(active_effects.wild_shape?.challenge_rating).to.equal(1);
+    });
+
+    it('sair da forma', async () => {
+      repository.stubs.findCharacterById.resolves(druid(2));
+      await expect(service.setWildShape(1, 'owner', null)).to.be.rejectedWith(
+        /não está transformado/,
+      );
+      repository.stubs.findCharacterById.resolves(
+        druid(2, {
+          active_effects: {
+            active: [],
+            turn_uses: {},
+            wild_shape: buildWildShape(WOLF),
+          },
+        }),
+      );
+      const {active_effects} = await service.setWildShape(1, 'owner', null);
+      expect(active_effects.wild_shape).to.be.null();
+    });
+
+    it('a ficha transformada usa PV, CA, FOR/DES/CON e deslocamento da besta; sem armas', async () => {
+      optionsRepository.stubs.findSpellsByIdsUpToLevel.resolves([]);
+      repository.stubs.findCharacterById.resolves(
+        druid(4, {
+          current_hit_points: 25,
+          max_hit_points: 30,
+          active_effects: {
+            active: [],
+            turn_uses: {},
+            wild_shape: {...buildWildShape(WOLF), hp_current: 6},
+          },
+        }),
+      );
+      const sheet = (await service.loadCharacter(1, 'owner'))!.character_sheet;
+      expect(sheet.combat_stats).to.containDeep({
+        armor_class: 13,
+        speed: 'terrestre 12 m',
+        hit_points: {max: 11, current: 6},
+      });
+      expect(sheet.attributes_and_saves.DEX.score).to.equal(15);
+      expect(sheet.attributes_and_saves.WIS.score).to.equal(12);
+      expect(sheet.weapons).to.eql([]);
+      expect(sheet.combat_features?.wild_shape).to.containDeep({
+        name: 'Lobo',
+        druid_hit_points: {current: 25, max: 30},
+        spells_blocked: true,
+        hours: 2,
+      });
+    });
+
+    it('sem forma, a ficha fica como sempre', async () => {
+      optionsRepository.stubs.findSpellsByIdsUpToLevel.resolves([]);
+      repository.stubs.findCharacterById.resolves(druid(4));
+      const sheet = (await service.loadCharacter(1, 'owner'))!.character_sheet;
+      expect(sheet.combat_features?.wild_shape).to.be.null();
     });
   });
 

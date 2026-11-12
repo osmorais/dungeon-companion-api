@@ -3,7 +3,11 @@ import {inject, injectable, BindingScope} from '@loopback/core';
 import {
   ActiveEffects,
   damageDefensesFor,
+  darkvisionFor,
 } from '../services/character-sheet/combat-features';
+import {applyHpToWildShape} from '../services/character-sheet/wild-shape';
+import {selectCompanions} from './companion.repository';
+import {companionMaxHp} from '../services/character-sheet/companion';
 import {normalizeKey} from '../services/character-sheet/calculator';
 import {StartingItem} from '../services/character-sheet/starting-items';
 import {
@@ -34,6 +38,9 @@ import {
 } from '../models/game-session-types';
 import {MonsterActionState} from '../services/monster-action-state';
 import {MAX_STATS, RANKING_STATS, StatDelta} from '../services/ranking-stats';
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Quantas rolagens ficam guardadas por sessão — não precisa de histórico ilimitado. */
 const ROLL_LOG_RETENTION = 30;
@@ -172,6 +179,49 @@ export class GameSessionRepository {
 
   // Nome de mestre e de jogador: o nome de usuário ATUAL da conta (troca em Minha Conta aparece em
   // todo lugar); `dm_name`/`player_name` gravados ficam só de reserva (sessões de antes da 1.9.0).
+  /** Mesas em que o personagem joga, com o PV dele (avisar a mesa da Forma Selvagem). */
+  async findPlayerSessionsOfCharacter(idCharacter: number): Promise<
+    {
+      id_player_session: string;
+      id_game_session: string;
+      current_hit_points: number;
+      max_hit_points: number;
+      temporary_hit_points: number;
+    }[]
+  > {
+    return this.db.sql`
+      SELECT ps.id_player_session, ps.id_game_session,
+             c.current_hit_points, c.max_hit_points,
+             COALESCE(c.temporary_hit_points, 0) AS temporary_hit_points
+      FROM player_session ps
+      JOIN character c ON c.id_character = ps.id_character
+      WHERE ps.id_character = ${idCharacter}
+    `;
+  }
+
+  /**
+   * Jogadores da mesa que podem receber um pedido de rolagem: só os com personagem. Uma consulta
+   * só, em vez de carregar a sessão inteira (o pedido espera por ela). Id que não é UUID fica de fora.
+   */
+  async findPlayersForRequest(
+    idGameSession: string,
+    ids: string[],
+  ): Promise<
+    {id_player_session: string; user_id: string | null; id_character: number}[]
+  > {
+    const valid = ids.filter(id => UUID_PATTERN.test(id));
+    if (!valid.length) return [];
+    return this.db.sql<
+      {id_player_session: string; user_id: string | null; id_character: number}[]
+    >`
+      SELECT ps.id_player_session, ps.user_id, ps.id_character
+      FROM player_session ps
+      JOIN character c ON c.id_character = ps.id_character
+      WHERE ps.id_game_session = ${idGameSession}
+        AND ps.id_player_session IN ${this.db.sql(valid)}
+    `;
+  }
+
   async findById(id: string): Promise<GameSessionDetail | null> {
     const sessions = await this.db.sql<GameSession[]>`
       SELECT gs.id_game_session, gs.session_name, gs.session_code, gs.max_player_quantity,
@@ -249,8 +299,14 @@ export class GameSessionRepository {
               class: row.character_class ?? '',
               race: row.character_race ?? '',
               level: row.character_level ?? 0,
-              max_hit_points: row.max_hit_points ?? 0,
-              current_hit_points: row.current_hit_points ?? 0,
+              // Forma Selvagem: a mesa vê o PV da forma, e o dano vai nele.
+              max_hit_points:
+                row.active_effects?.wild_shape?.hp_max ?? row.max_hit_points ?? 0,
+              current_hit_points:
+                row.active_effects?.wild_shape?.hp_current ??
+                row.current_hit_points ??
+                0,
+              wild_shape_name: row.active_effects?.wild_shape?.name ?? null,
               temporary_hit_points: row.temporary_hit_points ?? 0,
               experience_points: row.xp_points ?? 0,
               next_level_xp: xpNeededForLevel(row.character_level ?? 0),
@@ -263,6 +319,10 @@ export class GameSessionRepository {
                 idClass: row.id_class ?? 0,
                 level: row.character_level ?? 0,
                 activeEffects: row.active_effects,
+              }),
+              darkvision_m: darkvisionFor({
+                idRace: row.id_race ?? 0,
+                subrace: row.subrace ? normalizeKey(row.subrace) : null,
               }),
             }
           : null,
@@ -340,6 +400,10 @@ export class GameSessionRepository {
                 level: row.character_level ?? 0,
                 activeEffects: row.active_effects,
               }),
+              darkvision_m: darkvisionFor({
+                idRace: row.id_race ?? 0,
+                subrace: row.subrace ? normalizeKey(row.subrace) : null,
+              }),
             }
           : null,
     }));
@@ -361,11 +425,14 @@ export class GameSessionRepository {
       WHERE gs.id_game_session = ${id}
     `;
 
+    const companions = await selectCompanions(this.db.sql, id);
+
     return {
       game_session: session,
       players,
       npcs,
       monsters,
+      companions,
       // Recalculado no service, que sabe se quem está pedindo é o mestre ou um jogador.
       revealed_monsters: [],
       recent_rolls,
@@ -812,6 +879,7 @@ export class GameSessionRepository {
     customName?: string | null;
     dataSnapshot?: Record<string, unknown>;
     imageUrl?: string | null;
+    monsterSlug?: string | null;
     combatXp?: {id_combat_encounter: string; defeated_xp: number} | null;
   }> {
     const rows = await this.db.sql<
@@ -821,9 +889,11 @@ export class GameSessionRepository {
         custom_name: string | null;
         data_snapshot: Record<string, unknown>;
         image_url: string | null;
+        monster_api_slug: string | null;
       }[]
     >`
-      SELECT ms.id_game_session, gs.user_id AS session_owner_id, ms.custom_name, ms.data_snapshot, ms.image_url
+      SELECT ms.id_game_session, gs.user_id AS session_owner_id, ms.custom_name, ms.data_snapshot, ms.image_url,
+        ms.monster_api_slug
       FROM monster_session ms
       JOIN game_session gs ON gs.id_game_session = ms.id_game_session
       WHERE ms.id_monster_session = ${idMonsterSession}
@@ -836,6 +906,7 @@ export class GameSessionRepository {
       custom_name,
       data_snapshot,
       image_url,
+      monster_api_slug,
     } = rows[0];
     if (session_owner_id !== userId) return {status: 'unauthorized'};
 
@@ -866,6 +937,7 @@ export class GameSessionRepository {
       customName: custom_name,
       dataSnapshot: data_snapshot,
       imageUrl: image_url,
+      monsterSlug: monster_api_slug,
       combatXp,
     };
   }
@@ -920,6 +992,8 @@ export class GameSessionRepository {
     currentHitPoints: number,
     temporaryHitPoints: number,
     userId: string,
+    /** Dano que passou do PV pedido (só importa na Forma Selvagem: vai pro druida). */
+    overflow = 0,
   ): Promise<{
     status: 'not_found' | 'unauthorized' | 'ok';
     idGameSession?: string;
@@ -930,6 +1004,8 @@ export class GameSessionRepository {
     /** Personagem e PV antes da mudança (estatísticas do ranking). */
     idCharacter?: number;
     previous?: {current: number; temp: number};
+    /** Forma Selvagem envolvida: o PV máximo agora mostrado e a forma (`null` = acabou agora). */
+    wildShape?: {maxHitPoints: number; name: string | null};
   }> {
     const rows = await this.db.sql<
       {
@@ -939,10 +1015,12 @@ export class GameSessionRepository {
         session_owner_id: string | null;
         current_hit_points: number | null;
         temporary_hit_points: number | null;
+        max_hit_points: number | null;
+        active_effects: ActiveEffects | null;
       }[]
     >`
       SELECT ps.id_game_session, ps.id_character, ps.user_id AS player_user_id, gs.user_id AS session_owner_id,
-             c.current_hit_points, c.temporary_hit_points
+             c.current_hit_points, c.temporary_hit_points, c.max_hit_points, c.active_effects
       FROM player_session ps
       JOIN game_session gs ON gs.id_game_session = ps.id_game_session
       LEFT JOIN character c ON c.id_character = ps.id_character
@@ -958,9 +1036,34 @@ export class GameSessionRepository {
       session_owner_id,
       current_hit_points,
       temporary_hit_points,
+      max_hit_points,
+      active_effects,
     } = rows[0];
     if (player_user_id !== userId && session_owner_id !== userId)
       return {status: 'unauthorized'};
+
+    // Forma Selvagem: o PV pedido é o da forma. Acima de 0, só ela muda; em 0, o druida volta e
+    // recebe o dano que sobrou.
+    const form = active_effects?.wild_shape ?? null;
+    if (form && active_effects) {
+      const written = await this.writeWildShapeHp(
+        id_character,
+        active_effects,
+        {current: current_hit_points ?? 0, max: max_hit_points ?? 0},
+        currentHitPoints,
+        overflow,
+        temporaryHitPoints,
+      );
+      return {
+        status: 'ok',
+        idGameSession: id_game_session,
+        currentHitPoints: written.current,
+        relentlessEndurance: written.relentlessEndurance,
+        idCharacter: id_character,
+        previous: {current: form.hp_current, temp: temporary_hit_points ?? 0},
+        wildShape: {maxHitPoints: written.max, name: written.name},
+      };
+    }
 
     const {finalHp, relentlessEndurance} = await this.resolveRelentlessEndurance(
       id_character,
@@ -1073,7 +1176,7 @@ export class GameSessionRepository {
    */
   async findApplyTarget(
     idGameSession: string,
-    kind: 'player' | 'npc' | 'monster',
+    kind: 'player' | 'npc' | 'monster' | 'companion',
     id: string,
   ): Promise<{
     id_character: number | null;
@@ -1082,7 +1185,30 @@ export class GameSessionRepository {
     max: number;
     temp: number;
     is_revealed: boolean;
+    /** Druida em Forma Selvagem: os efeitos (o PV acima é o da forma) e o PV dele. */
+    wildShape?: {effects: ActiveEffects; druid: {current: number; max: number}};
   } | null> {
+    if (kind === 'companion') {
+      const [companion] = await this.db.sql<
+        {name: string; hp_current: number; data_snapshot: Record<string, unknown>; level: number | null}[]
+      >`
+        SELECT sc.name, sc.hp_current, sc.data_snapshot, c.level
+        FROM session_companion sc
+        JOIN player_session ps ON ps.id_player_session = sc.id_player_session
+        LEFT JOIN character c ON c.id_character = ps.id_character
+        WHERE sc.id_session_companion = ${id} AND sc.id_game_session = ${idGameSession}
+      `;
+      if (!companion) return null;
+      const baseHp = Number(companion.data_snapshot?.['hit_points'] ?? 1);
+      return {
+        id_character: null,
+        label: companion.name,
+        current: companion.hp_current,
+        max: companionMaxHp(baseHp, companion.level ?? 1),
+        temp: 0,
+        is_revealed: true,
+      };
+    }
     if (kind === 'monster') {
       const [row] = await this.db.sql<
         {hp_current: number; hp_max: number; is_revealed: boolean; custom_name: string | null; snapshot_name: string | null}[]
@@ -1104,7 +1230,8 @@ export class GameSessionRepository {
     const rows =
       kind === 'player'
         ? await this.db.sql<{id_character: number; name: string; current_hit_points: number; max_hit_points: number; temporary_hit_points: number | null}[]>`
-            SELECT c.id_character, c.name, c.current_hit_points, c.max_hit_points, c.temporary_hit_points
+            SELECT c.id_character, c.name, c.current_hit_points, c.max_hit_points, c.temporary_hit_points,
+                   c.active_effects
             FROM player_session ps JOIN character c ON c.id_character = ps.id_character
             WHERE ps.id_player_session = ${id} AND ps.id_game_session = ${idGameSession}
           `
@@ -1115,14 +1242,82 @@ export class GameSessionRepository {
           `;
     const [row] = rows;
     if (!row) return null;
+    // Druida em Forma Selvagem: quem aplica vê e mexe no PV da forma.
+    const effects = (row as {active_effects?: ActiveEffects | null}).active_effects ?? null;
+    const form = effects?.wild_shape ?? null;
     return {
       id_character: row.id_character,
       label: row.name,
-      current: row.current_hit_points,
-      max: row.max_hit_points,
+      current: form ? form.hp_current : row.current_hit_points,
+      max: form ? form.hp_max : row.max_hit_points,
       temp: row.temporary_hit_points ?? 0,
       is_revealed: true,
+      ...(form && effects
+        ? {
+            wildShape: {
+              effects,
+              druid: {current: row.current_hit_points, max: row.max_hit_points},
+            },
+          }
+        : {}),
     };
+  }
+
+  /**
+   * PV de quem está em Forma Selvagem: acima de 0, só a forma muda; em 0, o druida volta e recebe
+   * o dano que sobrou (`overflow`). Devolve o PV e o máximo agora mostrados e a forma (`null` =
+   * acabou). A permissão já foi conferida por quem chama.
+   */
+  async writeWildShapeHp(
+    idCharacter: number,
+    effects: ActiveEffects,
+    druid: {current: number; max: number},
+    requestedFormHp: number,
+    overflow: number,
+    temp: number,
+  ): Promise<{
+    current: number;
+    max: number;
+    name: string | null;
+    relentlessEndurance: {idCharacter: number; name: string} | null;
+  }> {
+    const routed = applyHpToWildShape(effects.wild_shape!, requestedFormHp, overflow, druid.current);
+    if (routed.form) {
+      await this.db.sql`
+        UPDATE character
+        SET active_effects = ${this.db.sql.json({...effects, wild_shape: routed.form} as never)},
+            temporary_hit_points = ${temp}
+        WHERE id_character = ${idCharacter}
+      `;
+      return {
+        current: routed.form.hp_current,
+        max: routed.form.hp_max,
+        name: routed.form.name,
+        relentlessEndurance: null,
+      };
+    }
+    const resolved = await this.resolveRelentlessEndurance(idCharacter, routed.druidHp);
+    await this.db.sql`
+      UPDATE character
+      SET active_effects = ${this.db.sql.json({...effects, wild_shape: null} as never)},
+          current_hit_points = ${resolved.finalHp},
+          temporary_hit_points = ${temp}
+      WHERE id_character = ${idCharacter}
+    `;
+    return {
+      current: resolved.finalHp,
+      max: druid.max,
+      name: null,
+      relentlessEndurance: resolved.relentlessEndurance,
+    };
+  }
+
+  /** PV do companheiro (a permissão já foi conferida no service). */
+  async writeCompanionHp(idSessionCompanion: string, hp: number): Promise<void> {
+    await this.db.sql`
+      UPDATE session_companion SET hp_current = ${hp}
+      WHERE id_session_companion = ${idSessionCompanion}
+    `;
   }
 
   /** Grava o PV calculado no servidor (a permissão já foi conferida no service). */
@@ -1282,6 +1477,7 @@ export class GameSessionRepository {
     custom_name: string | null;
     image_url: string | null;
     data_snapshot: Record<string, unknown>;
+    monster_api_slug: string | null;
   } | null> {
     const rows = await this.db.sql<
       {
@@ -1291,10 +1487,11 @@ export class GameSessionRepository {
         custom_name: string | null;
         image_url: string | null;
         data_snapshot: Record<string, unknown>;
+        monster_api_slug: string | null;
       }[]
     >`
       SELECT ms.id_game_session, gs.user_id AS session_owner_id, ms.is_revealed, ms.custom_name,
-             ms.image_url, ms.data_snapshot
+             ms.image_url, ms.data_snapshot, ms.monster_api_slug
       FROM monster_session ms
       JOIN game_session gs ON gs.id_game_session = ms.id_game_session
       WHERE ms.id_monster_session = ${idMonsterSession}
@@ -1322,6 +1519,7 @@ export class GameSessionRepository {
     dataSnapshot?: Record<string, unknown>;
     imageUrl?: string | null;
     lore?: string | null;
+    monsterSlug?: string | null;
   }> {
     const rows = await this.db.sql<
       {
@@ -1331,9 +1529,11 @@ export class GameSessionRepository {
         data_snapshot: Record<string, unknown>;
         image_url: string | null;
         lore: string | null;
+        monster_api_slug: string | null;
       }[]
     >`
       SELECT ms.id_game_session, gs.user_id AS session_owner_id, ms.custom_name, ms.data_snapshot, ms.image_url,
+        ms.monster_api_slug,
         (SELECT m.lore FROM monster m WHERE m.slug = ms.monster_api_slug) AS lore
       FROM monster_session ms
       JOIN game_session gs ON gs.id_game_session = ms.id_game_session
@@ -1349,6 +1549,7 @@ export class GameSessionRepository {
       data_snapshot,
       image_url,
       lore,
+      monster_api_slug,
     } = rows[0];
     if (session_owner_id !== userId) return {status: 'unauthorized'};
 
@@ -1362,6 +1563,7 @@ export class GameSessionRepository {
       dataSnapshot: data_snapshot,
       imageUrl: image_url,
       lore,
+      monsterSlug: monster_api_slug,
     };
   }
 
@@ -1421,6 +1623,7 @@ export class GameSessionRepository {
       data_snapshot: Record<string, unknown>;
       image_url: string | null;
       lore: string | null;
+      monster_api_slug: string | null;
     }[]
   > {
     if (!idMonsterSessions.length) return [];
@@ -1431,6 +1634,7 @@ export class GameSessionRepository {
         data_snapshot: Record<string, unknown>;
         image_url: string | null;
         lore: string | null;
+        monster_api_slug: string | null;
       }[]
     >`
       UPDATE monster_session
@@ -1438,17 +1642,28 @@ export class GameSessionRepository {
       WHERE id_game_session = ${idGameSession}
         AND id_monster_session = ANY(${idMonsterSessions})
         AND is_revealed = false
-      RETURNING id_monster_session, custom_name, data_snapshot, image_url,
+      RETURNING id_monster_session, custom_name, data_snapshot, image_url, monster_api_slug,
         (SELECT m.lore FROM monster m WHERE m.slug = monster_session.monster_api_slug) AS lore
     `;
   }
 
   /** Esconde todos os monstros revelados da sessão — chamado ao encerrar o combate. Devolve os ids afetados. */
-  /** Fim do combate: os efeitos ativos (Fúria, Arma Sagrada) dos personagens da sessão acabam. */
+  /**
+   * Fim do combate: os efeitos ativos (Fúria, Arma Sagrada) dos personagens da sessão acabam. A
+   * Forma Selvagem fica: ela dura horas, não o combate.
+   */
   async clearActiveEffectsInSession(idGameSession: string): Promise<void> {
     await this.db.sql`
       UPDATE character
-      SET active_effects = NULL
+      SET active_effects = CASE
+        WHEN jsonb_typeof(active_effects->'wild_shape') = 'object'
+          THEN jsonb_build_object(
+            'active', '[]'::jsonb,
+            'turn_uses', '{}'::jsonb,
+            'wild_shape', active_effects->'wild_shape'
+          )
+        ELSE NULL
+      END
       WHERE active_effects IS NOT NULL
         AND id_character IN (
           SELECT id_character FROM player_session WHERE id_game_session = ${idGameSession}

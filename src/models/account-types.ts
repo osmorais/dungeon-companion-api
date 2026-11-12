@@ -64,6 +64,8 @@ export interface ExportedParticipation {
   id_character: number | null;
   player_name: string;
   inventory: unknown[];
+  /** Companheiro Animal do ranger nesta mesa (besta, nome e PV), ou `null`. */
+  animal_companion: {slug: string; name: string; hp_current: number} | null;
 }
 
 export interface ExportedCatalogMonster {

@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {FinalStats, StatKeyEn} from '../../models/character-sheet-types';
-import {getMod} from './calculator';
+import {getMod, resolveRace, resolveSubrace} from './calculator';
 import {SaveContext} from '../../models/character-options-types';
+import {WildShapeState} from './wild-shape';
 
 /**
  * Traços que mexem no ataque com arma (fase 2 de `docs/dungeon-companion/conceitos/tracos-mecanicos.md`):
@@ -32,6 +33,8 @@ export interface ActiveEffects {
   turn_uses: Record<string, string>;
   /** Inspiração Bárdica recebida e ainda não usada (dado e quem deu). */
   bardic_inspiration?: {sides: number; from: string} | null;
+  /** Druida transformado (Forma Selvagem): sobrevive ao fim do combate, acaba no descanso longo. */
+  wild_shape?: WildShapeState | null;
 }
 
 /** Dado de Inspiração Bárdica pelo nível do bardo: d6, d8 (5), d10 (10), d12 (15). */
@@ -72,6 +75,37 @@ export interface DamageDefenses {
   uncanny_dodge: boolean;
   /** Ladino/Monge nv7: resistência de DES de metade → nada se passar, metade se falhar. */
   evasion: boolean;
+}
+
+/**
+ * Quantos ataques a ação de Atacar dá (Ataque Extra): o traço de maior número entre os da ficha.
+ * "Ataque Extra" = 2, "Ataque Extra (2)" = 3, "Ataque Extra (3)" = 4.
+ */
+export function attacksPerAction(traits: {name: string}[]): number {
+  let attacks = 1;
+  for (const {name} of traits) {
+    const match = name.match(/^Ataque Extra(?: \((\d)\))?$/);
+    if (match) attacks = Math.max(attacks, match[1] ? Number(match[1]) + 1 : 2);
+  }
+  return attacks;
+}
+
+/** Alcance da visão no escuro (metros) pelos traços da raça e da sub-raça; `null` se não tem. */
+export function darkvisionFor(ctx: {
+  idRace: number;
+  subrace: string | null;
+}): number | null {
+  const traits = [
+    ...(resolveRace(ctx.idRace)?.traits ?? []),
+    ...(resolveSubrace(ctx.subrace ?? undefined)?.traits ?? []),
+  ];
+  let meters: number | null = null;
+  for (const trait of traits) {
+    if (!trait.name.startsWith('Visão no Escuro')) continue;
+    const match = trait.description.match(/(\d+)\s*metros/);
+    if (match) meters = Math.max(meters ?? 0, Number(match[1]));
+  }
+  return meters;
 }
 
 export function damageDefensesFor(ctx: {
@@ -213,6 +247,23 @@ export interface CombatFeatures {
   halfling_lucky: boolean;
   /** Lembretes de vantagem nos testes de resistência/perícia. */
   d20_reminders: D20Reminder[];
+  /** Ataques por ação de Atacar (Ataque Extra): 1, 2, 3 ou 4. */
+  attacks_per_action: number;
+  /** Ladino nv2 (Ação Ardilosa): ação bônus pra Disparar, Desengajar ou Esconder. */
+  cunning_action: boolean;
+  /** Ranger do Conclave da Besta (nv3): tem Companheiro Animal na mesa. */
+  animal_companion: boolean;
+  /** Alcance da visão no escuro, em metros; `null` se não tem. */
+  darkvision_m: number | null;
+  /** Druida transformado: a forma, o PV dele guardado e se as magias estão travadas. */
+  wild_shape?: WildShapeView | null;
+}
+
+export interface WildShapeView extends WildShapeState {
+  druid_hit_points: {current: number; max: number};
+  /** Sem Magias da Besta (nv18), não lança magias transformado. */
+  spells_blocked: boolean;
+  hours: number;
 }
 
 const GOLPE_DIVINO_TYPE: Record<string, string> = {
@@ -243,6 +294,8 @@ export function buildCombatFeatures(ctx: {
   classResources: Record<string, string> | null;
   featIds: string[];
   activeEffects: ActiveEffects | null;
+  /** Traços da ficha (raça, classe, subclasse) — Ataque Extra e Ação Ardilosa vêm daqui. */
+  traits?: {name: string}[];
 }): CombatFeatures {
   const {idClass, idSubclass, level, stats, profBonus, classResources} = ctx;
   const riders: CombatRider[] = [];
@@ -365,6 +418,15 @@ export function buildCombatFeatures(ctx: {
       idClass,
       level,
       active: ctx.activeEffects?.active ?? [],
+    }),
+    attacks_per_action: attacksPerAction(ctx.traits ?? []),
+    cunning_action: (ctx.traits ?? []).some(t => t.name === 'Ação Ardilosa'),
+    animal_companion: (ctx.traits ?? []).some(
+      t => t.name === 'Companheiro Animal',
+    ),
+    darkvision_m: darkvisionFor({
+      idRace: ctx.idRace,
+      subrace: ctx.subrace ?? null,
     }),
   };
 }
