@@ -1175,6 +1175,10 @@ export class CharacterSheetService {
   async getLevelUpPreview(id: number, userId: string, pendingSubclassId?: string): Promise<LevelUpPreview> {
     const {raw, classRule, nextLevel, levelData} = await this.resolveLevelUpContext(id, userId);
     const {character, attributes, spells} = raw;
+    // Talento já escolhido não volta pra lista (salvo os repetíveis).
+    const takenFeats = new Set(
+      levelData.isAsiLevel ? (await this.repository.findChosenFeats(id)).map(f => f.feat_id) : [],
+    );
 
     const stats = this.statsFromRaw(attributes);
     const conModifier = getMod(stats.CON);
@@ -1217,7 +1221,9 @@ export class CharacterSheetService {
           ? THIRD_CASTER_SLOTS[nextLevel] ?? null
           : null,
       feat_options: levelData.isAsiLevel
-        ? Object.values(FEATS).map(f => ({
+        ? Object.values(FEATS)
+            .filter(f => f.repeatable || !takenFeats.has(f.id_feat))
+            .map(f => ({
             id_feat: f.id_feat,
             display_name: f.displayName,
             description: f.description,
@@ -1319,6 +1325,11 @@ export class CharacterSheetService {
       } else {
         const feat = FEATS[choice.feat_id];
         if (!feat) throw new Error('Unknown feat');
+        if (
+          !feat.repeatable &&
+          (await this.repository.findChosenFeats(id)).some(f => f.feat_id === feat.id_feat)
+        )
+          throw new Error('Talento já escolhido');
         featId = feat.id_feat;
         if (feat.abilityIncrease) {
           asiStatIncreases = {[feat.abilityIncrease.stat]: feat.abilityIncrease.amount};

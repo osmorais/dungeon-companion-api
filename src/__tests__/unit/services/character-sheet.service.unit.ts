@@ -358,6 +358,20 @@ describe('CharacterSheetService', () => {
       expect(preview.feat_options.length).to.be.above(30);
     });
 
+    it('talento já escolhido sai da lista; o Adepto Elemental (repetível) fica', async () => {
+      givenCharacter({character: {level: 7, id_subclass: 'campeao'}});
+      repository.stubs.findChosenFeats.resolves([
+        {level: 4, feat_id: 'duro'},
+        {level: 6, feat_id: 'adepto-elemental'},
+      ]);
+      const ids = (
+        await service.getLevelUpPreview(1, 'owner')
+      ).feat_options.map(f => f.id_feat);
+      expect(ids).to.not.containEql('duro');
+      expect(ids).to.containEql('adepto-elemental');
+      expect(ids).to.containEql('alerta');
+    });
+
     it('Cavaleiro Arcano 3→4 vira terço-conjurador (espaços + magias novas)', async () => {
       givenCharacter({character: {level: 3, id_subclass: 'cavaleiro-arcano'}});
       const preview = await service.getLevelUpPreview(1, 'owner');
@@ -681,6 +695,26 @@ describe('CharacterSheetService', () => {
           asi_or_feat: {type: 'feat', feat_id: 'duro'},
         });
         expect(result.hp_gained).to.equal(5 + 2 + 2 * 4);
+      });
+
+      it('talento repetido é recusado (Vigoroso de novo); o Adepto Elemental pode repetir', async () => {
+        repository.stubs.findChosenFeats.resolves([
+          {level: 4, feat_id: 'duro'},
+          {level: 6, feat_id: 'adepto-elemental'},
+        ]);
+        await expect(
+          service.confirmLevelUp(1, 'owner', {
+            hit_die_roll: 5,
+            asi_or_feat: {type: 'feat', feat_id: 'duro'},
+          }),
+        ).to.be.rejectedWith(/já escolhido/);
+        expect(repository.stubs.applyLevelUp.called).to.be.false();
+        await expect(
+          service.confirmLevelUp(1, 'owner', {
+            hit_die_roll: 5,
+            asi_or_feat: {type: 'feat', feat_id: 'adepto-elemental'},
+          }),
+        ).to.be.fulfilled();
       });
     });
 
