@@ -1456,6 +1456,18 @@ describe('GameSessionService', () => {
       );
     });
 
+    it('a mesa recebe a rolagem sem esperar a estatística do ranking gravar', async () => {
+      repository.stubs.bumpStats.returns(new Promise<void>(() => {}));
+      const roll = await service.addRoll(
+        'gs',
+        {...ROLL, id_character: 7, dice_notation: '1d20', rolls: [12]},
+        'u',
+      );
+      expect(roll).to.be.ok();
+      expect(events.map(e => e.type)).to.containEql('roll_added');
+      sinon.assert.calledOnce(repository.stubs.bumpStats);
+    });
+
     it('rolagem de d20 com 20 natural soma crítico pra quem rolou', async () => {
       await service.addRoll(
         'gs',
@@ -1732,11 +1744,30 @@ describe('GameSessionService', () => {
         async (_gs, user) => user === 'dm',
       );
       repository.stubs.findById.resolves({...sessionDetail(), players});
+      repository.stubs.findPlayersForRequest.callsFake(async (_gs, ids) =>
+        players
+          .filter(p => ids.includes(p.id_player_session) && p.character)
+          .map(p => ({
+            id_player_session: p.id_player_session,
+            user_id: p.user_id ?? null,
+            id_character: p.id_character,
+          })),
+      );
       repository.stubs.hasSessionAccess.resolves(true);
       repository.stubs.canPostRollFor.resolves(true);
       repository.stubs.addRoll.callsFake(
         async (_gs, input) => ({...input}) as unknown as RollLogEntry,
       );
+    });
+
+    it('confere os jogadores numa consulta só, sem carregar a sessão inteira', async () => {
+      await service.requestSecretRoll('gs', perception, 'dm');
+      sinon.assert.calledOnceWithExactly(
+        repository.stubs.findPlayersForRequest,
+        'gs',
+        ['p1'],
+      );
+      sinon.assert.notCalled(repository.stubs.findById);
     });
 
     it('só o mestre pede', async () => {

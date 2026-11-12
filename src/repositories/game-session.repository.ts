@@ -35,6 +35,9 @@ import {
 import {MonsterActionState} from '../services/monster-action-state';
 import {MAX_STATS, RANKING_STATS, StatDelta} from '../services/ranking-stats';
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** Quantas rolagens ficam guardadas por sessão — não precisa de histórico ilimitado. */
 const ROLL_LOG_RETENTION = 30;
 
@@ -172,6 +175,29 @@ export class GameSessionRepository {
 
   // Nome de mestre e de jogador: o nome de usuário ATUAL da conta (troca em Minha Conta aparece em
   // todo lugar); `dm_name`/`player_name` gravados ficam só de reserva (sessões de antes da 1.9.0).
+  /**
+   * Jogadores da mesa que podem receber um pedido de rolagem: só os com personagem. Uma consulta
+   * só, em vez de carregar a sessão inteira (o pedido espera por ela). Id que não é UUID fica de fora.
+   */
+  async findPlayersForRequest(
+    idGameSession: string,
+    ids: string[],
+  ): Promise<
+    {id_player_session: string; user_id: string | null; id_character: number}[]
+  > {
+    const valid = ids.filter(id => UUID_PATTERN.test(id));
+    if (!valid.length) return [];
+    return this.db.sql<
+      {id_player_session: string; user_id: string | null; id_character: number}[]
+    >`
+      SELECT ps.id_player_session, ps.user_id, ps.id_character
+      FROM player_session ps
+      JOIN character c ON c.id_character = ps.id_character
+      WHERE ps.id_game_session = ${idGameSession}
+        AND ps.id_player_session IN ${this.db.sql(valid)}
+    `;
+  }
+
   async findById(id: string): Promise<GameSessionDetail | null> {
     const sessions = await this.db.sql<GameSession[]>`
       SELECT gs.id_game_session, gs.session_name, gs.session_code, gs.max_player_quantity,

@@ -1340,13 +1340,15 @@ export class GameSessionService {
               : null,
         }
       : roll;
-    if (idCharacter !== null)
-      await this.recordStats(idGameSession, idCharacter, rollStats(input));
+    // A mesa (e quem pediu a resistência) recebe já; a estatística do ranking grava depois, sem
+    // segurar a resposta (falha aqui só vai pro log).
     this.events.publish({
       type: 'roll_added',
       id_game_session: idGameSession,
       roll: castId ? {...answer, cast_id: castId} : answer,
     });
+    if (idCharacter !== null)
+      void this.recordStats(idGameSession, idCharacter, rollStats(input));
     return answer;
   }
 
@@ -1430,11 +1432,10 @@ export class GameSessionService {
     )
       throw new HttpErrors.UnprocessableEntity('contexto inválido');
 
-    const session = await this.repository.findById(idGameSession);
-    if (!session) throw new HttpErrors.NotFound('Sessão não encontrada');
+    const found = await this.repository.findPlayersForRequest(idGameSession, ids);
     const targets = ids.map(id => {
-      const player = session.players.find(p => p.id_player_session === id);
-      if (!player?.user_id || !player.character)
+      const player = found.find(p => p.id_player_session === id);
+      if (!player?.user_id)
         throw new HttpErrors.UnprocessableEntity(
           'Jogador sem personagem ou fora da sessão',
         );
