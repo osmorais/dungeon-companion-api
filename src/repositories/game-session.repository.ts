@@ -3,7 +3,9 @@ import {inject, injectable, BindingScope} from '@loopback/core';
 import {
   ActiveEffects,
   damageDefensesFor,
+  darkvisionFor,
 } from '../services/character-sheet/combat-features';
+import {applyHpToWildShape} from '../services/character-sheet/wild-shape';
 import {normalizeKey} from '../services/character-sheet/calculator';
 import {StartingItem} from '../services/character-sheet/starting-items';
 import {
@@ -175,6 +177,26 @@ export class GameSessionRepository {
 
   // Nome de mestre e de jogador: o nome de usuário ATUAL da conta (troca em Minha Conta aparece em
   // todo lugar); `dm_name`/`player_name` gravados ficam só de reserva (sessões de antes da 1.9.0).
+  /** Mesas em que o personagem joga, com o PV dele (avisar a mesa da Forma Selvagem). */
+  async findPlayerSessionsOfCharacter(idCharacter: number): Promise<
+    {
+      id_player_session: string;
+      id_game_session: string;
+      current_hit_points: number;
+      max_hit_points: number;
+      temporary_hit_points: number;
+    }[]
+  > {
+    return this.db.sql`
+      SELECT ps.id_player_session, ps.id_game_session,
+             c.current_hit_points, c.max_hit_points,
+             COALESCE(c.temporary_hit_points, 0) AS temporary_hit_points
+      FROM player_session ps
+      JOIN character c ON c.id_character = ps.id_character
+      WHERE ps.id_character = ${idCharacter}
+    `;
+  }
+
   /**
    * Jogadores da mesa que podem receber um pedido de rolagem: só os com personagem. Uma consulta
    * só, em vez de carregar a sessão inteira (o pedido espera por ela). Id que não é UUID fica de fora.
@@ -275,8 +297,14 @@ export class GameSessionRepository {
               class: row.character_class ?? '',
               race: row.character_race ?? '',
               level: row.character_level ?? 0,
-              max_hit_points: row.max_hit_points ?? 0,
-              current_hit_points: row.current_hit_points ?? 0,
+              // Forma Selvagem: a mesa vê o PV da forma, e o dano vai nele.
+              max_hit_points:
+                row.active_effects?.wild_shape?.hp_max ?? row.max_hit_points ?? 0,
+              current_hit_points:
+                row.active_effects?.wild_shape?.hp_current ??
+                row.current_hit_points ??
+                0,
+              wild_shape_name: row.active_effects?.wild_shape?.name ?? null,
               temporary_hit_points: row.temporary_hit_points ?? 0,
               experience_points: row.xp_points ?? 0,
               next_level_xp: xpNeededForLevel(row.character_level ?? 0),
@@ -289,6 +317,10 @@ export class GameSessionRepository {
                 idClass: row.id_class ?? 0,
                 level: row.character_level ?? 0,
                 activeEffects: row.active_effects,
+              }),
+              darkvision_m: darkvisionFor({
+                idRace: row.id_race ?? 0,
+                subrace: row.subrace ? normalizeKey(row.subrace) : null,
               }),
             }
           : null,
@@ -365,6 +397,10 @@ export class GameSessionRepository {
                 idClass: row.id_class ?? 0,
                 level: row.character_level ?? 0,
                 activeEffects: row.active_effects,
+              }),
+              darkvision_m: darkvisionFor({
+                idRace: row.id_race ?? 0,
+                subrace: row.subrace ? normalizeKey(row.subrace) : null,
               }),
             }
           : null,
@@ -946,6 +982,8 @@ export class GameSessionRepository {
     currentHitPoints: number,
     temporaryHitPoints: number,
     userId: string,
+    /** Dano que passou do PV pedido (só importa na Forma Selvagem: vai pro druida). */
+    overflow = 0,
   ): Promise<{
     status: 'not_found' | 'unauthorized' | 'ok';
     idGameSession?: string;
@@ -956,6 +994,8 @@ export class GameSessionRepository {
     /** Personagem e PV antes da mudança (estatísticas do ranking). */
     idCharacter?: number;
     previous?: {current: number; temp: number};
+    /** Forma Selvagem envolvida: o PV máximo agora mostrado e a forma (`null` = acabou agora). */
+    wildShape?: {maxHitPoints: number; name: string | null};
   }> {
     const rows = await this.db.sql<
       {
@@ -965,10 +1005,12 @@ export class GameSessionRepository {
         session_owner_id: string | null;
         current_hit_points: number | null;
         temporary_hit_points: number | null;
+        max_hit_points: number | null;
+        active_effects: ActiveEffects | null;
       }[]
     >`
       SELECT ps.id_game_session, ps.id_character, ps.user_id AS player_user_id, gs.user_id AS session_owner_id,
-             c.current_hit_points, c.temporary_hit_points
+             c.current_hit_points, c.temporary_hit_points, c.max_hit_points, c.active_effects
       FROM player_session ps
       JOIN game_session gs ON gs.id_game_session = ps.id_game_session
       LEFT JOIN character c ON c.id_character = ps.id_character
@@ -984,9 +1026,57 @@ export class GameSessionRepository {
       session_owner_id,
       current_hit_points,
       temporary_hit_points,
+      max_hit_points,
+      active_effects,
     } = rows[0];
     if (player_user_id !== userId && session_owner_id !== userId)
       return {status: 'unauthorized'};
+
+    // Forma Selvagem: o PV pedido é o da forma. Acima de 0, só ela muda; em 0, o druida volta e
+    // recebe o dano que sobrou.
+    const form = active_effects?.wild_shape ?? null;
+    if (form) {
+      const routed = applyHpToWildShape(
+        form,
+        currentHitPoints,
+        overflow,
+        current_hit_points ?? 0,
+      );
+      if (routed.form) {
+        await this.db.sql`
+          UPDATE character
+          SET active_effects = ${this.db.sql.json({...active_effects, wild_shape: routed.form} as never)},
+              temporary_hit_points = ${temporaryHitPoints}
+          WHERE id_character = ${id_character}
+        `;
+        return {
+          status: 'ok',
+          idGameSession: id_game_session,
+          currentHitPoints: routed.form.hp_current,
+          relentlessEndurance: null,
+          idCharacter: id_character,
+          previous: {current: form.hp_current, temp: temporary_hit_points ?? 0},
+          wildShape: {maxHitPoints: routed.form.hp_max, name: routed.form.name},
+        };
+      }
+      const druid = await this.resolveRelentlessEndurance(id_character, routed.druidHp);
+      await this.db.sql`
+        UPDATE character
+        SET active_effects = ${this.db.sql.json({...active_effects, wild_shape: null} as never)},
+            current_hit_points = ${druid.finalHp},
+            temporary_hit_points = ${temporaryHitPoints}
+        WHERE id_character = ${id_character}
+      `;
+      return {
+        status: 'ok',
+        idGameSession: id_game_session,
+        currentHitPoints: druid.finalHp,
+        relentlessEndurance: druid.relentlessEndurance,
+        idCharacter: id_character,
+        previous: {current: form.hp_current, temp: temporary_hit_points ?? 0},
+        wildShape: {maxHitPoints: max_hit_points ?? 0, name: null},
+      };
+    }
 
     const {finalHp, relentlessEndurance} = await this.resolveRelentlessEndurance(
       id_character,
@@ -1470,11 +1560,22 @@ export class GameSessionRepository {
   }
 
   /** Esconde todos os monstros revelados da sessão — chamado ao encerrar o combate. Devolve os ids afetados. */
-  /** Fim do combate: os efeitos ativos (Fúria, Arma Sagrada) dos personagens da sessão acabam. */
+  /**
+   * Fim do combate: os efeitos ativos (Fúria, Arma Sagrada) dos personagens da sessão acabam. A
+   * Forma Selvagem fica: ela dura horas, não o combate.
+   */
   async clearActiveEffectsInSession(idGameSession: string): Promise<void> {
     await this.db.sql`
       UPDATE character
-      SET active_effects = NULL
+      SET active_effects = CASE
+        WHEN jsonb_typeof(active_effects->'wild_shape') = 'object'
+          THEN jsonb_build_object(
+            'active', '[]'::jsonb,
+            'turn_uses', '{}'::jsonb,
+            'wild_shape', active_effects->'wild_shape'
+          )
+        ELSE NULL
+      END
       WHERE active_effects IS NOT NULL
         AND id_character IN (
           SELECT id_character FROM player_session WHERE id_game_session = ${idGameSession}

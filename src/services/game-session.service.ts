@@ -483,7 +483,14 @@ export class GameSessionService {
     currentHitPoints: number,
     temporaryHitPoints: number,
     userId: string,
-  ): Promise<{current_hit_points: number}> {
+    overflow: number = 0,
+  ): Promise<{
+    current_hit_points: number;
+    max_hit_points?: number;
+    wild_shape_name?: string | null;
+  }> {
+    if (!Number.isInteger(overflow) || overflow < 0)
+      throw new HttpErrors.UnprocessableEntity('overflow deve ser um inteiro não negativo');
     if (
       typeof currentHitPoints !== 'number' ||
       !Number.isInteger(currentHitPoints)
@@ -506,6 +513,7 @@ export class GameSessionService {
       currentHitPoints,
       temporaryHitPoints,
       userId,
+      overflow,
     );
     if (result.status === 'not_found')
       throw new HttpErrors.NotFound('Jogador não encontrado na sessão');
@@ -529,6 +537,12 @@ export class GameSessionService {
       id_player_session: idPlayerSession,
       current_hit_points: result.currentHitPoints ?? currentHitPoints,
       temporary_hit_points: temporaryHitPoints,
+      ...(result.wildShape
+        ? {
+            max_hit_points: result.wildShape.maxHitPoints,
+            wild_shape_name: result.wildShape.name,
+          }
+        : {}),
     });
     // Resistência Implacável (Meio-Orc) entrou sozinha: avisa a mesa ("USOU").
     if (result.relentlessEndurance) {
@@ -543,7 +557,15 @@ export class GameSessionService {
         is_ability: true,
       });
     }
-    return {current_hit_points: result.currentHitPoints ?? currentHitPoints};
+    return {
+      current_hit_points: result.currentHitPoints ?? currentHitPoints,
+      ...(result.wildShape
+        ? {
+            max_hit_points: result.wildShape.maxHitPoints,
+            wild_shape_name: result.wildShape.name,
+          }
+        : {}),
+    };
   }
 
   /** Só o mestre concede XP; cada jogador selecionado recebe o valor cheio informado (não dividido). */

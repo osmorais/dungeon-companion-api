@@ -745,6 +745,38 @@ describe('GameSessionService', () => {
       ]);
     });
 
+    it('Forma Selvagem: repassa o dano que sobrou e avisa a mesa do PV máximo e da forma', async () => {
+      await expect(
+        service.updateCharacterHp('ps', 0, 0, 'u', -2),
+      ).to.be.rejectedWith(/overflow/);
+      repository.stubs.updateCharacterHp.resolves({
+        status: 'ok',
+        idGameSession: 'gs',
+        currentHitPoints: 18,
+        wildShape: {maxHitPoints: 30, name: null},
+      });
+      const result = await service.updateCharacterHp('ps', 0, 0, 'u', 7);
+      sinon.assert.calledWith(
+        repository.stubs.updateCharacterHp,
+        'ps',
+        0,
+        0,
+        'u',
+        7,
+      );
+      expect(result).to.eql({
+        current_hit_points: 18,
+        max_hit_points: 30,
+        wild_shape_name: null,
+      });
+      expect(events[0]).to.containDeep({
+        type: 'player_hp_updated',
+        current_hit_points: 18,
+        max_hit_points: 30,
+        wild_shape_name: null,
+      });
+    });
+
     it('Resistência Implacável: grava 1 em vez de 0, devolve o PV final e avisa a mesa', async () => {
       repository.stubs.updateCharacterHp.resolves({
         status: 'ok',

@@ -462,18 +462,21 @@ export class GameSessionController {
             properties: {
               current_hit_points: {type: 'integer'},
               temporary_hit_points: {type: 'integer'},
+              // Forma Selvagem: dano que passou do PV da forma (vai pro druida).
+              overflow: {type: 'integer'},
             },
           },
         },
       },
     })
-    body: {current_hit_points: number; temporary_hit_points: number},
-  ): Promise<{current_hit_points: number}> {
+    body: {current_hit_points: number; temporary_hit_points: number; overflow?: number},
+  ): Promise<object> {
     return this.gameSessionService.updateCharacterHp(
       idPlayerSession,
       body.current_hit_points,
       body.temporary_hit_points,
       currentUser.id,
+      body.overflow ?? 0,
     );
   }
 

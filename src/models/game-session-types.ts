@@ -119,6 +119,10 @@ export interface PlayerCharacterSummary {
   /** Resistências e reações pra quem aplica dano nele (ver `damageDefensesFor`) — vem no
    *  detalhe da sessão; ausente nos retornos de adicionar jogador/NPC. */
   defenses?: DamageDefenses;
+  /** Alcance da visão no escuro, em metros (informativo, no card da sessão). */
+  darkvision_m?: number | null;
+  /** Druida transformado (Forma Selvagem): o nome da besta; o PV acima é o da forma. */
+  wild_shape_name?: string | null;
 }
 
 export interface PlayerSession {

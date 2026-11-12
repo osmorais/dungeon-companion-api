@@ -27,6 +27,31 @@ export class MonsterRepository {
     `;
   }
 
+  /** Bestas do bestiário (Forma Selvagem), com a ficha inteira. */
+  async listBeasts(): Promise<
+    (BestiaryMonster & {challenge_rating: number})[]
+  > {
+    return this.db.sql<(BestiaryMonster & {challenge_rating: number})[]>`
+      SELECT slug, name, hp_max, ac, challenge_rating::float8 AS challenge_rating, data
+      FROM monster
+      WHERE data->>'type' = 'besta'
+      ORDER BY challenge_rating, name
+    `;
+  }
+
+  async findBeast(
+    slug: string,
+  ): Promise<(BestiaryMonster & {challenge_rating: number}) | null> {
+    const rows = await this.db.sql<
+      (BestiaryMonster & {challenge_rating: number})[]
+    >`
+      SELECT slug, name, hp_max, ac, challenge_rating::float8 AS challenge_rating, data
+      FROM monster
+      WHERE slug = ${slug} AND data->>'type' = 'besta'
+    `;
+    return rows[0] ?? null;
+  }
+
   async findBySlug(slug: string): Promise<BestiaryMonster | null> {
     const rows = await this.db.sql<BestiaryMonster[]>`
       SELECT slug, name, hp_max, ac, data FROM monster WHERE slug = ${slug}

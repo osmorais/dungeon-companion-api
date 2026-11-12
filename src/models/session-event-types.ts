@@ -53,6 +53,9 @@ export interface SessionEventPayloadMap {
     id_player_session: string;
     current_hit_points: number;
     temporary_hit_points: number;
+    /** Forma Selvagem entrou em jogo: o PV máximo mostrado e a forma (`null` = voltou ao normal). */
+    max_hit_points?: number;
+    wild_shape_name?: string | null;
   };
   player_xp_granted: {
     id_player_session: string;
