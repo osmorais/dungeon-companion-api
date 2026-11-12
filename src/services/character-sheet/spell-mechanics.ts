@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import {SpellRoll} from '../../models/character-options-types';
+import {SaveContext, SpellRoll} from '../../models/character-options-types';
 import {StatKeyEn} from '../../models/character-sheet-types';
 
 /**
@@ -563,6 +563,46 @@ function saveOnly(name: string, ability: StatKeyEn): SpellMechanics {
   return {name, kind: 'save', save: {ability}};
 }
 
+/**
+ * Magias cuja resistência é contra enfeitiçar, medo ou veneno (condição que a magia impõe). Dano de
+ * veneno já conta como veneno sozinho; toda magia conta como magia e como efeito visível.
+ */
+const SAVE_AGAINST: Record<number, SaveContext[]> = {
+  11: ['charm'], // Amizade Animal
+  17: ['charm', 'fear'], // Antipatia/Simpatia
+  28: ['fear'], // Assassino Fantasmagórico
+  95: ['charm'], // Coroa da Loucura
+  133: ['charm'], // Dominar Besta
+  134: ['charm'], // Dominar Monstro
+  135: ['charm'], // Dominar Pessoa
+  138: ['fear'], // Encarnação Fantasmagórica
+  141: ['charm'], // Enfeitiçar Pessoa
+  214: ['fear'], // Medo
+  221: ['charm'], // Missão
+  223: ['charm'], // Modificar Memória
+  236: ['poison'], // Névoa Fétida
+  248: ['charm'], // Padrão Hipnótico
+};
+
+/** Contra o que é a resistência da magia (vazio se ela não pede resistência). */
+export function spellSaveAgainst(idSpell: number): SaveContext[] {
+  const mechanics = SPELL_MECHANICS[idSpell];
+  if (!mechanics?.save) return [];
+  const against = new Set<SaveContext>(SAVE_AGAINST[idSpell] ?? []);
+  if (mechanics.damage?.type.includes('veneno')) against.add('poison');
+  against.add('magic');
+  against.add('visible');
+  return SAVE_CONTEXTS_ORDER.filter(c => against.has(c));
+}
+
+const SAVE_CONTEXTS_ORDER: SaveContext[] = [
+  'poison',
+  'charm',
+  'fear',
+  'magic',
+  'visible',
+];
+
 /** Multiplicador de truque pelo nível do personagem: 1/2/3/4 nos níveis 1/5/11/17. */
 export function cantripTier(characterLevel: number): number {
   if (characterLevel >= 17) return 4;
@@ -673,6 +713,7 @@ export function buildSpellRoll(
     save_ability: mechanics.save?.ability ?? null,
     save_dc: mechanics.save ? spellSaveDc : null,
     save_on_success: mechanics.save?.onSuccess ?? null,
+    save_against: spellSaveAgainst(idSpell),
     instance_label: mechanics.instances?.label ?? null,
     variant: mechanics.variant ?? null,
     by_slot: Object.fromEntries(

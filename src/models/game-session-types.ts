@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {AvatarPreset} from './character-sheet-types';
-import {SpellCardDamage} from './character-options-types';
+import {SaveContext, SpellCardDamage} from './character-options-types';
 import {DamageDefenses} from '../services/character-sheet/combat-features';
 import {CombatEncounterDetail} from './combat-types';
 import {MonsterRevealCard} from '../services/monster-reveal';
@@ -198,6 +198,10 @@ export interface RollLogEntry {
   created_at: Date;
   /** Rolagem oculta do mestre — não aparece pros jogadores (nem no log, nem no toast/socket). */
   is_hidden: boolean;
+  /** Resposta a um pedido de rolagem (não fica gravado): o id do pedido e, numa resistência com
+   *  CD, se passou ou falhou. */
+  save_request_id?: string;
+  save_outcome?: 'success' | 'fail' | null;
 }
 
 export interface RollLogInput {
@@ -230,6 +234,13 @@ export interface SecretRollRequestInput {
   check: SecretRollCheck;
   /** Nome do teste exibido pro jogador e no log do mestre (ex.: "Percepção"). */
   label: string;
+  /** Só resistência: CD (nunca vai pro jogador — ele recebe só se passou ou falhou). */
+  dc?: number | null;
+  /** Só resistência: contra o que é (decide a vantagem condicional). */
+  against?: SaveContext[];
+  /** `false`: resistência contra magia/ação, pública e pedida por quem lançou (mestre ou
+   *  jogador). Padrão `true`: teste secreto, só o mestre pede e só ele vê o resultado. */
+  secret?: boolean;
 }
 
 /** Anúncio de "jogador lançou uma magia" — só informativo, não persiste (ao contrário da

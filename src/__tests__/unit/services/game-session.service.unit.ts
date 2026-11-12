@@ -1794,7 +1794,7 @@ describe('GameSessionService', () => {
       expect(eventTargetUserId(events[1])).to.equal('u2');
     });
 
-    it('resposta do jogador fica oculta (só o mestre recebe) e o pedido vale uma vez', async () => {
+    it('resposta do jogador fica oculta (só o mestre recebe) e o pedido acaba depois de rolar de novo', async () => {
       const [{request_id}] = await service.requestSecretRoll(
         'gs',
         perception,
@@ -1815,9 +1815,123 @@ describe('GameSessionService', () => {
       );
       expect(isDmOnlyEvent(events[0])).to.be.true();
 
+      // rolar de novo (Sortudo, Indomável) usa o mesmo pedido, até o limite
+      await service.addRoll('gs', answer, 'u1');
+      await service.addRoll('gs', answer, 'u1');
       await expect(service.addRoll('gs', answer, 'u1')).to.be.rejectedWith(
         /inválido ou expirado/,
       );
+    });
+
+    describe('resistência com CD e contexto', () => {
+      const save = {
+        id_player_sessions: ['p1'],
+        check: {kind: 'save' as const, ability: 'CON' as const},
+        label: 'Rajada de Veneno',
+        dc: 14,
+        against: ['poison' as const, 'magic' as const],
+      };
+      const answerTo = (request_id: string, total: number) => ({
+        ...ROLL,
+        id_character: 10,
+        roll_type: 'save' as const,
+        label: 'Resistência: Constituição',
+        total,
+        secret_request_id: request_id,
+      });
+
+      it('o evento leva o contexto, mas nunca a CD', async () => {
+        await service.requestSecretRoll('gs', save, 'dm');
+        expect(events[0]).to.containDeep({
+          secret: true,
+          against: ['poison', 'magic'],
+          check: {kind: 'save', ability: 'CON'},
+        });
+        expect(JSON.stringify(events[0])).to.not.match(/"dc"/);
+      });
+
+      it('a resposta diz se passou ou falhou (CD 14)', async () => {
+        const [{request_id}] = await service.requestSecretRoll(
+          'gs',
+          save,
+          'dm',
+        );
+        const failed = await service.addRoll(
+          'gs',
+          answerTo(request_id, 13),
+          'u1',
+        );
+        expect(failed).to.containDeep({
+          save_request_id: request_id,
+          save_outcome: 'fail',
+        });
+        // Indomável: rola de novo pelo mesmo pedido
+        const passed = await service.addRoll(
+          'gs',
+          answerTo(request_id, 14),
+          'u1',
+        );
+        expect(passed.save_outcome).to.equal('success');
+      });
+
+      it('sem CD, a resposta não julga', async () => {
+        const [{request_id}] = await service.requestSecretRoll(
+          'gs',
+          {...save, dc: null},
+          'dm',
+        );
+        const roll = await service.addRoll('gs', answerTo(request_id, 3), 'u1');
+        expect(roll.save_outcome).to.be.null();
+      });
+
+      it('jogador pede resistência pública contra a própria magia; a rolagem não fica oculta', async () => {
+        const [{request_id}] = await service.requestSecretRoll(
+          'gs',
+          {...save, secret: false},
+          'u2',
+        );
+        expect(events[0]).to.containDeep({secret: false});
+        const roll = await service.addRoll(
+          'gs',
+          answerTo(request_id, 20),
+          'u1',
+        );
+        expect(roll.is_hidden).to.be.false();
+        expect(roll.save_outcome).to.equal('success');
+        expect(isDmOnlyEvent(events[1])).to.be.false();
+        expect(events[1]).to.containDeep({
+          roll: {save_request_id: request_id, save_outcome: 'success'},
+        });
+      });
+
+      it('jogador não pede teste secreto nem perícia, e precisa estar na mesa', async () => {
+        await expect(
+          service.requestSecretRoll('gs', save, 'u2'),
+        ).to.be.rejectedWith(/Só o mestre/);
+        await expect(
+          service.requestSecretRoll('gs', {...perception, secret: false}, 'u2'),
+        ).to.be.rejectedWith(/só dá pra pedir resistência/);
+        repository.stubs.hasSessionAccess.resolves(false);
+        await expect(
+          service.requestSecretRoll('gs', {...save, secret: false}, 'u9'),
+        ).to.be.rejectedWith(/acesso/);
+      });
+
+      it('valida CD e contexto', async () => {
+        const bad = [
+          {...save, dc: 0},
+          {...save, dc: 41},
+          {...save, dc: 12.5},
+          {...save, against: ['raiva' as 'poison']},
+          {...perception, dc: 12},
+          {...perception, against: ['poison' as const]},
+        ];
+        for (const input of bad)
+          await expect(
+            service.requestSecretRoll('gs', input, 'dm'),
+          ).to.be.rejectedWith(/CD|contexto/);
+        expect(events).to.eql([]);
+      });
     });
 
     it('pedido de outro jogador/personagem não serve', async () => {

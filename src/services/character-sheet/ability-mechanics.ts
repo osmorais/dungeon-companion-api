@@ -165,6 +165,12 @@ export function abilityMechanicsFor(
     save_ability: mechanics.save?.ability ?? null,
     save_dc: dc,
     save_on_success: mechanics.save?.onSuccess ?? null,
+    // Habilidade não é magia: só conta como efeito visível (e veneno, se o dano for de veneno).
+    save_against: !mechanics.save
+      ? []
+      : mechanics.damageType?.includes('veneno')
+        ? ['poison', 'visible']
+        : ['visible'],
     save_effect_note: mechanics.save?.effectNote ?? null,
     heal: mechanics.kind === 'heal' ? 'hp' : null,
     heal_distribute: !!mechanics.distribute,

@@ -1,7 +1,10 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {randomUUID} from 'crypto';
 
-/** Pedido de teste secreto do mestre pra um jogador — vale uma vez, por um tempo limitado. */
+/**
+ * Pedido de rolagem pra um jogador: teste secreto do mestre ou resistência contra uma magia/ação
+ * (quem lançou marca os atingidos). Vale por um tempo limitado.
+ */
 export interface SecretRollRequest {
   id: string;
   id_game_session: string;
@@ -9,10 +12,18 @@ export interface SecretRollRequest {
   id_character: number;
   user_id: string;
   label: string;
+  /** CD da resistência: fica só aqui — o jogador recebe só se passou ou falhou. */
+  dc: number | null;
+  /** Teste secreto (rolagem oculta, só o mestre vê) ou resistência pública. */
+  secret: boolean;
+  /** Rolagens já registradas pra este pedido. */
+  answers: number;
   created_at: number;
 }
 
 export const SECRET_ROLL_TTL_MS = 30 * 60 * 1000;
+/** A rolagem e até duas de novo pelo mesmo pedido (Sortudo, Ponto de Sorte, Indomável). */
+export const MAX_ANSWERS_PER_REQUEST = 3;
 
 /**
  * Pedidos de teste secreto pendentes, em memória (mesma premissa do SessionEventsService: uma
@@ -25,15 +36,23 @@ export class SecretRollRequestStore {
   constructor(private now: () => number = () => Date.now()) {}
 
   create(
-    data: Omit<SecretRollRequest, 'id' | 'created_at'>,
+    data: Omit<SecretRollRequest, 'id' | 'created_at' | 'answers'>,
   ): SecretRollRequest {
     this.prune();
-    const request = {...data, id: randomUUID(), created_at: this.now()};
+    const request = {
+      ...data,
+      id: randomUUID(),
+      answers: 0,
+      created_at: this.now(),
+    };
     this.requests.set(request.id, request);
     return request;
   }
 
-  /** Usa o pedido (some na hora) se ele existe, não venceu e é desse jogador/personagem/sessão. */
+  /**
+   * Registra uma rolagem do pedido se ele existe, não venceu, é desse jogador/personagem/sessão e
+   * ainda cabe rolar de novo (some ao chegar no limite).
+   */
   consume(
     id: string,
     who: {
@@ -52,7 +71,8 @@ export class SecretRollRequestStore {
     ) {
       return null;
     }
-    this.requests.delete(id);
+    request.answers += 1;
+    if (request.answers >= MAX_ANSWERS_PER_REQUEST) this.requests.delete(id);
     return request;
   }
 

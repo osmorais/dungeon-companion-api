@@ -136,6 +136,12 @@ export interface SpellCardDamage {
 }
 
 /** Rolagem de uma magia pro personagem — ver `buildSpellRoll`. */
+/**
+ * Contra o que é a resistência, quando quem pede a rolagem sabe: veneno, enfeitiçar, medo, magia
+ * ou efeito que dá pra ver (armadilha, magia — Sentido de Perigo). Decide a vantagem condicional.
+ */
+export type SaveContext = 'poison' | 'charm' | 'fear' | 'magic' | 'visible';
+
 export interface SpellRoll {
   kind: 'attack' | 'auto' | 'save' | 'heal' | 'rider';
   attack_type: 'melee' | 'ranged' | null;
@@ -148,6 +154,8 @@ export interface SpellRoll {
   save_dc: number | null;
   /** Dano quando o alvo passa: metade, nenhum ou total (`null` sem dano). */
   save_on_success: 'half' | 'none' | 'full' | null;
+  /** Só `kind: 'save'`: contra o que é a resistência (vazio nas outras). */
+  save_against: SaveContext[];
   /** Só `kind: 'heal'`: cura PV ou dá PV temporários. */
   heal: 'hp' | 'temp_hp' | null;
   /** Cura Suprema (Clérigo da Vida nv17): usa o valor máximo dos dados em vez de rolar. */
