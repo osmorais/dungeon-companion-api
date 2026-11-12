@@ -337,6 +337,8 @@ export interface MonsterCastInfo {
   image_url: string | null;
   monster_type: string | null;
   size: string | null;
+  /** Slug do bestiário (arte padrão no site). */
+  monster_slug: string | null;
 }
 
 export interface SpellCastStageInput {

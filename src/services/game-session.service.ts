@@ -456,7 +456,7 @@ export class GameSessionService {
       name: result.customName ?? this.monsterSnapshotName(result.dataSnapshot),
       image_url: result.imageUrl ?? null,
       combat_xp: result.combatXp ?? null,
-      ...monsterRevealCard(result.dataSnapshot, null),
+      ...monsterRevealCard(result.dataSnapshot, null, result.monsterSlug),
     });
     // Também na resposta (1.15.1): quem derrotou já tem o acumulado sem esperar o socket — o
     // encerrar combate pergunta do XP logo depois de derrotar os que sobraram.
@@ -762,7 +762,7 @@ export class GameSessionService {
         id_monster_session: m.id_monster_session,
         name: m.custom_name ?? this.monsterSnapshotName(m.data_snapshot),
         image_url: m.image_url,
-        ...monsterRevealCard(m.data_snapshot, m.lore),
+        ...monsterRevealCard(m.data_snapshot, m.lore, m.monster_api_slug),
       }));
 
     const combat = await this.combatService.getActiveEncounterDetail(id);
@@ -1268,7 +1268,7 @@ export class GameSessionService {
       id_monster_session: idMonsterSession,
       name: result.customName ?? this.monsterSnapshotName(result.dataSnapshot),
       image_url: result.imageUrl ?? null,
-      ...monsterRevealCard(result.dataSnapshot, result.lore),
+      ...monsterRevealCard(result.dataSnapshot, result.lore, result.monsterSlug),
     });
     await this.joinActiveCombat(result.idGameSession!, idMonsterSession, userId);
   }
@@ -1771,6 +1771,7 @@ export class GameSessionService {
       image_url: found.image_url,
       monster_type: card.monster_type,
       size: card.size,
+      monster_slug: found.monster_api_slug ?? null,
     };
   }
 

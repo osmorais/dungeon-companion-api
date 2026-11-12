@@ -734,13 +734,22 @@ describe('GameSessionService', () => {
       const detail = await service.getSession('gs', 'player');
       expect(detail.monsters).to.eql([]);
       const noCard = {monster_type: null, size: null, lore: null};
+      // Slug do bestiário pra arte padrão no site (1.23.0).
+      const goblinArt = {monster_slug: 'goblin'};
       expect(detail.revealed_monsters).to.eql([
-        {id_monster_session: 'm1', name: 'Goblin', image_url: null, ...noCard},
+        {
+          id_monster_session: 'm1',
+          name: 'Goblin',
+          image_url: null,
+          ...noCard,
+          ...goblinArt,
+        },
         {
           id_monster_session: 'm2',
           name: 'Chefão',
           image_url: 'c.png',
           ...noCard,
+          ...goblinArt,
         },
       ]);
       expect(
@@ -773,6 +782,7 @@ describe('GameSessionService', () => {
           monster_type: 'humanoide',
           size: 'Pequeno',
           lore: 'Pequenos e traiçoeiros.',
+          monster_slug: 'goblin',
         },
       ]);
     });
@@ -1027,6 +1037,7 @@ describe('GameSessionService', () => {
         },
         imageUrl: 'o.png',
         lore: 'Saqueadores das montanhas.',
+        monsterSlug: 'orc',
       });
       await service.revealMonster('m', 'dm');
       expect(events).to.eql([
@@ -1039,6 +1050,7 @@ describe('GameSessionService', () => {
           monster_type: 'humanoide',
           size: 'Médio',
           lore: 'Saqueadores das montanhas.',
+          monster_slug: 'orc',
         },
       ]);
     });
@@ -1127,6 +1139,7 @@ describe('GameSessionService', () => {
           hit_points: 15,
         },
         imageUrl: null,
+        monsterSlug: 'orc',
       });
       await service.defeatMonster('m', 'dm');
       expect(events).to.eql([
@@ -1139,6 +1152,7 @@ describe('GameSessionService', () => {
           monster_type: 'humanoide',
           size: 'Médio',
           lore: null,
+          monster_slug: 'orc',
           combat_xp: null,
         },
       ]);
@@ -2316,6 +2330,7 @@ describe('GameSessionService', () => {
         custom_name: null,
         image_url: 'g.png',
         data_snapshot: {name: 'Goblin', type: 'humanoide', size: 'Pequeno'},
+        monster_api_slug: 'goblin',
         ...over,
       });
 
@@ -2339,6 +2354,7 @@ describe('GameSessionService', () => {
             image_url: 'g.png',
             monster_type: 'humanoide',
             size: 'Pequeno',
+            monster_slug: 'goblin',
           },
         });
         expect(repository.stubs.canPostRollFor.called).to.be.false();

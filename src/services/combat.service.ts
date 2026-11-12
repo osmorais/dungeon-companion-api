@@ -401,7 +401,11 @@ export class CombatService {
           monster.custom_name ??
           this.monsterSnapshotName(monster.data_snapshot),
         image_url: monster.image_url,
-        ...monsterRevealCard(monster.data_snapshot, monster.lore),
+        ...monsterRevealCard(
+          monster.data_snapshot,
+          monster.lore,
+          monster.monster_api_slug,
+        ),
       });
     }
 
@@ -485,7 +489,11 @@ export class CombatService {
           monster.custom_name ??
           this.monsterSnapshotName(monster.data_snapshot),
         image_url: monster.image_url,
-        ...monsterRevealCard(monster.data_snapshot, monster.lore),
+        ...monsterRevealCard(
+          monster.data_snapshot,
+          monster.lore,
+          monster.monster_api_slug,
+        ),
       });
     }
 

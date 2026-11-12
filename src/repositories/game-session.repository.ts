@@ -879,6 +879,7 @@ export class GameSessionRepository {
     customName?: string | null;
     dataSnapshot?: Record<string, unknown>;
     imageUrl?: string | null;
+    monsterSlug?: string | null;
     combatXp?: {id_combat_encounter: string; defeated_xp: number} | null;
   }> {
     const rows = await this.db.sql<
@@ -888,9 +889,11 @@ export class GameSessionRepository {
         custom_name: string | null;
         data_snapshot: Record<string, unknown>;
         image_url: string | null;
+        monster_api_slug: string | null;
       }[]
     >`
-      SELECT ms.id_game_session, gs.user_id AS session_owner_id, ms.custom_name, ms.data_snapshot, ms.image_url
+      SELECT ms.id_game_session, gs.user_id AS session_owner_id, ms.custom_name, ms.data_snapshot, ms.image_url,
+        ms.monster_api_slug
       FROM monster_session ms
       JOIN game_session gs ON gs.id_game_session = ms.id_game_session
       WHERE ms.id_monster_session = ${idMonsterSession}
@@ -903,6 +906,7 @@ export class GameSessionRepository {
       custom_name,
       data_snapshot,
       image_url,
+      monster_api_slug,
     } = rows[0];
     if (session_owner_id !== userId) return {status: 'unauthorized'};
 
@@ -933,6 +937,7 @@ export class GameSessionRepository {
       customName: custom_name,
       dataSnapshot: data_snapshot,
       imageUrl: image_url,
+      monsterSlug: monster_api_slug,
       combatXp,
     };
   }
@@ -1472,6 +1477,7 @@ export class GameSessionRepository {
     custom_name: string | null;
     image_url: string | null;
     data_snapshot: Record<string, unknown>;
+    monster_api_slug: string | null;
   } | null> {
     const rows = await this.db.sql<
       {
@@ -1481,10 +1487,11 @@ export class GameSessionRepository {
         custom_name: string | null;
         image_url: string | null;
         data_snapshot: Record<string, unknown>;
+        monster_api_slug: string | null;
       }[]
     >`
       SELECT ms.id_game_session, gs.user_id AS session_owner_id, ms.is_revealed, ms.custom_name,
-             ms.image_url, ms.data_snapshot
+             ms.image_url, ms.data_snapshot, ms.monster_api_slug
       FROM monster_session ms
       JOIN game_session gs ON gs.id_game_session = ms.id_game_session
       WHERE ms.id_monster_session = ${idMonsterSession}
@@ -1512,6 +1519,7 @@ export class GameSessionRepository {
     dataSnapshot?: Record<string, unknown>;
     imageUrl?: string | null;
     lore?: string | null;
+    monsterSlug?: string | null;
   }> {
     const rows = await this.db.sql<
       {
@@ -1521,9 +1529,11 @@ export class GameSessionRepository {
         data_snapshot: Record<string, unknown>;
         image_url: string | null;
         lore: string | null;
+        monster_api_slug: string | null;
       }[]
     >`
       SELECT ms.id_game_session, gs.user_id AS session_owner_id, ms.custom_name, ms.data_snapshot, ms.image_url,
+        ms.monster_api_slug,
         (SELECT m.lore FROM monster m WHERE m.slug = ms.monster_api_slug) AS lore
       FROM monster_session ms
       JOIN game_session gs ON gs.id_game_session = ms.id_game_session
@@ -1539,6 +1549,7 @@ export class GameSessionRepository {
       data_snapshot,
       image_url,
       lore,
+      monster_api_slug,
     } = rows[0];
     if (session_owner_id !== userId) return {status: 'unauthorized'};
 
@@ -1552,6 +1563,7 @@ export class GameSessionRepository {
       dataSnapshot: data_snapshot,
       imageUrl: image_url,
       lore,
+      monsterSlug: monster_api_slug,
     };
   }
 
@@ -1611,6 +1623,7 @@ export class GameSessionRepository {
       data_snapshot: Record<string, unknown>;
       image_url: string | null;
       lore: string | null;
+      monster_api_slug: string | null;
     }[]
   > {
     if (!idMonsterSessions.length) return [];
@@ -1621,6 +1634,7 @@ export class GameSessionRepository {
         data_snapshot: Record<string, unknown>;
         image_url: string | null;
         lore: string | null;
+        monster_api_slug: string | null;
       }[]
     >`
       UPDATE monster_session
@@ -1628,7 +1642,7 @@ export class GameSessionRepository {
       WHERE id_game_session = ${idGameSession}
         AND id_monster_session = ANY(${idMonsterSessions})
         AND is_revealed = false
-      RETURNING id_monster_session, custom_name, data_snapshot, image_url,
+      RETURNING id_monster_session, custom_name, data_snapshot, image_url, monster_api_slug,
         (SELECT m.lore FROM monster m WHERE m.slug = monster_session.monster_api_slug) AS lore
     `;
   }

@@ -7,11 +7,13 @@ describe('monsterRevealCard (carta do aviso de revelação)', () => {
       monsterRevealCard(
         {name: 'Goblin', type: 'humanoide', size: 'Pequeno', hit_points: 7},
         '  Pequenos e traiçoeiros.  ',
+        'goblin',
       ),
     ).to.eql({
       monster_type: 'humanoide',
       size: 'Pequeno',
       lore: 'Pequenos e traiçoeiros.',
+      monster_slug: 'goblin',
     });
   });
 
@@ -20,11 +22,13 @@ describe('monsterRevealCard (carta do aviso de revelação)', () => {
       monster_type: null,
       size: null,
       lore: null,
+      monster_slug: null,
     });
     expect(monsterRevealCard(undefined, undefined)).to.eql({
       monster_type: null,
       size: null,
       lore: null,
+      monster_slug: null,
     });
   });
 });

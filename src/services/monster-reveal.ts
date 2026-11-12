@@ -7,11 +7,14 @@ export interface MonsterRevealCard {
   monster_type: string | null;
   size: string | null;
   lore: string | null;
+  /** Slug do bestiário: o site mostra a arte padrão dele quando o mestre não subiu imagem. */
+  monster_slug: string | null;
 }
 
 export function monsterRevealCard(
   snapshot: unknown,
   lore: string | null | undefined,
+  slug?: string | null,
 ): MonsterRevealCard {
   const s = (snapshot ?? {}) as {type?: unknown; size?: unknown};
   const text = (v: unknown) =>
@@ -20,5 +23,6 @@ export function monsterRevealCard(
     monster_type: text(s.type),
     size: text(s.size),
     lore: text(lore),
+    monster_slug: text(slug),
   };
 }
