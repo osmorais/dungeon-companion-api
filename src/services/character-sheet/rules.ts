@@ -15,6 +15,8 @@ export interface RaceRule {
   weaponProficiencies?: string[];
   skillProficiencies?: string[];
   languages: string[];
+  /** Idiomas à escolha da raça (Humano e Meio-Elfo: 1), além dos fixos. */
+  extraLanguages?: number;
   subraces?: string[];
   toolProficiencyChoice?: ToolProficiencyChoice;
 }
@@ -792,6 +794,7 @@ export const RACES: Record<number, RaceRule> = {
     bonuses: {CHA: 2},
     speed: '9m',
     languages: ['Comum', 'Élfico'],
+    extraLanguages: 1,
     traits: [
       {name: 'Visão no Escuro', source: 'Raça', description: 'Você enxerga na meia-luz a até 18 metros como se fosse luz plena.'},
       {name: 'Ancestralidade Feérica', source: 'Raça', description: 'Você tem vantagem em testes de resistência contra ser enfeitiçado.'},
@@ -831,6 +834,7 @@ export const RACES: Record<number, RaceRule> = {
     bonuses: {STR: 1, DEX: 1, CON: 1, INT: 1, WIS: 1, CHA: 1},
     speed: '9m',
     languages: ['Comum'],
+    extraLanguages: 1,
     traits: [],
   },
 };

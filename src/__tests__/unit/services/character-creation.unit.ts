@@ -449,8 +449,8 @@ describe('Criação de personagem → ficha gravada', () => {
         check(profs.languages.includes(l), `idioma ${l}`);
       check(
         profs.languages.filter(l => l.startsWith('Idioma à escolha')).length ===
-          bgRule.languages,
-        'idiomas à escolha do antecedente',
+          bgRule.languages + (raceRule.extraLanguages ?? 0),
+        'idiomas à escolha da raça e do antecedente',
       );
 
       // Traços: raça, sub-raça, classe, subclasse (nível 1), antecedente, estilo de luta

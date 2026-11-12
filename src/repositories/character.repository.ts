@@ -110,9 +110,12 @@ export class CharacterRepository {
 
       if (equipment.weapons.length) {
         for (const weapon of equipment.weapons) {
+          // Calculado na ficha (classe, raça e subclasse); a ficha recalcula ao carregar.
+          const proficient =
+            cs.weapons.find(w => w.id_weapon === weapon.id_weapon)?.proficient ?? true;
           await sql`
             INSERT INTO character_weapon (id_character, id_weapon, has_proficiency)
-            VALUES (${idCharacter}, ${weapon.id_weapon}, TRUE)
+            VALUES (${idCharacter}, ${weapon.id_weapon}, ${proficient})
           `;
         }
       }

@@ -36,6 +36,10 @@ export interface WeaponRow {
   weight: number;
   price_value: number;
   isRanged: boolean;
+  /** Sabe usar a arma (classe, raça ou subclasse): só então a proficiência entra no ataque. */
+  proficient?: boolean;
+  /** Arma versátil: o dado de dano usando as duas mãos (ex.: "1d8" do Bordão). */
+  versatile_die?: string | null;
 }
 
 /** Texto explicativo genérico (nome + descrição) reaproveitado nas explicações de escolha do wizard de criação. */

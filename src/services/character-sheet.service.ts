@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/naming-convention */
+import {weaponProficiencyList} from './character-sheet/weapon-proficiency';
 import {injectable, BindingScope, service} from '@loopback/core';
 import {HttpErrors} from '@loopback/rest';
 import {buildPrintHtml} from './character-sheet-print';
@@ -246,11 +247,16 @@ export class CharacterSheetService {
       getMod(stats.CON),
       (subraceRule?.hpBonusPerLevel ?? 0) + calcDraconicResilienceHpBonus(subclassRule?.id_subclass),
     );
+    const weaponProficiencies = weaponProficiencyList(
+      [classRule.weaponProficiencies, raceRule.weaponProficiencies, subraceRule?.weaponProficiencies],
+      subclassRule?.id_subclass,
+    );
     const weaponActions = buildWeaponActions(
       equipment.weapons,
       stats,
       profBonus,
       choices.fighting_style,
+      weaponProficiencies,
     );
     const traits = collectTraits(raceRule, subraceRule, classRule, bgRule, level, subclassRule, choices.fighting_style, profBonus, stats);
     const spells = choices.spells ?? [];
@@ -336,13 +342,7 @@ export class CharacterSheetService {
               ...(subraceRule?.armorProficiencies ?? []),
             ]),
           ],
-          weapons: [
-            ...new Set([
-              ...classRule.weaponProficiencies,
-              ...(raceRule.weaponProficiencies ?? []),
-              ...(subraceRule?.weaponProficiencies ?? []),
-            ]),
-          ],
+          weapons: weaponProficiencies,
           tools: [
             ...new Set([
               ...bgRule.tools,
@@ -789,7 +789,17 @@ export class CharacterSheetService {
       damage_modifier: 0,
       isRanged: false,
     }));
-    const weaponResult = buildWeaponActions(weaponsForCalc, stats, profBonus, character.chosen_fighting_style);
+    const weaponProficiencies = weaponProficiencyList(
+      [classRule.weaponProficiencies, raceRule.weaponProficiencies, subraceRule?.weaponProficiencies],
+      subclassRule?.id_subclass,
+    );
+    const weaponResult = buildWeaponActions(
+      weaponsForCalc,
+      stats,
+      profBonus,
+      character.chosen_fighting_style,
+      weaponProficiencies,
+    );
 
     const knownSpells: Spell[] = spells.map(s => ({
       id_spell: s.id_spell,
@@ -931,13 +941,7 @@ export class CharacterSheetService {
               ...(subraceRule?.armorProficiencies ?? []),
             ]),
           ],
-          weapons: [
-            ...new Set([
-              ...classRule.weaponProficiencies,
-              ...(raceRule.weaponProficiencies ?? []),
-              ...(subraceRule?.weaponProficiencies ?? []),
-            ]),
-          ],
+          weapons: weaponProficiencies,
           tools: [
             ...new Set([
               ...bgRule.tools,
