@@ -43,7 +43,10 @@ import {
   ShownReferenceImage,
   SpellCastInput,
 } from '../models/game-session-types';
-import {bardicInspirationSides} from './character-sheet/combat-features';
+import {
+  bardicInspirationSides,
+  SAVE_CONTEXTS,
+} from './character-sheet/combat-features';
 import {startingInventory} from './character-sheet/starting-items';
 import {applyHpAmount} from './hp-math';
 import {monsterRevealCard} from './monster-reveal';
@@ -60,6 +63,7 @@ import {
   StatDelta,
 } from './ranking-stats';
 import {
+  SecretRollRequest,
   SecretRollRequestStore,
   secretRollRequests,
 } from './secret-roll-requests';
@@ -1290,11 +1294,12 @@ export class GameSessionService {
         'Você não pode registrar uma rolagem para esse personagem',
       );
 
-    // Resposta a um teste secreto: só vale uma vez, do jogador/personagem pra quem o mestre
-    // pediu, e a rolagem fica oculta (só o mestre recebe).
-    let answersSecretRequest = false;
+    // Resposta a um pedido: só do jogador/personagem pra quem foi pedido (a rolagem e as de novo
+    // de Sortudo/Indomável). Teste secreto fica oculto (só o mestre recebe); numa resistência com
+    // CD, a resposta diz se passou ou falhou — a CD nunca sai daqui.
+    let request: SecretRollRequest | null = null;
     if (input.secret_request_id !== undefined) {
-      const request = this.secretRequests.consume(String(input.secret_request_id), {
+      request = this.secretRequests.consume(String(input.secret_request_id), {
         id_game_session: idGameSession,
         id_character: idCharacter,
         user_id: userId,
@@ -1303,7 +1308,6 @@ export class GameSessionService {
         throw new HttpErrors.Conflict(
           'Pedido de teste secreto inválido ou expirado',
         );
-      answersSecretRequest = true;
     }
 
     // Fora isso, só o mestre pode ocultar uma rolagem dos jogadores — ignora silenciosamente
@@ -1322,16 +1326,28 @@ export class GameSessionService {
     const roll = await this.repository.addRoll(idGameSession, {
       ...rollInput,
       id_character: idCharacter,
-      is_hidden: answersSecretRequest || (isDm && !!input.is_hidden),
+      is_hidden: (request?.secret ?? false) || (isDm && !!input.is_hidden),
     });
+    const answer: RollLogEntry = request
+      ? {
+          ...roll,
+          save_request_id: request.id,
+          save_outcome:
+            request.dc !== null && input.roll_type === 'save'
+              ? input.total >= request.dc
+                ? 'success'
+                : 'fail'
+              : null,
+        }
+      : roll;
     if (idCharacter !== null)
       await this.recordStats(idGameSession, idCharacter, rollStats(input));
     this.events.publish({
       type: 'roll_added',
       id_game_session: idGameSession,
-      roll: castId ? {...roll, cast_id: castId} : roll,
+      roll: castId ? {...answer, cast_id: castId} : answer,
     });
-    return roll;
+    return answer;
   }
 
   /**
@@ -1371,8 +1387,16 @@ export class GameSessionService {
     userId: string,
   ): Promise<{id_player_session: string; request_id: string}[]> {
     const isOwner = await this.repository.isSessionOwner(idGameSession, userId);
-    if (!isOwner)
+    // Teste secreto é só do mestre. Resistência pública (contra a magia/ação que alguém lançou)
+    // qualquer um da mesa pede pros atingidos.
+    const secret = input.secret !== false;
+    if (secret && !isOwner)
       throw new HttpErrors.Forbidden('Só o mestre pede teste secreto');
+    if (!secret && !isOwner) {
+      const hasAccess = await this.repository.hasSessionAccess(idGameSession, userId);
+      if (!hasAccess)
+        throw new HttpErrors.Forbidden('Você não tem acesso a esta sessão');
+    }
 
     const ids = Array.isArray(input.id_player_sessions)
       ? [...new Set(input.id_player_sessions)]
@@ -1390,6 +1414,21 @@ export class GameSessionService {
         check.id_skill <= SKILL_IDS_MAX) ||
       (check?.kind === 'save' && SAVE_ABILITIES.includes(check.ability));
     if (!validCheck) throw new HttpErrors.UnprocessableEntity('check inválido');
+    if (!secret && check.kind !== 'save')
+      throw new HttpErrors.UnprocessableEntity(
+        'Fora do teste secreto, só dá pra pedir resistência',
+      );
+    const dc = input.dc ?? null;
+    const against = input.against ?? [];
+    if (check.kind !== 'save' && (dc !== null || against.length > 0))
+      throw new HttpErrors.UnprocessableEntity('CD e contexto só valem em resistência');
+    if (dc !== null && (!Number.isInteger(dc) || dc < 1 || dc > 40))
+      throw new HttpErrors.UnprocessableEntity('CD inválida');
+    if (
+      !Array.isArray(against) ||
+      against.some(context => !SAVE_CONTEXTS.includes(context))
+    )
+      throw new HttpErrors.UnprocessableEntity('contexto inválido');
 
     const session = await this.repository.findById(idGameSession);
     if (!session) throw new HttpErrors.NotFound('Sessão não encontrada');
@@ -1409,6 +1448,8 @@ export class GameSessionService {
         id_character: player.id_character,
         user_id: player.user_id!,
         label,
+        dc,
+        secret,
       });
       this.events.publish({
         type: 'secret_roll_requested',
@@ -1419,6 +1460,8 @@ export class GameSessionService {
         id_character: player.id_character,
         label,
         check: input.check,
+        secret,
+        against: [...new Set(against)],
       });
       return {id_player_session: player.id_player_session, request_id: request.id};
     });

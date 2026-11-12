@@ -612,7 +612,7 @@ export class GameSessionController {
   @post('/api/game-session/{id}/secret-roll-request')
   @response(200, {
     description:
-      'DM asks one or more players for a secret check — each player rolls and only the DM receives the result',
+      'Asks players for a roll: a secret check from the DM (only the DM sees it) or, with secret=false, a public saving throw against a spell/action, requested by whoever cast it. The DC never reaches the players — the answer says only success or fail',
     content: {'application/json': {schema: {type: 'array', items: {type: 'object'}}}},
   })
   async requestSecretRoll(

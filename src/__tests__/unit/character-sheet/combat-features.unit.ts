@@ -186,12 +186,33 @@ describe('combat-features', () => {
     ]);
   });
 
+  it('cada vantagem diz contra o que vale; Fúria vale sempre (sem contexto)', () => {
+    const against = (
+      overrides: Partial<Parameters<typeof buildCombatFeatures>[0]>,
+    ) =>
+      buildCombatFeatures({...base, ...overrides}).d20_reminders.map(
+        r => r.against,
+      );
+    expect(against({idRace: 2})).to.eql(['charm']);
+    expect(against({idRace: 3})).to.eql(['fear']);
+    expect(against({idRace: 5})).to.eql(['magic']);
+    expect(against({idClass: 1, level: 2})).to.eql(['visible']);
+    expect(
+      against({
+        idClass: 1,
+        level: 1,
+        activeEffects: {active: ['Fúria'], turn_uses: {}},
+      }),
+    ).to.eql([null, null]);
+  });
+
   it('lembretes de vantagem: raça, Sentido de Perigo e Fúria ativa', () => {
     const dwarf = buildCombatFeatures({...base, idRace: 1});
     expect(dwarf.d20_reminders).to.eql([
       {
         applies: 'save',
         abilities: null,
+        against: 'poison',
         text: 'Vantagem contra veneno (Resistência Anã)',
       },
     ]);

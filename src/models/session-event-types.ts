@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {CombatEncounterDetail} from './combat-types';
+import {SaveContext} from './character-options-types';
 import {
   MonsterAbilityKey,
   MonsterSession,
@@ -104,6 +105,10 @@ export interface SessionEventPayloadMap {
     id_character: number;
     label: string;
     check: SecretRollCheck;
+    /** Teste secreto (só o mestre vê) ou resistência pública contra uma magia/ação. */
+    secret: boolean;
+    /** Contra o que é a resistência (a CD nunca vai no evento). */
+    against: SaveContext[];
   };
   spell_cast: {
     id_character: number;

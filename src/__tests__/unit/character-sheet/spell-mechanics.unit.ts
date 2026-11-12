@@ -6,6 +6,7 @@ import {
   healingFeaturesFor,
   resolveSpellRollAtSlot,
   SPELL_MECHANICS,
+  spellSaveAgainst,
 } from '../../../services/character-sheet/spell-mechanics';
 
 describe('spell-mechanics', () => {
@@ -263,6 +264,7 @@ describe('spell-mechanics', () => {
         save_ability: 'WIS',
         save_dc: 13,
         save_on_success: null,
+        save_against: ['magic', 'visible'],
         heal: null,
         maximize: false,
         rider_trigger: null,
@@ -271,6 +273,43 @@ describe('spell-mechanics', () => {
         variant: null,
         by_slot: {},
       });
+    });
+
+    it('contra o que é a resistência: condição da magia, dano de veneno, magia e efeito visível', () => {
+      expect(spellSaveAgainst(141)).to.eql(['charm', 'magic', 'visible']); // Enfeitiçar Pessoa
+      expect(spellSaveAgainst(214)).to.eql(['fear', 'magic', 'visible']); // Medo
+      expect(spellSaveAgainst(17)).to.eql([
+        'charm',
+        'fear',
+        'magic',
+        'visible',
+      ]); // Antipatia/Simpatia
+      expect(spellSaveAgainst(293)).to.eql(['poison', 'magic', 'visible']); // Rajada de Veneno
+      expect(spellSaveAgainst(236)).to.eql(['poison', 'magic', 'visible']); // Névoa Fétida
+      expect(spellSaveAgainst(44)).to.eql(['magic', 'visible']); // Bola de Fogo
+      expect(buildSpellRoll(141, 1, 3, 3, 5, 13)!.save_against).to.eql([
+        'charm',
+        'magic',
+        'visible',
+      ]);
+    });
+
+    it('magia sem resistência não tem contexto', () => {
+      const attack = Object.keys(SPELL_MECHANICS)
+        .map(Number)
+        .find(id => SPELL_MECHANICS[id].kind === 'attack')!;
+      expect(spellSaveAgainst(attack)).to.eql([]);
+      expect(spellSaveAgainst(999999)).to.eql([]);
+    });
+
+    it('toda magia marcada com contexto pede resistência', () => {
+      for (const id of [
+        11, 17, 28, 95, 133, 134, 135, 138, 141, 214, 221, 223, 236, 248,
+      ])
+        expect({id, save: !!SPELL_MECHANICS[id]?.save}).to.eql({
+          id,
+          save: true,
+        });
     });
   });
 
@@ -412,6 +451,7 @@ describe('spell-mechanics', () => {
         save_ability: null,
         save_dc: null,
         save_on_success: null,
+        save_against: [],
         heal: null,
         maximize: false,
         rider_trigger: null,

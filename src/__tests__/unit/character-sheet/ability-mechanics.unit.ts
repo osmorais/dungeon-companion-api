@@ -120,6 +120,8 @@ describe('ability-mechanics', () => {
       save_dc: 8 + 2 + 3,
       save_on_success: 'half',
       damage_type: 'fogo',
+      // habilidade, não magia: só efeito visível
+      save_against: ['visible'],
     });
     expect([1, 6, 11, 16].map(l => breath(l).by_slot['0'].dice_count)).to.eql([
       2, 3, 4, 5,

@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {expect} from '@loopback/testlab';
 import {
+  MAX_ANSWERS_PER_REQUEST,
   SECRET_ROLL_TTL_MS,
   SecretRollRequestStore,
 } from '../../../services/secret-roll-requests';
@@ -12,13 +13,18 @@ describe('SecretRollRequestStore', () => {
     id_character: 10,
     user_id: 'u1',
     label: 'Percepção',
+    dc: null,
+    secret: true,
   };
   const who = {id_game_session: 'gs', id_character: 10, user_id: 'u1'};
 
-  it('usa o pedido uma vez só', () => {
+  it('vale a rolagem e até duas de novo (Sortudo, Indomável), depois some', () => {
     const store = new SecretRollRequestStore();
     const request = store.create(data);
+    expect(MAX_ANSWERS_PER_REQUEST).to.equal(3);
     expect(store.consume(request.id, who)).to.containDeep(data);
+    expect(store.consume(request.id, who)).to.containDeep({answers: 2});
+    expect(store.consume(request.id, who)).to.containDeep({answers: 3});
     expect(store.consume(request.id, who)).to.be.null();
   });
 

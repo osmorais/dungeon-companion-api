@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {FinalStats, StatKeyEn} from '../../models/character-sheet-types';
 import {getMod} from './calculator';
+import {SaveContext} from '../../models/character-options-types';
 
 /**
  * Traços que mexem no ataque com arma (fase 2 de `docs/dungeon-companion/conceitos/tracos-mecanicos.md`):
@@ -41,11 +42,25 @@ export function bardicInspirationSides(level: number): number {
   return 6;
 }
 
-/** Lembrete de vantagem num d20 (o jogador decide aplicar — o app não sabe a origem do efeito). */
+export type {SaveContext};
+export const SAVE_CONTEXTS: readonly SaveContext[] = [
+  'poison',
+  'charm',
+  'fear',
+  'magic',
+  'visible',
+];
+
+/**
+ * Vantagem num d20. Com `against`, só vale quando a rolagem é contra isso: se quem pede sabe o
+ * contexto, a vantagem entra sozinha; sem contexto, vira lembrete. `against: null` vale sempre
+ * (Fúria nos testes de Força).
+ */
 export interface D20Reminder {
   applies: 'save' | 'check';
   /** Atributos em que vale; `null` = qualquer um. */
   abilities: StatKeyEn[] | null;
+  against: SaveContext | null;
   text: string;
 }
 
@@ -94,6 +109,7 @@ function d20RemindersFor(ctx: {
     reminders.push({
       applies: 'save',
       abilities: null,
+      against: 'poison',
       text: 'Vantagem contra veneno (Resistência Anã)',
     });
   }
@@ -101,6 +117,7 @@ function d20RemindersFor(ctx: {
     reminders.push({
       applies: 'save',
       abilities: null,
+      against: 'poison',
       text: 'Vantagem contra veneno (Resistência Robusto)',
     });
   }
@@ -108,6 +125,7 @@ function d20RemindersFor(ctx: {
     reminders.push({
       applies: 'save',
       abilities: null,
+      against: 'charm',
       text: 'Vantagem contra ser enfeitiçado (Ancestralidade Feérica)',
     });
   }
@@ -115,6 +133,7 @@ function d20RemindersFor(ctx: {
     reminders.push({
       applies: 'save',
       abilities: null,
+      against: 'fear',
       text: 'Vantagem contra medo (Bravura)',
     });
   }
@@ -122,6 +141,7 @@ function d20RemindersFor(ctx: {
     reminders.push({
       applies: 'save',
       abilities: ['INT', 'WIS', 'CHA'],
+      against: 'magic',
       text: 'Vantagem contra magia (Esperteza Gnômica)',
     });
   }
@@ -129,6 +149,7 @@ function d20RemindersFor(ctx: {
     reminders.push({
       applies: 'save',
       abilities: ['DEX'],
+      against: 'visible',
       text: 'Vantagem contra efeitos que você vê, como armadilhas e magias (Sentido de Perigo)',
     });
   }
@@ -136,11 +157,13 @@ function d20RemindersFor(ctx: {
     reminders.push({
       applies: 'save',
       abilities: ['STR'],
+      against: null,
       text: 'Vantagem (Fúria)',
     });
     reminders.push({
       applies: 'check',
       abilities: ['STR'],
+      against: null,
       text: 'Vantagem (Fúria)',
     });
   }
