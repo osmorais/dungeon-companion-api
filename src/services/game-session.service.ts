@@ -794,7 +794,7 @@ export class GameSessionService {
       );
     if (!['damage', 'heal', 'temp_hp'].includes(input.kind))
       throw new HttpErrors.UnprocessableEntity('kind inválido');
-    if (!['player', 'npc', 'monster'].includes(input.target_kind))
+    if (!['player', 'npc', 'monster', 'companion'].includes(input.target_kind))
       throw new HttpErrors.UnprocessableEntity('target_kind inválido');
     if (!Number.isInteger(input.id_character))
       throw new HttpErrors.UnprocessableEntity('id_character é obrigatório');
@@ -834,7 +834,53 @@ export class GameSessionService {
       {};
     let after = {current: next.current, temp: next.temp};
 
-    if (input.target_kind === 'monster') {
+    if (input.target_kind === 'companion') {
+      after = {current: next.current, temp: 0};
+      await this.repository.writeCompanionHp(input.target_id, next.current);
+      this.events.publish({
+        type: 'companion_hp_updated',
+        id_game_session: idGameSession,
+        id_session_companion: input.target_id,
+        hp_current: next.current,
+      });
+      result = {current_hit_points: next.current};
+    } else if (input.target_kind === 'player' && target.wildShape) {
+      // Druida em Forma Selvagem: o dano vai na forma; o que passar dela, no druida.
+      const overflow =
+        input.kind === 'damage'
+          ? Math.max(0, Math.max(0, amount - target.temp) - target.current)
+          : 0;
+      const written = await this.repository.writeWildShapeHp(
+        target.id_character!,
+        target.wildShape.effects,
+        target.wildShape.druid,
+        next.current,
+        overflow,
+        next.temp,
+      );
+      after = {current: written.current, temp: next.temp};
+      this.events.publish({
+        type: 'player_hp_updated',
+        id_game_session: idGameSession,
+        id_player_session: input.target_id,
+        current_hit_points: written.current,
+        temporary_hit_points: next.temp,
+        max_hit_points: written.max,
+        wild_shape_name: written.name,
+      });
+      if (written.relentlessEndurance)
+        this.events.publish({
+          type: 'spell_cast',
+          id_game_session: idGameSession,
+          id_character: written.relentlessEndurance.idCharacter,
+          actor_name: written.relentlessEndurance.name,
+          spell_name: 'Resistência Implacável',
+          save_dc: null,
+          save_ability: null,
+          is_ability: true,
+        });
+      result = {current_hit_points: written.current, temporary_hit_points: next.temp};
+    } else if (input.target_kind === 'monster') {
       after = {current: next.current, temp: 0};
       await this.repository.writeMonsterHp(input.target_id, next.current);
       this.events.publish({
@@ -889,7 +935,8 @@ export class GameSessionService {
 
     const stats = applyStats({
       kind: input.kind,
-      targetKind: input.target_kind,
+      // Companheiro conta como aliado (como um NPC) nas estatísticas.
+      targetKind: input.target_kind === 'companion' ? 'npc' : input.target_kind,
       before: {current: target.current, temp: target.temp},
       after,
     });

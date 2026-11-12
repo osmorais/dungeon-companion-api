@@ -6,6 +6,8 @@ import {
   darkvisionFor,
 } from '../services/character-sheet/combat-features';
 import {applyHpToWildShape} from '../services/character-sheet/wild-shape';
+import {selectCompanions} from './companion.repository';
+import {companionMaxHp} from '../services/character-sheet/companion';
 import {normalizeKey} from '../services/character-sheet/calculator';
 import {StartingItem} from '../services/character-sheet/starting-items';
 import {
@@ -423,11 +425,14 @@ export class GameSessionRepository {
       WHERE gs.id_game_session = ${id}
     `;
 
+    const companions = await selectCompanions(this.db.sql, id);
+
     return {
       game_session: session,
       players,
       npcs,
       monsters,
+      companions,
       // Recalculado no service, que sabe se quem está pedindo é o mestre ou um jogador.
       revealed_monsters: [],
       recent_rolls,
@@ -1035,46 +1040,23 @@ export class GameSessionRepository {
     // Forma Selvagem: o PV pedido é o da forma. Acima de 0, só ela muda; em 0, o druida volta e
     // recebe o dano que sobrou.
     const form = active_effects?.wild_shape ?? null;
-    if (form) {
-      const routed = applyHpToWildShape(
-        form,
+    if (form && active_effects) {
+      const written = await this.writeWildShapeHp(
+        id_character,
+        active_effects,
+        {current: current_hit_points ?? 0, max: max_hit_points ?? 0},
         currentHitPoints,
         overflow,
-        current_hit_points ?? 0,
+        temporaryHitPoints,
       );
-      if (routed.form) {
-        await this.db.sql`
-          UPDATE character
-          SET active_effects = ${this.db.sql.json({...active_effects, wild_shape: routed.form} as never)},
-              temporary_hit_points = ${temporaryHitPoints}
-          WHERE id_character = ${id_character}
-        `;
-        return {
-          status: 'ok',
-          idGameSession: id_game_session,
-          currentHitPoints: routed.form.hp_current,
-          relentlessEndurance: null,
-          idCharacter: id_character,
-          previous: {current: form.hp_current, temp: temporary_hit_points ?? 0},
-          wildShape: {maxHitPoints: routed.form.hp_max, name: routed.form.name},
-        };
-      }
-      const druid = await this.resolveRelentlessEndurance(id_character, routed.druidHp);
-      await this.db.sql`
-        UPDATE character
-        SET active_effects = ${this.db.sql.json({...active_effects, wild_shape: null} as never)},
-            current_hit_points = ${druid.finalHp},
-            temporary_hit_points = ${temporaryHitPoints}
-        WHERE id_character = ${id_character}
-      `;
       return {
         status: 'ok',
         idGameSession: id_game_session,
-        currentHitPoints: druid.finalHp,
-        relentlessEndurance: druid.relentlessEndurance,
+        currentHitPoints: written.current,
+        relentlessEndurance: written.relentlessEndurance,
         idCharacter: id_character,
         previous: {current: form.hp_current, temp: temporary_hit_points ?? 0},
-        wildShape: {maxHitPoints: max_hit_points ?? 0, name: null},
+        wildShape: {maxHitPoints: written.max, name: written.name},
       };
     }
 
@@ -1189,7 +1171,7 @@ export class GameSessionRepository {
    */
   async findApplyTarget(
     idGameSession: string,
-    kind: 'player' | 'npc' | 'monster',
+    kind: 'player' | 'npc' | 'monster' | 'companion',
     id: string,
   ): Promise<{
     id_character: number | null;
@@ -1198,7 +1180,30 @@ export class GameSessionRepository {
     max: number;
     temp: number;
     is_revealed: boolean;
+    /** Druida em Forma Selvagem: os efeitos (o PV acima é o da forma) e o PV dele. */
+    wildShape?: {effects: ActiveEffects; druid: {current: number; max: number}};
   } | null> {
+    if (kind === 'companion') {
+      const [companion] = await this.db.sql<
+        {name: string; hp_current: number; data_snapshot: Record<string, unknown>; level: number | null}[]
+      >`
+        SELECT sc.name, sc.hp_current, sc.data_snapshot, c.level
+        FROM session_companion sc
+        JOIN player_session ps ON ps.id_player_session = sc.id_player_session
+        LEFT JOIN character c ON c.id_character = ps.id_character
+        WHERE sc.id_session_companion = ${id} AND sc.id_game_session = ${idGameSession}
+      `;
+      if (!companion) return null;
+      const baseHp = Number(companion.data_snapshot?.['hit_points'] ?? 1);
+      return {
+        id_character: null,
+        label: companion.name,
+        current: companion.hp_current,
+        max: companionMaxHp(baseHp, companion.level ?? 1),
+        temp: 0,
+        is_revealed: true,
+      };
+    }
     if (kind === 'monster') {
       const [row] = await this.db.sql<
         {hp_current: number; hp_max: number; is_revealed: boolean; custom_name: string | null; snapshot_name: string | null}[]
@@ -1220,7 +1225,8 @@ export class GameSessionRepository {
     const rows =
       kind === 'player'
         ? await this.db.sql<{id_character: number; name: string; current_hit_points: number; max_hit_points: number; temporary_hit_points: number | null}[]>`
-            SELECT c.id_character, c.name, c.current_hit_points, c.max_hit_points, c.temporary_hit_points
+            SELECT c.id_character, c.name, c.current_hit_points, c.max_hit_points, c.temporary_hit_points,
+                   c.active_effects
             FROM player_session ps JOIN character c ON c.id_character = ps.id_character
             WHERE ps.id_player_session = ${id} AND ps.id_game_session = ${idGameSession}
           `
@@ -1231,14 +1237,82 @@ export class GameSessionRepository {
           `;
     const [row] = rows;
     if (!row) return null;
+    // Druida em Forma Selvagem: quem aplica vê e mexe no PV da forma.
+    const effects = (row as {active_effects?: ActiveEffects | null}).active_effects ?? null;
+    const form = effects?.wild_shape ?? null;
     return {
       id_character: row.id_character,
       label: row.name,
-      current: row.current_hit_points,
-      max: row.max_hit_points,
+      current: form ? form.hp_current : row.current_hit_points,
+      max: form ? form.hp_max : row.max_hit_points,
       temp: row.temporary_hit_points ?? 0,
       is_revealed: true,
+      ...(form && effects
+        ? {
+            wildShape: {
+              effects,
+              druid: {current: row.current_hit_points, max: row.max_hit_points},
+            },
+          }
+        : {}),
     };
+  }
+
+  /**
+   * PV de quem está em Forma Selvagem: acima de 0, só a forma muda; em 0, o druida volta e recebe
+   * o dano que sobrou (`overflow`). Devolve o PV e o máximo agora mostrados e a forma (`null` =
+   * acabou). A permissão já foi conferida por quem chama.
+   */
+  async writeWildShapeHp(
+    idCharacter: number,
+    effects: ActiveEffects,
+    druid: {current: number; max: number},
+    requestedFormHp: number,
+    overflow: number,
+    temp: number,
+  ): Promise<{
+    current: number;
+    max: number;
+    name: string | null;
+    relentlessEndurance: {idCharacter: number; name: string} | null;
+  }> {
+    const routed = applyHpToWildShape(effects.wild_shape!, requestedFormHp, overflow, druid.current);
+    if (routed.form) {
+      await this.db.sql`
+        UPDATE character
+        SET active_effects = ${this.db.sql.json({...effects, wild_shape: routed.form} as never)},
+            temporary_hit_points = ${temp}
+        WHERE id_character = ${idCharacter}
+      `;
+      return {
+        current: routed.form.hp_current,
+        max: routed.form.hp_max,
+        name: routed.form.name,
+        relentlessEndurance: null,
+      };
+    }
+    const resolved = await this.resolveRelentlessEndurance(idCharacter, routed.druidHp);
+    await this.db.sql`
+      UPDATE character
+      SET active_effects = ${this.db.sql.json({...effects, wild_shape: null} as never)},
+          current_hit_points = ${resolved.finalHp},
+          temporary_hit_points = ${temp}
+      WHERE id_character = ${idCharacter}
+    `;
+    return {
+      current: resolved.finalHp,
+      max: druid.max,
+      name: null,
+      relentlessEndurance: resolved.relentlessEndurance,
+    };
+  }
+
+  /** PV do companheiro (a permissão já foi conferida no service). */
+  async writeCompanionHp(idSessionCompanion: string, hp: number): Promise<void> {
+    await this.db.sql`
+      UPDATE session_companion SET hp_current = ${hp}
+      WHERE id_session_companion = ${idSessionCompanion}
+    `;
   }
 
   /** Grava o PV calculado no servidor (a permissão já foi conferida no service). */

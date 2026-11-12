@@ -52,6 +52,7 @@ function sessionDetail(): GameSessionDetail {
     game_session: {user_id: 'dm'} as GameSessionDetail['game_session'],
     players: [],
     npcs: [],
+    companions: [],
     monsters: [
       monster('m1', {is_revealed: true}),
       monster('m2', {
@@ -348,6 +349,86 @@ describe('GameSessionService', () => {
         target_label: 'Thorin',
         amount: 5,
         kind: 'heal',
+      });
+    });
+
+    it('companheiro: dano no PV dele e a mesa recebe o PV novo', async () => {
+      repository.stubs.findApplyTarget.resolves({
+        id_character: null,
+        label: 'Lobo',
+        current: 12,
+        max: 12,
+        temp: 0,
+        is_revealed: true,
+      });
+      const result = await service.applyAmount(
+        'gs',
+        input({
+          target_kind: 'companion',
+          target_id: 'c1',
+          kind: 'damage',
+          amount: 5,
+        }),
+        'u1',
+      );
+      expect(result).to.eql({current_hit_points: 7});
+      sinon.assert.calledWith(repository.stubs.writeCompanionHp, 'c1', 7);
+      expect(events[0]).to.eql({
+        type: 'companion_hp_updated',
+        id_game_session: 'gs',
+        id_session_companion: 'c1',
+        hp_current: 7,
+      });
+      await expect(
+        service.applyAmount(
+          'gs',
+          input({target_kind: 'companion', target_id: 'c1', kind: 'temp_hp'}),
+          'u1',
+        ),
+      ).to.be.rejectedWith(/PV temporários/);
+    });
+
+    it('druida em Forma Selvagem: o dano vai na forma e o que sobra passa pro druida', async () => {
+      const effects = {
+        active: [],
+        turn_uses: {},
+        wild_shape: {hp_current: 4, hp_max: 11, name: 'Lobo'},
+      } as never;
+      repository.stubs.findApplyTarget.resolves({
+        ...ally,
+        current: 4,
+        max: 11,
+        temp: 1,
+        wildShape: {effects, druid: {current: 25, max: 30}},
+      });
+      repository.stubs.writeWildShapeHp.resolves({
+        current: 20,
+        max: 30,
+        name: null,
+        relentlessEndurance: null,
+      });
+      const result = await service.applyAmount(
+        'gs',
+        input({kind: 'damage', amount: 10}),
+        'u1',
+      );
+      // 10 de dano: 1 na vida temporária, 4 na forma, 5 passam pro druida
+      sinon.assert.calledWith(
+        repository.stubs.writeWildShapeHp,
+        20,
+        effects,
+        {current: 25, max: 30},
+        0,
+        5,
+        0,
+      );
+      sinon.assert.notCalled(repository.stubs.writeCharacterHp);
+      expect(result).to.eql({current_hit_points: 20, temporary_hit_points: 0});
+      expect(events[0]).to.containDeep({
+        type: 'player_hp_updated',
+        current_hit_points: 20,
+        max_hit_points: 30,
+        wild_shape_name: null,
       });
     });
 

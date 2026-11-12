@@ -925,3 +925,23 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_session_invite_pending
     ON session_invite (id_game_session, receiver_id) WHERE status = 'pending';
 CREATE INDEX IF NOT EXISTS ix_session_invite_receiver ON session_invite (receiver_id, status);
 CREATE INDEX IF NOT EXISTS ix_session_invite_sender ON session_invite (sender_id, status);
+
+-- Companheiro Animal (1.22.0): a besta do ranger do Conclave da Besta numa mesa. Um por jogador
+-- na mesa (`uq_session_companion_player`). Usado em CompanionService/CompanionRepository e no
+-- detalhe da sessão (`companions`). Some com a sessão e com a vaga do jogador (cascata).
+-- monster_slug: a besta no bestiário (`monster.slug`); data_snapshot: cópia da ficha dela (CA,
+-- atributos, ações), tirada ao escolher. hp_current: PV atual (o máximo é calculado: o maior entre
+-- o da besta e 4 × o nível do ranger). color: contorno que liga o card dele ao do ranger (#rrggbb).
+CREATE TABLE IF NOT EXISTS session_companion (
+    id_session_companion UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id_game_session UUID NOT NULL REFERENCES game_session(id_game_session) ON DELETE CASCADE,
+    id_player_session UUID NOT NULL REFERENCES player_session(id_player_session) ON DELETE CASCADE,
+    monster_slug VARCHAR(80) NOT NULL,
+    name VARCHAR(80) NOT NULL,
+    hp_current INTEGER NOT NULL CHECK (hp_current >= 0),
+    data_snapshot JSONB NOT NULL,
+    color VARCHAR(7) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_session_companion_player UNIQUE (id_player_session)
+);
+CREATE INDEX IF NOT EXISTS ix_session_companion_game ON session_companion (id_game_session);

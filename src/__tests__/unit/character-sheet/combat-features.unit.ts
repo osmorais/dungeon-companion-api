@@ -42,6 +42,7 @@ describe('combat-features', () => {
       d20_reminders: [],
       attacks_per_action: 1,
       cunning_action: false,
+      animal_companion: false,
       darkvision_m: null,
     });
   });

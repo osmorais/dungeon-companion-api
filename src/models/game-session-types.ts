@@ -4,6 +4,7 @@ import {SaveContext, SpellCardDamage} from './character-options-types';
 import {DamageDefenses} from '../services/character-sheet/combat-features';
 import {CombatEncounterDetail} from './combat-types';
 import {MonsterRevealCard} from '../services/monster-reveal';
+import {SessionCompanion} from '../services/character-sheet/companion';
 
 export interface GameSession {
   id_game_session: string;
@@ -366,7 +367,7 @@ export interface SpellCastStageInput {
  */
 export interface ApplyAmountInput {
   id_character: number;
-  target_kind: 'player' | 'npc' | 'monster';
+  target_kind: 'player' | 'npc' | 'monster' | 'companion';
   target_id: string;
   amount: number;
   kind: 'damage' | 'heal' | 'temp_hp';
@@ -378,6 +379,8 @@ export interface GameSessionDetail {
   game_session: GameSession;
   players: PlayerSession[];
   npcs: NpcSession[];
+  /** Companheiros Animais dos rangers (Conclave da Besta), visíveis pra todos. */
+  companions: SessionCompanion[];
   /** Só preenchido para o mestre — jogadores recebem sempre um array vazio aqui. */
   monsters: MonsterSession[];
   /** Monstros revelados pelo mestre — visível para todos, sem status/PV. */

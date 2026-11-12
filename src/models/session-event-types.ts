@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {CombatEncounterDetail} from './combat-types';
+import {SessionCompanion} from '../services/character-sheet/companion';
 import {SaveContext} from './character-options-types';
 import {
   MonsterAbilityKey,
@@ -33,6 +34,12 @@ export interface SessionEventPayloadMap {
   npc_added: {npc: NpcSession};
   npc_removed: {id_npc_session: string};
   monster_added: {monster: MonsterSession};
+  /** Companheiro Animal escolhido, trocado (`companion`) ou dispensado (`null`). */
+  companion_set: {
+    id_player_session: string;
+    companion: SessionCompanion | null;
+  };
+  companion_hp_updated: {id_session_companion: string; hp_current: number};
   monster_removed: {id_monster_session: string};
   /** Com a carta (tipo e tamanho; sem lore) pra explosão no aviso de derrota (1.11.0). */
   monster_defeated: {

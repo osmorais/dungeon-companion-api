@@ -190,7 +190,7 @@ export class AccountRepository {
     `;
   }
 
-  /** Participações como jogador, com o inventário de cada uma. */
+  /** Participações como jogador, com o inventário e o Companheiro Animal de cada uma. */
   async findParticipations(userId: string): Promise<ExportedParticipation[]> {
     return this.db.sql<ExportedParticipation[]>`
       SELECT
@@ -205,7 +205,15 @@ export class AccountRepository {
             'weight', pii.weight
           ) ORDER BY pii.name)
           FROM player_inventory_item pii WHERE pii.id_player_session = ps.id_player_session
-        ), '[]'::json) AS inventory
+        ), '[]'::json) AS inventory,
+        (
+          SELECT json_build_object(
+            'slug', sc.monster_slug,
+            'name', sc.name,
+            'hp_current', sc.hp_current
+          )
+          FROM session_companion sc WHERE sc.id_player_session = ps.id_player_session
+        ) AS animal_companion
       FROM player_session ps
       JOIN game_session gs ON gs.id_game_session = ps.id_game_session
       WHERE ps.user_id = ${userId}

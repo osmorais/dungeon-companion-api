@@ -251,6 +251,8 @@ export interface CombatFeatures {
   attacks_per_action: number;
   /** Ladino nv2 (Ação Ardilosa): ação bônus pra Disparar, Desengajar ou Esconder. */
   cunning_action: boolean;
+  /** Ranger do Conclave da Besta (nv3): tem Companheiro Animal na mesa. */
+  animal_companion: boolean;
   /** Alcance da visão no escuro, em metros; `null` se não tem. */
   darkvision_m: number | null;
   /** Druida transformado: a forma, o PV dele guardado e se as magias estão travadas. */
@@ -419,6 +421,9 @@ export function buildCombatFeatures(ctx: {
     }),
     attacks_per_action: attacksPerAction(ctx.traits ?? []),
     cunning_action: (ctx.traits ?? []).some(t => t.name === 'Ação Ardilosa'),
+    animal_companion: (ctx.traits ?? []).some(
+      t => t.name === 'Companheiro Animal',
+    ),
     darkvision_m: darkvisionFor({
       idRace: ctx.idRace,
       subrace: ctx.subrace ?? null,
