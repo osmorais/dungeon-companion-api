@@ -217,6 +217,30 @@ export class CharacterController {
     }
   }
 
+  @patch('/api/character-sheet/{id}/language-tool-choices')
+  @response(200, {
+    description: 'Escolhe os idiomas e as ferramentas/kits "à escolha" da raça e do antecedente',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async updateLanguageToolChoices(
+    @param.path.number('id') id: number,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      description: 'languages: string[]; tools: {"Um tipo de kit de jogo": "Dados"}',
+      required: true,
+      content: {'application/json': {schema: {type: 'object'}}},
+    })
+    body: {languages?: unknown; tools?: unknown},
+  ): Promise<object> {
+    try {
+      return await this.characterSheetService.setLanguageToolChoices(id, currentUser.id, body);
+    } catch (e: unknown) {
+      if (HttpErrors.isHttpError(e)) throw e;
+      const message = e instanceof Error ? e.message : String(e);
+      throw new HttpErrors.UnprocessableEntity(message);
+    }
+  }
+
   @get('/api/character-sheet/{id}/level-up/preview')
   @response(200, {
     description: 'Computes what would change if the character leveled up, without saving anything',

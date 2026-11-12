@@ -1,4 +1,5 @@
 import {injectable, BindingScope, service} from '@loopback/core';
+import {LANGUAGES, TOOL_CHOICES} from './character-sheet/language-tool-choices';
 import {CharacterOptionsRepository} from '../repositories/character-options.repository';
 import {Alignment, Armour, Background, CharacterClass, CharacterOptions, Race, Spell, WeaponOption} from '../models/character-options-types';
 import {RACES, SUBRACES, CLASSES, BACKGROUNDS} from './character-sheet/rules';
@@ -55,6 +56,7 @@ export class CharacterOptionsService {
         languages: rule?.languages ?? [],
         traits: (rule?.traits ?? []).map(t => ({name: t.name, description: t.description})),
         tool_proficiency_options: rule?.toolProficiencyChoice?.options,
+        extra_languages: rule?.extraLanguages ?? 0,
       };
     });
 
@@ -89,6 +91,9 @@ export class CharacterOptionsService {
         skills: bgSkills.map(s => s.name),
         skill_ids: bgSkills.map(s => s.id_skill),
         tools: rule?.tools ?? [],
+        tool_choices: (rule?.tools ?? [])
+          .filter(t => TOOL_CHOICES[t])
+          .map(t => ({placeholder: t, options: TOOL_CHOICES[t]})),
         feature: rule ? {name: rule.feature.name, description: rule.feature.description} : {name: '', description: ''},
         starting_weapons: kitWeapons(rule?.startingItems ?? []),
       };
@@ -104,6 +109,7 @@ export class CharacterOptionsService {
       alignments,
       spells: spells.map(withCardDamage),
       armours,
+      languages: LANGUAGES,
     };
   }
 }

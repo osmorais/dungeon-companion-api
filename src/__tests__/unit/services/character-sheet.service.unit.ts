@@ -285,6 +285,63 @@ describe('CharacterSheetService', () => {
   });
 
   // -------------------------------------------------------------------------
+  describe('idiomas e ferramentas à escolha (1.24.0)', () => {
+    it('criação: grava as escolhas válidas e a ficha mostra', () => {
+      const input = characterInput({
+        choices: {
+          languages: ['Élfico'],
+          tools: {'Um tipo de kit de jogo': 'Dados'},
+        },
+      });
+      const sheet = service.build(input).character_sheet;
+      expect(sheet.proficiencies_and_languages.languages).to.containEql(
+        'Élfico',
+      );
+      expect(sheet.proficiencies_and_languages.tools).to.containEql('Dados');
+      expect(sheet.proficiencies_and_languages.tools).to.not.containEql(
+        'Um tipo de kit de jogo',
+      );
+    });
+
+    it('criação: escolha inválida é recusada', () => {
+      expect(() =>
+        service.build(characterInput({choices: {languages: ['Comum']}})),
+      ).to.throw(/já fala/);
+    });
+
+    it('na ficha: dono escolhe, grava e recebe como fica', async () => {
+      givenCharacter();
+      const result = await service.setLanguageToolChoices(1, 'owner', {
+        languages: ['Anão'],
+        tools: {'Um tipo de kit de jogo': 'Baralho'},
+      });
+      expect(
+        repository.stubs.updateLanguageToolChoices.calledWith(1, ['Anão'], {
+          'Um tipo de kit de jogo': 'Baralho',
+        }),
+      ).to.be.true();
+      expect(result.languages).to.eql(['Comum', 'Anão']);
+      expect(result.tools).to.containEql('Baralho');
+    });
+
+    it('na ficha: outro usuário 403, ficha inexistente 404, escolha inválida não grava', async () => {
+      givenCharacter();
+      await expect(
+        service.setLanguageToolChoices(1, 'outro', {languages: ['Anão']}),
+      ).to.be.rejectedWith(/não pode alterar/);
+      await expect(
+        service.setLanguageToolChoices(1, 'owner', {
+          languages: ['Anão', 'Orc'],
+        }),
+      ).to.be.rejectedWith(/limite/);
+      expect(repository.stubs.updateLanguageToolChoices.called).to.be.false();
+      repository.stubs.findCharacterById.resolves(null);
+      await expect(
+        service.setLanguageToolChoices(9, 'owner', {}),
+      ).to.be.rejectedWith(/./);
+    });
+  });
+
   describe('level-up: travas comuns', () => {
     it('personagem inexistente', async () => {
       repository.stubs.findCharacterById.resolves(null);

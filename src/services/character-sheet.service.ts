@@ -1,4 +1,11 @@
 /* eslint-disable @typescript-eslint/naming-convention */
+import {
+  LANGUAGES,
+  choiceSlots,
+  sheetLanguages,
+  sheetTools,
+  validateLanguageToolChoices,
+} from './character-sheet/language-tool-choices';
 import {weaponProficiencyList} from './character-sheet/weapon-proficiency';
 import {injectable, BindingScope, service} from '@loopback/core';
 import {HttpErrors} from '@loopback/rest';
@@ -53,7 +60,6 @@ import {
   collectTraits,
   buildSpellcasting,
   SubclassCastingOverride,
-  buildLanguages,
   collectProficientSkills,
   normalizeKey,
   normalizeSkill,
@@ -187,6 +193,14 @@ export class CharacterSheetService {
     } else if (choices.tool_proficiency) {
       throw new Error('Tool proficiency choice not allowed for this race');
     }
+    // Idiomas e ferramentas à escolha (1.24.0): opcionais aqui, dá pra escolher depois na ficha.
+    const languageToolChoices = validateLanguageToolChoices(
+      choiceSlots(raceRule, bgRule),
+      choices.languages,
+      choices.tools,
+    );
+    choices.languages = languageToolChoices.languages;
+    choices.tools = languageToolChoices.tools;
 
     const abilityBonusChoices = validateAbilityBonusChoice(core_build.id_race, choices.ability_bonus_choices);
     validateArmourChoice(
@@ -260,7 +274,8 @@ export class CharacterSheetService {
     );
     const traits = collectTraits(raceRule, subraceRule, classRule, bgRule, level, subclassRule, choices.fighting_style, profBonus, stats);
     const spells = choices.spells ?? [];
-    const languages = buildLanguages(raceRule, bgRule);
+    const creationSlots = choiceSlots(raceRule, bgRule);
+    const languages = sheetLanguages(creationSlots, choices.languages);
 
     const spellcastingResult = buildSpellcasting(
       classRule,
@@ -345,12 +360,20 @@ export class CharacterSheetService {
           weapons: weaponProficiencies,
           tools: [
             ...new Set([
-              ...bgRule.tools,
+              ...sheetTools(bgRule.tools, choices.tools),
               ...(subraceRule?.toolProficiencies ?? []),
               ...(choices.tool_proficiency ? [choices.tool_proficiency] : []),
             ]),
           ],
           languages,
+          choices: {
+            language_count: creationSlots.languages,
+            language_options: LANGUAGES,
+            fixed_languages: creationSlots.fixed_languages,
+            chosen_languages: choices.languages ?? [],
+            tool_slots: creationSlots.tools,
+            chosen_tools: choices.tools ?? {},
+          },
         },
         equipment: {
           currency: {cp: 0, sp: 0, ep: 0, gp: totalGold, pp: 0},
@@ -837,7 +860,8 @@ export class CharacterSheetService {
         const picked = (row.choice_data as {feat_proficiencies?: {tools?: unknown}})?.feat_proficiencies?.tools;
         return Array.isArray(picked) ? picked.filter((t): t is string => typeof t === 'string') : [];
       });
-    const languages = buildLanguages(raceRule, bgRule);
+    const languageSlots = choiceSlots(raceRule, bgRule);
+    const languages = sheetLanguages(languageSlots, character.chosen_languages);
 
     // CA deixou de ser congelada em `character.armour_class` — recalculada a cada carregamento
     // (mesmo padrão já usado pros slots de magia), pra refletir troca de equipamento e ASI de DEX.
@@ -944,13 +968,21 @@ export class CharacterSheetService {
           weapons: weaponProficiencies,
           tools: [
             ...new Set([
-              ...bgRule.tools,
+              ...sheetTools(bgRule.tools, character.chosen_tools),
               ...(subraceRule?.toolProficiencies ?? []),
               ...(character.chosen_tool_proficiency ? [character.chosen_tool_proficiency] : []),
               ...featTools,
             ]),
           ],
           languages,
+          choices: {
+            language_count: languageSlots.languages,
+            language_options: LANGUAGES,
+            fixed_languages: languageSlots.fixed_languages,
+            chosen_languages: character.chosen_languages ?? [],
+            tool_slots: languageSlots.tools,
+            chosen_tools: character.chosen_tools ?? {},
+          },
         },
         equipment: {
           currency: {cp: 0, sp: 0, ep: 0, gp: character.total_po, pp: 0},
@@ -1619,6 +1651,30 @@ export class CharacterSheetService {
     const stats = applyLevelBasedAttributeBonuses(this.statsFromRaw(attributes), character.id_class, character.level);
     const ac = calcArmorClass(armour, stats, input.has_shield, character.id_class, character.chosen_fighting_style, character.id_subclass);
     return {armor_class: ac};
+  }
+
+  /**
+   * Idiomas e ferramentas à escolha (1.24.0), na ficha: serve pras fichas antigas e pra quem pulou
+   * na criação. Substitui a escolha anterior. Devolve como a ficha passa a mostrar.
+   */
+  async setLanguageToolChoices(
+    id: number,
+    userId: string,
+    input: {languages?: unknown; tools?: unknown},
+  ): Promise<{languages: string[]; tools: string[]}> {
+    const raw = await this.repository.findCharacterById(id);
+    if (!raw) throw new HttpErrors.NotFound(NOT_FOUND);
+    if (!(await this.userCanManageCharacter(raw.character.user_id, id, userId))) {
+      throw new HttpErrors.Forbidden(NOT_ALLOWED);
+    }
+    const {character} = raw;
+    const slots = choiceSlots(resolveRace(character.id_race), resolveBackground(character.id_background ?? 1));
+    const valid = validateLanguageToolChoices(slots, input?.languages, input?.tools);
+    await this.repository.updateLanguageToolChoices(id, valid.languages, valid.tools);
+    return {
+      languages: sheetLanguages(slots, valid.languages),
+      tools: sheetTools(resolveBackground(character.id_background ?? 1).tools, valid.tools),
+    };
   }
 
   async deleteCharacter(id: number, userId: string): Promise<{success: boolean}> {

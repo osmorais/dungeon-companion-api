@@ -945,3 +945,9 @@ CREATE TABLE IF NOT EXISTS session_companion (
     CONSTRAINT uq_session_companion_player UNIQUE (id_player_session)
 );
 CREATE INDEX IF NOT EXISTS ix_session_companion_game ON session_companion (id_game_session);
+
+-- Idiomas e ferramentas/kits escolhidos (1.24.0): o que a raça e o antecedente deixam "à escolha".
+-- chosen_languages: ["Élfico", "Dracônico"]; chosen_tools: {"Um tipo de kit de jogo": "Dados"}.
+-- Nulos = ainda não escolheu (a ficha mostra "Idioma à escolha"). Ver character-sheet/language-tool-choices.ts.
+ALTER TABLE character ADD COLUMN IF NOT EXISTS chosen_languages JSONB;
+ALTER TABLE character ADD COLUMN IF NOT EXISTS chosen_tools JSONB;
