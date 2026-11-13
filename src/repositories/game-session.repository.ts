@@ -222,6 +222,35 @@ export class GameSessionRepository {
     `;
   }
 
+  /** Monstros da sessão pros pedidos de resistência (nome e se está revelado). */
+  async findMonstersForRequest(
+    idGameSession: string,
+    ids: string[],
+  ): Promise<
+    {
+      id_monster_session: string;
+      custom_name: string | null;
+      data_snapshot: Record<string, unknown>;
+      is_revealed: boolean;
+    }[]
+  > {
+    const valid = ids.filter(id => UUID_PATTERN.test(id));
+    if (!valid.length) return [];
+    return this.db.sql<
+      {
+        id_monster_session: string;
+        custom_name: string | null;
+        data_snapshot: Record<string, unknown>;
+        is_revealed: boolean;
+      }[]
+    >`
+      SELECT id_monster_session, custom_name, data_snapshot, is_revealed
+      FROM monster_session
+      WHERE id_game_session = ${idGameSession}
+        AND id_monster_session IN ${this.db.sql(valid)}
+    `;
+  }
+
   async findById(id: string): Promise<GameSessionDetail | null> {
     const sessions = await this.db.sql<GameSession[]>`
       SELECT gs.id_game_session, gs.session_name, gs.session_code, gs.max_player_quantity,

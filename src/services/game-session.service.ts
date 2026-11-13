@@ -1392,10 +1392,14 @@ export class GameSessionService {
     const rollInput = {...input};
     delete rollInput.secret_request_id;
     delete rollInput.cast_id;
+    // Resistência de monstro: a rolagem fica oculta (só o mestre vê o total); a mesa recebe só
+    // o passou/falhou no `save_resolved`.
+    const monsterSave = !!request?.id_monster_session;
     const roll = await this.repository.addRoll(idGameSession, {
       ...rollInput,
       id_character: idCharacter,
-      is_hidden: (request?.secret ?? false) || (isDm && !!input.is_hidden),
+      is_hidden:
+        monsterSave || (request?.secret ?? false) || (isDm && !!input.is_hidden),
     });
     const answer: RollLogEntry = request
       ? {
@@ -1416,6 +1420,15 @@ export class GameSessionService {
       id_game_session: idGameSession,
       roll: castId ? {...answer, cast_id: castId} : answer,
     });
+    if (request?.id_monster_session && answer.save_outcome)
+      this.events.publish({
+        type: 'save_resolved',
+        id_game_session: idGameSession,
+        save_request_id: request.id,
+        id_monster_session: request.id_monster_session,
+        name: input.actor_name ?? 'Monstro',
+        outcome: answer.save_outcome,
+      });
     if (idCharacter !== null)
       void this.recordStats(idGameSession, idCharacter, rollStats(input));
     return answer;
@@ -1456,7 +1469,13 @@ export class GameSessionService {
     idGameSession: string,
     input: SecretRollRequestInput,
     userId: string,
-  ): Promise<{id_player_session: string; request_id: string}[]> {
+  ): Promise<
+    {
+      id_player_session: string | null;
+      id_monster_session?: string | null;
+      request_id: string;
+    }[]
+  > {
     const isOwner = await this.repository.isSessionOwner(idGameSession, userId);
     // Teste secreto é só do mestre. Resistência pública (contra a magia/ação que alguém lançou)
     // qualquer um da mesa pede pros atingidos.
@@ -1472,8 +1491,15 @@ export class GameSessionService {
     const ids = Array.isArray(input.id_player_sessions)
       ? [...new Set(input.id_player_sessions)]
       : [];
-    if (ids.length === 0)
+    const monsterIds = Array.isArray(input.id_monster_sessions)
+      ? [...new Set(input.id_monster_sessions)]
+      : [];
+    if (ids.length === 0 && monsterIds.length === 0)
       throw new HttpErrors.UnprocessableEntity('Escolha ao menos um jogador');
+    if (monsterIds.length && secret)
+      throw new HttpErrors.UnprocessableEntity(
+        'Monstro só recebe resistência contra magia ou ação',
+      );
     const label = typeof input.label === 'string' ? input.label.trim() : '';
     if (!label || label.length > 60)
       throw new HttpErrors.UnprocessableEntity('label inválido');
@@ -1501,7 +1527,9 @@ export class GameSessionService {
     )
       throw new HttpErrors.UnprocessableEntity('contexto inválido');
 
-    const found = await this.repository.findPlayersForRequest(idGameSession, ids);
+    const found = ids.length
+      ? await this.repository.findPlayersForRequest(idGameSession, ids)
+      : [];
     const targets = ids.map(id => {
       const player = found.find(p => p.id_player_session === id);
       if (!player?.user_id)
@@ -1511,7 +1539,59 @@ export class GameSessionService {
       return player;
     });
 
-    return targets.map(player => {
+    // Monstros (1.24.2): o mestre rola com o bônus da ficha. Jogador só marca monstro revelado
+    // (o escondido nem aparece pra ele); o pedido vai só pro mestre, com a CD.
+    const monsters = monsterIds.length
+      ? await this.repository.findMonstersForRequest(idGameSession, monsterIds)
+      : [];
+    const monsterTargets = monsterIds.map(id => {
+      const monster = monsters.find(m => m.id_monster_session === id);
+      if (!monster || (!isOwner && !monster.is_revealed))
+        throw new HttpErrors.UnprocessableEntity('Monstro fora da sessão');
+      return monster;
+    });
+    const dmUserId = monsterTargets.length
+      ? await this.repository.findSessionOwnerId(idGameSession)
+      : null;
+    if (monsterTargets.length && !dmUserId)
+      throw new HttpErrors.UnprocessableEntity('Sessão sem mestre');
+
+    const monsterRequests = monsterTargets.map(monster => {
+      const name =
+        monster.custom_name ?? this.monsterSnapshotName(monster.data_snapshot);
+      const request = this.secretRequests.create({
+        id_game_session: idGameSession,
+        id_player_session: null,
+        id_monster_session: monster.id_monster_session,
+        id_character: null,
+        user_id: dmUserId!,
+        label,
+        dc,
+        secret: false,
+      });
+      this.events.publish({
+        type: 'secret_roll_requested',
+        id_game_session: idGameSession,
+        target_user_id: dmUserId!,
+        request_id: request.id,
+        id_player_session: null,
+        id_character: null,
+        id_monster_session: monster.id_monster_session,
+        monster_name: name,
+        dc,
+        label,
+        check: input.check,
+        secret: false,
+        against: [...new Set(against)],
+      });
+      return {
+        id_player_session: null,
+        id_monster_session: monster.id_monster_session,
+        request_id: request.id,
+      };
+    });
+
+    const playerRequests = targets.map(player => {
       const request = this.secretRequests.create({
         id_game_session: idGameSession,
         id_player_session: player.id_player_session,
@@ -1535,6 +1615,7 @@ export class GameSessionService {
       });
       return {id_player_session: player.id_player_session, request_id: request.id};
     });
+    return [...playerRequests, ...monsterRequests];
   }
 
   /** Só anuncia (broadcast via socket) — ao contrário de addRoll, não persiste nada, é puramente

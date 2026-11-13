@@ -627,7 +627,13 @@ export class GameSessionController {
       content: {'application/json': {schema: {type: 'object'}}},
     })
     body: SecretRollRequestInput,
-  ): Promise<{id_player_session: string; request_id: string}[]> {
+  ): Promise<
+    {
+      id_player_session: string | null;
+      id_monster_session?: string | null;
+      request_id: string;
+    }[]
+  > {
     return this.gameSessionService.requestSecretRoll(id, body, currentUser.id);
   }
 

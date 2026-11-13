@@ -2062,6 +2062,131 @@ describe('GameSessionService', () => {
         });
       });
 
+      describe('monstros atingidos (1.24.2)', () => {
+        const fireball = {
+          id_monster_sessions: ['m1'],
+          check: {kind: 'save' as const, ability: 'DEX' as const},
+          label: 'Bola de Fogo',
+          dc: 15,
+          against: ['magic' as const],
+          secret: false,
+        };
+        beforeEach(() => {
+          repository.stubs.findSessionOwnerId.resolves('dm');
+          repository.stubs.findMonstersForRequest.resolves([
+            {
+              id_monster_session: 'm1',
+              custom_name: null,
+              data_snapshot: {name: 'Goblin'},
+              is_revealed: true,
+            },
+            {
+              id_monster_session: 'm2',
+              custom_name: 'Chefe',
+              data_snapshot: {name: 'Hobgoblin'},
+              is_revealed: false,
+            },
+          ]);
+        });
+        const dmAnswer = (request_id: string, total: number) => ({
+          ...ROLL,
+          id_character: null,
+          actor_name: 'Goblin',
+          roll_type: 'save' as const,
+          label: 'Resistência: Destreza',
+          total,
+          secret_request_id: request_id,
+        });
+
+        it('o pedido vai só pro mestre, com o monstro e a CD', async () => {
+          const [created] = await service.requestSecretRoll(
+            'gs',
+            fireball,
+            'u2',
+          );
+          expect(created).to.containDeep({
+            id_player_session: null,
+            id_monster_session: 'm1',
+          });
+          expect(events[0]).to.containDeep({
+            type: 'secret_roll_requested',
+            target_user_id: 'dm',
+            id_monster_session: 'm1',
+            monster_name: 'Goblin',
+            dc: 15,
+            secret: false,
+          });
+        });
+
+        it('o mestre rola: rolagem oculta e a mesa recebe só passou/falhou', async () => {
+          const [{request_id}] = await service.requestSecretRoll(
+            'gs',
+            fireball,
+            'u2',
+          );
+          events.length = 0;
+          const roll = await service.addRoll(
+            'gs',
+            dmAnswer(request_id, 12),
+            'dm',
+          );
+          expect(roll.is_hidden).to.be.true();
+          expect(isDmOnlyEvent(events[0])).to.be.true();
+          expect(events[1]).to.eql({
+            type: 'save_resolved',
+            id_game_session: 'gs',
+            save_request_id: request_id,
+            id_monster_session: 'm1',
+            name: 'Goblin',
+            outcome: 'fail',
+          });
+          expect(isDmOnlyEvent(events[1])).to.be.false();
+        });
+
+        it('só o mestre responde pelo monstro', async () => {
+          const [{request_id}] = await service.requestSecretRoll(
+            'gs',
+            fireball,
+            'u2',
+          );
+          await expect(
+            service.addRoll('gs', dmAnswer(request_id, 20), 'u2'),
+          ).to.be.rejectedWith(/não pode registrar|inválido/);
+        });
+
+        it('jogador não marca monstro escondido; monstro não recebe teste secreto', async () => {
+          await expect(
+            service.requestSecretRoll(
+              'gs',
+              {...fireball, id_monster_sessions: ['m2']},
+              'u2',
+            ),
+          ).to.be.rejectedWith(/fora da sessão/);
+          await expect(
+            service.requestSecretRoll('gs', {...fireball, secret: true}, 'dm'),
+          ).to.be.rejectedWith(/Monstro só recebe/);
+          // O mestre pode marcar o escondido.
+          await expect(
+            service.requestSecretRoll(
+              'gs',
+              {...fireball, id_monster_sessions: ['m2']},
+              'dm',
+            ),
+          ).to.be.fulfilled();
+        });
+
+        it('jogadores e monstros no mesmo pedido', async () => {
+          const created = await service.requestSecretRoll(
+            'gs',
+            {...fireball, id_player_sessions: ['p1']},
+            'u2',
+          );
+          expect(
+            created.map(c => c.id_player_session ?? c.id_monster_session),
+          ).to.eql(['p1', 'm1']);
+        });
+      });
+
       it('jogador não pede teste secreto nem perícia, e precisa estar na mesa', async () => {
         await expect(
           service.requestSecretRoll('gs', save, 'u2'),

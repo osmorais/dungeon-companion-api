@@ -107,12 +107,26 @@ export interface SessionEventPayloadMap {
   monster_hidden: {id_monster_session: string};
   /** `cast_id`: rolagem de um lançamento de magia — a mesa mostra no aviso do lançamento. */
   roll_added: {roll: RollLogEntry & {cast_id?: string}};
+  /** Resistência de monstro resolvida pelo mestre: a mesa sabe só se passou ou falhou (o total
+   *  fica na rolagem oculta, 1.24.2). */
+  save_resolved: {
+    save_request_id: string;
+    id_monster_session: string;
+    name: string;
+    outcome: 'success' | 'fail';
+  };
   /** Teste secreto pedido pelo mestre — vai só pro jogador alvo (ver `eventTargetUserId`). */
   secret_roll_requested: {
     target_user_id: string;
     request_id: string;
-    id_player_session: string;
-    id_character: number;
+    /** `null` quando o alvo é um monstro (o pedido vai pro mestre). */
+    id_player_session: string | null;
+    id_character: number | null;
+    /** Monstro atingido e o nome dele (só nos pedidos pro mestre, 1.24.2). */
+    id_monster_session?: string | null;
+    monster_name?: string | null;
+    /** CD — só no pedido de monstro, que vai só pro mestre (o jogador nunca recebe). */
+    dc?: number | null;
     label: string;
     check: SecretRollCheck;
     /** Teste secreto (só o mestre vê) ou resistência pública contra uma magia/ação. */

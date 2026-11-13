@@ -235,7 +235,9 @@ export type SecretRollCheck =
   | {kind: 'save'; ability: 'STR' | 'DEX' | 'CON' | 'INT' | 'WIS' | 'CHA'};
 
 export interface SecretRollRequestInput {
-  id_player_sessions: string[];
+  id_player_sessions?: string[];
+  /** Monstros atingidos (só resistência pública): o pedido vai pro mestre rolar (1.24.2). */
+  id_monster_sessions?: string[];
   check: SecretRollCheck;
   /** Nome do teste exibido pro jogador e no log do mestre (ex.: "Percepção"). */
   label: string;
