@@ -1743,5 +1743,32 @@ describe('CharacterSheetService', () => {
       ).to.be.rejectedWith(/durante o combate/);
       sinon.assert.notCalled(repository.stubs.setSpellPrepared);
     });
+
+    it('com a mesa, só o combate dela conta (combate esquecido noutra mesa não trava)', async () => {
+      const gs = '9ce28442-55a3-42f4-a187-17496f572109';
+      combatRepository.stubs.isCharacterPreparationLocked.resolves(false);
+      await service.setSpellPrepared(1, 42, true, 'owner', gs);
+      sinon.assert.calledWith(
+        combatRepository.stubs.isCharacterPreparationLocked,
+        1,
+        gs,
+      );
+      await service.loadCharacter(1, 'owner', gs);
+      sinon.assert.calledWith(
+        combatRepository.stubs.isCharacterPreparationLocked,
+        1,
+        gs,
+      );
+    });
+
+    it('id de mesa inválido é ignorado (vale qualquer combate, como antes)', async () => {
+      combatRepository.stubs.isCharacterPreparationLocked.resolves(false);
+      await service.setSpellPrepared(1, 42, true, 'owner', "x'; drop");
+      sinon.assert.calledWith(
+        combatRepository.stubs.isCharacterPreparationLocked,
+        1,
+        undefined,
+      );
+    });
   });
 });

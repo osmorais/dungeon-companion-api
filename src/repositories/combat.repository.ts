@@ -333,8 +333,13 @@ export class CombatRepository {
    * Preparar magia fica travado quando o personagem já está **na ordem de turnos** de um combate
    * em andamento — participante com a iniciativa rolada. Antes de rolar (o mestre acabou de
    * iniciar a luta e o jogador recebe o "Deseja selecionar suas magias preparadas?"), ainda pode.
+   * Com a mesa (`idGameSession`), só o combate dela conta: um combate esquecido aberto noutra
+   * mesa em que o personagem também joga não trava o preparo aqui.
    */
-  async isCharacterPreparationLocked(idCharacter: number): Promise<boolean> {
+  async isCharacterPreparationLocked(
+    idCharacter: number,
+    idGameSession?: string,
+  ): Promise<boolean> {
     const rows = await this.db.sql<{id_combat_participant: string}[]>`
       SELECT cp.id_combat_participant
       FROM combat_participant cp
@@ -344,6 +349,7 @@ export class CombatRepository {
       WHERE ce.status = ANY(${ACTIVE_STATUSES})
         AND cp.initiative_total IS NOT NULL
         AND (ps.id_character = ${idCharacter} OR ns.id_character = ${idCharacter})
+        ${idGameSession ? this.db.sql`AND ce.id_game_session = ${idGameSession}` : this.db.sql``}
       LIMIT 1
     `;
     return rows.length > 0;

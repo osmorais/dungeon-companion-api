@@ -691,6 +691,8 @@ export class CharacterSheetService {
   async loadCharacter(
     id: number,
     userId: string,
+    /** Mesa de onde a ficha foi aberta: só o combate dela trava o preparo de magias. */
+    idGameSession?: string,
   ): Promise<CharacterSheet | null> {
     const raw = await this.repository.findCharacterById(id);
     if (!raw) return null;
@@ -907,7 +909,10 @@ export class CharacterSheetService {
     // Só consulta se a classe realmente precisa preparar magia — evita uma query à toa pras
     // outras (maioria das classes/personagens não-conjuradores).
     const inActiveCombat = classRule.preparesSpells
-      ? await this.combatRepository.isCharacterPreparationLocked(character.id_character)
+      ? await this.combatRepository.isCharacterPreparationLocked(
+          character.id_character,
+          validSessionId(idGameSession),
+        )
       : false;
 
     return {
@@ -2101,6 +2106,8 @@ export class CharacterSheetService {
     idSpell: number,
     isPrepared: boolean,
     userId: string,
+    /** Mesa de onde veio o pedido: só o combate dela trava o preparo (outra mesa não). */
+    idGameSession?: string,
   ): Promise<{success: boolean}> {
     const raw = await this.repository.findCharacterById(id);
     if (!raw)
@@ -2115,7 +2122,9 @@ export class CharacterSheetService {
       );
     }
 
-    if (await this.combatRepository.isCharacterPreparationLocked(id)) {
+    if (
+      await this.combatRepository.isCharacterPreparationLocked(id, validSessionId(idGameSession))
+    ) {
       throw new HttpErrors.Conflict(
         'Não é possível preparar magias durante o combate',
       );
@@ -2170,4 +2179,9 @@ export class CharacterSheetService {
     );
     return {success: true};
   }
+}
+
+/** Id de mesa só se tiver cara de UUID (o banco recusaria outro formato com erro 500). */
+function validSessionId(id: string | undefined): string | undefined {
+  return id && /^[0-9a-f-]{36}$/i.test(id) ? id : undefined;
 }
