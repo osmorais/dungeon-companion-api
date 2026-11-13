@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/naming-convention */
+import {ApplyAmountResult} from '../models/game-session-types';
 import {inject} from '@loopback/core';
 import {
   del,
@@ -631,7 +632,9 @@ export class GameSessionController {
     {
       id_player_session: string | null;
       id_monster_session?: string | null;
-      request_id: string;
+      /** `null` com `immune`: monstro imune ao dano, sem pedido (1.24.4). */
+      request_id: string | null;
+      immune?: boolean;
     }[]
   > {
     return this.gameSessionService.requestSecretRoll(id, body, currentUser.id);
@@ -691,7 +694,7 @@ export class GameSessionController {
       content: {'application/json': {schema: {type: 'object'}}},
     })
     body: ApplyAmountInput,
-  ): Promise<{current_hit_points?: number; temporary_hit_points?: number}> {
+  ): Promise<ApplyAmountResult> {
     return this.gameSessionService.applyAmount(id, body, currentUser.id);
   }
 

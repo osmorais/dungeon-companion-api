@@ -1,4 +1,11 @@
 /* eslint-disable @typescript-eslint/naming-convention */
+import {ApplyAmountResult} from '../models/game-session-types';
+import {
+  DefenseOutcome,
+  damageAfterDefenses,
+  isImmuneTo,
+  monsterDefenses,
+} from './monster-defenses';
 import {inject, injectable, BindingScope, service} from '@loopback/core';
 import {HttpErrors} from '@loopback/rest';
 import {GameSessionRepository} from '../repositories/game-session.repository';
@@ -786,7 +793,7 @@ export class GameSessionService {
     idGameSession: string,
     input: ApplyAmountInput,
     userId: string,
-  ): Promise<{current_hit_points?: number; temporary_hit_points?: number}> {
+  ): Promise<ApplyAmountResult> {
     const amount = input?.amount;
     if (!Number.isInteger(amount) || amount < 1 || amount > APPLY_AMOUNT_MAX)
       throw new HttpErrors.UnprocessableEntity(
@@ -827,7 +834,20 @@ export class GameSessionService {
         'Só jogadores recebem PV temporários',
       );
 
-    const next = applyHpAmount(target, amount, input.kind);
+    // Monstro (1.24.4): imunidade, resistência e vulnerabilidade da ficha ao tipo do dano. O
+    // jogador não vê a ficha do monstro — quem ajusta é a API, e a mesa vê o que entrou.
+    let applied = amount;
+    let defense: DefenseOutcome = null;
+    if (input.target_kind === 'monster' && input.kind === 'damage' && input.damage_type) {
+      const adjusted = damageAfterDefenses(
+        monsterDefenses(target.data_snapshot),
+        String(input.damage_type),
+        amount,
+      );
+      applied = adjusted.amount;
+      defense = adjusted.outcome;
+    }
+    const next = applyHpAmount(target, applied, input.kind);
     const actorName =
       (await this.repository.findCharacterName(input.id_character)) ?? '—';
     let result: {current_hit_points?: number; temporary_hit_points?: number} =
@@ -950,11 +970,12 @@ export class GameSessionService {
       id_character: input.id_character,
       actor_name: actorName,
       target_label: target.label,
-      amount,
+      amount: applied,
       kind: input.kind,
       ...(input.cast_id ? {cast_id: input.cast_id} : {}),
+      ...(defense ? {defense} : {}),
     });
-    return result;
+    return defense ? {...result, applied_amount: applied, defense} : result;
   }
 
   /** Só o mestre pode alterar o PV atual de um NPC. */
@@ -1473,7 +1494,9 @@ export class GameSessionService {
     {
       id_player_session: string | null;
       id_monster_session?: string | null;
-      request_id: string;
+      /** `null` com `immune`: monstro imune ao dano, sem pedido (1.24.4). */
+      request_id: string | null;
+      immune?: boolean;
     }[]
   > {
     const isOwner = await this.repository.isSessionOwner(idGameSession, userId);
@@ -1556,9 +1579,19 @@ export class GameSessionService {
     if (monsterTargets.length && !dmUserId)
       throw new HttpErrors.UnprocessableEntity('Sessão sem mestre');
 
+    const damageType =
+      typeof input.damage_type === 'string' ? input.damage_type.slice(0, 40) : null;
     const monsterRequests = monsterTargets.map(monster => {
       const name =
         monster.custom_name ?? this.monsterSnapshotName(monster.data_snapshot);
+      // Imune ao dano da magia (ex.: esqueleto e veneno): nem pede a resistência (1.24.4).
+      if (isImmuneTo(monsterDefenses(monster.data_snapshot), damageType))
+        return {
+          id_player_session: null,
+          id_monster_session: monster.id_monster_session,
+          request_id: null,
+          immune: true,
+        };
       const request = this.secretRequests.create({
         id_game_session: idGameSession,
         id_player_session: null,

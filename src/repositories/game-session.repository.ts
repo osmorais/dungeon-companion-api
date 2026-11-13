@@ -1216,6 +1216,8 @@ export class GameSessionRepository {
     is_revealed: boolean;
     /** Druida em Forma Selvagem: os efeitos (o PV acima é o da forma) e o PV dele. */
     wildShape?: {effects: ActiveEffects; druid: {current: number; max: number}};
+    /** Monstro: a ficha (imunidades/resistências ao dano, 1.24.4). */
+    data_snapshot?: Record<string, unknown>;
   } | null> {
     if (kind === 'companion') {
       const [companion] = await this.db.sql<
@@ -1240,9 +1242,9 @@ export class GameSessionRepository {
     }
     if (kind === 'monster') {
       const [row] = await this.db.sql<
-        {hp_current: number; hp_max: number; is_revealed: boolean; custom_name: string | null; snapshot_name: string | null}[]
+        {hp_current: number; hp_max: number; is_revealed: boolean; custom_name: string | null; snapshot_name: string | null; data_snapshot: Record<string, unknown>}[]
       >`
-        SELECT hp_current, hp_max, is_revealed, custom_name, data_snapshot->>'name' AS snapshot_name
+        SELECT hp_current, hp_max, is_revealed, custom_name, data_snapshot->>'name' AS snapshot_name, data_snapshot
         FROM monster_session
         WHERE id_monster_session = ${id} AND id_game_session = ${idGameSession}
       `;
@@ -1254,6 +1256,7 @@ export class GameSessionRepository {
         max: row.hp_max,
         temp: 0,
         is_revealed: row.is_revealed,
+        data_snapshot: row.data_snapshot,
       };
     }
     const rows =

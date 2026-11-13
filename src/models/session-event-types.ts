@@ -172,6 +172,8 @@ export interface SessionEventPayloadMap {
     kind: 'damage' | 'heal' | 'temp_hp';
     /** Veio de um lançamento: a mesa mostra no aviso dele (sem aviso avulso). */
     cast_id?: string;
+    /** Monstro imune/resistente/vulnerável ao dano (o `amount` já é o que entrou, 1.24.4). */
+    defense?: 'immune' | 'resistant' | 'vulnerable' | null;
   };
   /** Mestre mostra uma imagem de referência em tela cheia pra todos da sessão. */
   reference_image_shown: {image: ShownReferenceImage};

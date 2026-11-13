@@ -481,6 +481,61 @@ describe('GameSessionService', () => {
       ).to.be.false();
     });
 
+    describe('defesas do monstro ao dano (1.24.4)', () => {
+      const skeleton = {
+        ...goblin,
+        label: 'Esqueleto',
+        current: 13,
+        max: 13,
+        data_snapshot: {
+          damage_immunities: ['veneno'],
+          damage_resistances: ['fogo'],
+          damage_vulnerabilities: ['concussão'],
+        },
+      };
+      const hit = (damage_type: string, amount = 8) =>
+        service.applyAmount(
+          'gs',
+          input({
+            target_kind: 'monster',
+            target_id: 'm1',
+            kind: 'damage',
+            amount,
+            damage_type,
+          }),
+          'u1',
+        );
+      beforeEach(() => repository.stubs.findApplyTarget.resolves(skeleton));
+
+      it('imune: nada entra e a mesa vê o 0 com o aviso', async () => {
+        const result = await hit('veneno');
+        expect(result).to.containDeep({applied_amount: 0, defense: 'immune'});
+        expect(
+          repository.stubs.writeMonsterHp.calledWith('m1', 13),
+        ).to.be.true();
+        expect(events.find(e => e.type === 'amount_applied')).to.containDeep({
+          amount: 0,
+          defense: 'immune',
+        });
+      });
+
+      it('resistente: metade pra baixo; vulnerável: o dobro ("contundente" = concussão)', async () => {
+        expect(await hit('fogo', 7)).to.containDeep({
+          applied_amount: 3,
+          defense: 'resistant',
+        });
+        expect(await hit('contundente', 3)).to.containDeep({
+          applied_amount: 6,
+          defense: 'vulnerable',
+        });
+      });
+
+      it('sem tipo ou tipo comum: dano inteiro, sem aviso', async () => {
+        expect(await hit('cortante', 5)).to.eql({});
+        expect(repository.stubs.writeMonsterHp.lastCall.args).to.eql(['m1', 8]);
+      });
+    });
+
     it('monstro escondido: 404 pro jogador, mas o mestre aplica', async () => {
       repository.stubs.findApplyTarget.resolves({
         ...goblin,
@@ -1964,7 +2019,7 @@ describe('GameSessionService', () => {
         id_character: 10,
         roll_type: 'skill' as const,
         label: 'Teste secreto: Percepção',
-        secret_request_id: request_id,
+        secret_request_id: request_id!,
       };
       const roll = await service.addRoll('gs', answer, 'u1');
       expect(roll.is_hidden).to.be.true();
@@ -2016,7 +2071,7 @@ describe('GameSessionService', () => {
         );
         const failed = await service.addRoll(
           'gs',
-          answerTo(request_id, 13),
+          answerTo(request_id!, 13),
           'u1',
         );
         expect(failed).to.containDeep({
@@ -2026,7 +2081,7 @@ describe('GameSessionService', () => {
         // Indomável: rola de novo pelo mesmo pedido
         const passed = await service.addRoll(
           'gs',
-          answerTo(request_id, 14),
+          answerTo(request_id!, 14),
           'u1',
         );
         expect(passed.save_outcome).to.equal('success');
@@ -2038,7 +2093,11 @@ describe('GameSessionService', () => {
           {...save, dc: null},
           'dm',
         );
-        const roll = await service.addRoll('gs', answerTo(request_id, 3), 'u1');
+        const roll = await service.addRoll(
+          'gs',
+          answerTo(request_id!, 3),
+          'u1',
+        );
         expect(roll.save_outcome).to.be.null();
       });
 
@@ -2051,7 +2110,7 @@ describe('GameSessionService', () => {
         expect(events[0]).to.containDeep({secret: false});
         const roll = await service.addRoll(
           'gs',
-          answerTo(request_id, 20),
+          answerTo(request_id!, 20),
           'u1',
         );
         expect(roll.is_hidden).to.be.false();
@@ -2127,7 +2186,7 @@ describe('GameSessionService', () => {
           events.length = 0;
           const roll = await service.addRoll(
             'gs',
-            dmAnswer(request_id, 12),
+            dmAnswer(request_id!, 12),
             'dm',
           );
           expect(roll.is_hidden).to.be.true();
@@ -2150,7 +2209,7 @@ describe('GameSessionService', () => {
             'u2',
           );
           await expect(
-            service.addRoll('gs', dmAnswer(request_id, 20), 'u2'),
+            service.addRoll('gs', dmAnswer(request_id!, 20), 'u2'),
           ).to.be.rejectedWith(/não pode registrar|inválido/);
         });
 
@@ -2173,6 +2232,40 @@ describe('GameSessionService', () => {
               'dm',
             ),
           ).to.be.fulfilled();
+        });
+
+        it('monstro imune ao dano da magia nem recebe o pedido (1.24.4)', async () => {
+          repository.stubs.findMonstersForRequest.resolves([
+            {
+              id_monster_session: 'm1',
+              custom_name: null,
+              data_snapshot: {name: 'Esqueleto', damage_immunities: ['veneno']},
+              is_revealed: true,
+            },
+          ]);
+          const created = await service.requestSecretRoll(
+            'gs',
+            {...fireball, damage_type: 'veneno'},
+            'u2',
+          );
+          expect(created).to.eql([
+            {
+              id_player_session: null,
+              id_monster_session: 'm1',
+              request_id: null,
+              immune: true,
+            },
+          ]);
+          expect(
+            events.filter(e => e.type === 'secret_roll_requested'),
+          ).to.have.length(0);
+          // Outro tipo de dano: pede normalmente.
+          const [fire] = await service.requestSecretRoll(
+            'gs',
+            {...fireball, damage_type: 'fogo'},
+            'u2',
+          );
+          expect(fire.request_id).to.be.a.String();
         });
 
         it('jogadores e monstros no mesmo pedido', async () => {
@@ -2226,21 +2319,21 @@ describe('GameSessionService', () => {
       await expect(
         service.addRoll(
           'gs',
-          {...ROLL, id_character: 10, secret_request_id: request_id},
+          {...ROLL, id_character: 10, secret_request_id: request_id!},
           'u2',
         ),
       ).to.be.rejectedWith(/inválido ou expirado/);
       await expect(
         service.addRoll(
           'gs',
-          {...ROLL, id_character: 20, secret_request_id: request_id},
+          {...ROLL, id_character: 20, secret_request_id: request_id!},
           'u1',
         ),
       ).to.be.rejectedWith(/inválido ou expirado/);
       // ainda vale pro dono certo
       const roll = await service.addRoll(
         'gs',
-        {...ROLL, id_character: 10, secret_request_id: request_id},
+        {...ROLL, id_character: 10, secret_request_id: request_id!},
         'u1',
       );
       expect(roll.is_hidden).to.be.true();

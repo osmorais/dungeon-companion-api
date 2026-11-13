@@ -245,6 +245,8 @@ export interface SecretRollRequestInput {
   dc?: number | null;
   /** Só resistência: contra o que é (decide a vantagem condicional). */
   against?: SaveContext[];
+  /** Tipo do dano da magia/ação: monstro imune a ele nem recebe o pedido (1.24.4). */
+  damage_type?: string | null;
   /** `false`: resistência contra magia/ação, pública e pedida por quem lançou (mestre ou
    *  jogador). Padrão `true`: teste secreto, só o mestre pede e só ele vê o resultado. */
   secret?: boolean;
@@ -369,6 +371,14 @@ export interface SpellCastStageInput {
  * calcula o PV (o cliente manda só a quantidade), então o jogador pode aplicar em aliados e em
  * monstros revelados sem conseguir gravar um PV qualquer.
  */
+/** PV do alvo depois de aplicar; no monstro, o que entrou e a defesa que valeu (1.24.4). */
+export interface ApplyAmountResult {
+  current_hit_points?: number;
+  temporary_hit_points?: number;
+  applied_amount?: number;
+  defense?: 'immune' | 'resistant' | 'vulnerable';
+}
+
 export interface ApplyAmountInput {
   id_character: number;
   target_kind: 'player' | 'npc' | 'monster' | 'companion';
@@ -377,6 +387,8 @@ export interface ApplyAmountInput {
   kind: 'damage' | 'heal' | 'temp_hp';
   /** Aplicação feita dentro de um lançamento: a mesa mostra no aviso dele, sem aviso avulso. */
   cast_id?: string;
+  /** Tipo do dano ("veneno"): no monstro, a API aplica imunidade/resistência/vulnerabilidade. */
+  damage_type?: string | null;
 }
 
 export interface GameSessionDetail {
