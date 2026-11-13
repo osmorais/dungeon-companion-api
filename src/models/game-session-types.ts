@@ -14,6 +14,8 @@ export interface GameSession {
   dm_name: string;
   user_id: string | null;
   created_at?: Date;
+  /** Acerto automático do ataque contra a CA do alvo (1.25.0), opção do mestre. */
+  auto_hit_check?: boolean;
 }
 
 export interface NpcSessionInput {
@@ -286,6 +288,13 @@ export const CAST_ROLL_OUTCOMES = ['pending', 'hit', 'miss'] as const;
 
 /** Rolagem que faz parte do lançamento (o id é o da rolagem já registrada em /roll). */
 /** Dano/cura do lançamento já aplicado num alvo (mostrado no aviso, no lugar do aviso avulso). */
+/** Alvo escolhido no começo do lançamento (1.25.0) e como ele se saiu: a mesa vê o carimbo. */
+export interface CastStageTarget {
+  label: string;
+  /** Resistência pedida: aguardando, passou, falhou ou imune ao dano. */
+  save?: 'pending' | 'success' | 'fail' | 'immune' | null;
+}
+
 export interface CastStageApplied {
   label: string;
   amount: number;
@@ -362,6 +371,8 @@ export interface SpellCastStageInput {
   rolls: CastStageRoll[];
   /** O que quem lança já aplicou nos alvos (opcional; clientes antigos não mandam). */
   applied?: CastStageApplied[];
+  /** Alvos escolhidos no começo (1.25.0; clientes antigos não mandam). */
+  targets?: CastStageTarget[];
   save_dc?: number | null;
   save_ability?: 'STR' | 'DEX' | 'CON' | 'INT' | 'WIS' | 'CHA' | null;
 }

@@ -2476,6 +2476,35 @@ describe('GameSessionService', () => {
       repository.stubs.findSpellCard.resolves(SPELL);
     });
 
+    it('leva os alvos escolhidos com o resultado da resistência (1.25.0) e valida', async () => {
+      await service.publishSpellCastStage(
+        'gs',
+        {
+          ...STAGE,
+          targets: [
+            {label: ' Goblin ', save: 'fail'},
+            {label: 'Esqueleto', save: 'immune'},
+            {label: 'Lyra'},
+          ],
+        },
+        'u1',
+      );
+      expect(events[0]).to.containDeep({
+        targets: [
+          {label: 'Goblin', save: 'fail'},
+          {label: 'Esqueleto', save: 'immune'},
+          {label: 'Lyra', save: null},
+        ],
+      });
+      await expect(
+        service.publishSpellCastStage(
+          'gs',
+          {...STAGE, targets: [{label: 'x', save: 'talvez' as never}]},
+          'u1',
+        ),
+      ).to.be.rejectedWith(/targets inválido/);
+    });
+
     it('publica a etapa com a carta da magia e quem lançou (não grava nada)', async () => {
       await service.publishSpellCastStage('gs', STAGE, 'u1');
       expect(events).to.eql([
@@ -2494,6 +2523,7 @@ describe('GameSessionService', () => {
           phase: 'open',
           rolls: STAGE.rolls,
           applied: [],
+          targets: [],
           save_dc: null,
           save_ability: null,
         },

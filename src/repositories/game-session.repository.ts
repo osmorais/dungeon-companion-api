@@ -254,7 +254,7 @@ export class GameSessionRepository {
   async findById(id: string): Promise<GameSessionDetail | null> {
     const sessions = await this.db.sql<GameSession[]>`
       SELECT gs.id_game_session, gs.session_name, gs.session_code, gs.max_player_quantity,
-        COALESCE(u.username, gs.dm_name) AS dm_name, gs.user_id, gs.created_at
+        COALESCE(u.username, gs.dm_name) AS dm_name, gs.user_id, gs.created_at, gs.auto_hit_check
       FROM game_session gs
       LEFT JOIN users u ON u.id = gs.user_id
       WHERE gs.id_game_session = ${id}
@@ -651,6 +651,12 @@ export class GameSessionRepository {
   async updateDmNotes(idGameSession: string, notes: string | null): Promise<void> {
     await this.db.sql`
       UPDATE game_session SET dm_notes = ${notes} WHERE id_game_session = ${idGameSession}
+    `;
+  }
+
+  async setAutoHitCheck(idGameSession: string, value: boolean): Promise<void> {
+    await this.db.sql`
+      UPDATE game_session SET auto_hit_check = ${value} WHERE id_game_session = ${idGameSession}
     `;
   }
 

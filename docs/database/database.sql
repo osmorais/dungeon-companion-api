@@ -951,3 +951,7 @@ CREATE INDEX IF NOT EXISTS ix_session_companion_game ON session_companion (id_ga
 -- Nulos = ainda não escolheu (a ficha mostra "Idioma à escolha"). Ver character-sheet/language-tool-choices.ts.
 ALTER TABLE character ADD COLUMN IF NOT EXISTS chosen_languages JSONB;
 ALTER TABLE character ADD COLUMN IF NOT EXISTS chosen_tools JSONB;
+
+-- Acerto automático do ataque contra a CA do alvo (1.25.0), ligado pelo mestre no Quadro do Mestre.
+-- false (padrão): quem rola responde "passou da CA?". Ver game-session.service.ts (resolveAttack).
+ALTER TABLE game_session ADD COLUMN IF NOT EXISTS auto_hit_check BOOLEAN NOT NULL DEFAULT FALSE;

@@ -7,6 +7,7 @@ import {
   MonsterSession,
   NpcSession,
   CastStageApplied,
+  CastStageTarget,
   CastStageRoll,
   PlayerSession,
   RollLogEntry,
@@ -107,6 +108,8 @@ export interface SessionEventPayloadMap {
   monster_hidden: {id_monster_session: string};
   /** `cast_id`: rolagem de um lançamento de magia — a mesa mostra no aviso do lançamento. */
   roll_added: {roll: RollLogEntry & {cast_id?: string}};
+  /** Mestre mudou uma opção da mesa no Quadro do Mestre (1.25.0). */
+  session_settings_updated: {auto_hit_check: boolean};
   /** Resistência de monstro resolvida pelo mestre: a mesa sabe só se passou ou falhou (o total
    *  fica na rolagem oculta, 1.24.2). */
   save_resolved: {
@@ -159,6 +162,8 @@ export interface SessionEventPayloadMap {
     phase: 'open' | 'done' | 'cancel';
     rolls: CastStageRoll[];
     applied: CastStageApplied[];
+    /** Alvos escolhidos no começo e o resultado da resistência de cada um (1.25.0). */
+    targets: CastStageTarget[];
     save_dc: number | null;
     save_ability: 'STR' | 'DEX' | 'CON' | 'INT' | 'WIS' | 'CHA' | null;
   };

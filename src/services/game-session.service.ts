@@ -1782,6 +1782,16 @@ export class GameSessionService {
       )
         throw new HttpErrors.UnprocessableEntity('applied inválido');
     }
+    const targets = input.targets ?? [];
+    if (!Array.isArray(targets) || targets.length > 20)
+      throw new HttpErrors.UnprocessableEntity('targets inválido');
+    for (const t of targets) {
+      if (
+        !shortText(t?.label, 80) ||
+        ![undefined, null, 'pending', 'success', 'fail', 'immune'].includes(t.save)
+      )
+        throw new HttpErrors.UnprocessableEntity('targets inválido');
+    }
     const saveDc = input.save_dc ?? null;
     const saveAbility = input.save_ability ?? null;
     if ((saveDc === null) !== (saveAbility === null))
@@ -1853,6 +1863,7 @@ export class GameSessionService {
         amount: a.amount,
         kind: a.kind,
       })),
+      targets: targets.map(t => ({label: t.label.trim(), save: t.save ?? null})),
       save_dc: saveDc,
       save_ability: saveAbility,
     });
