@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {randomUUID} from 'crypto';
+import {MonsterSpellEffectKey} from './monster-spell-effects';
 
 /**
  * Pedido de rolagem pra um jogador: teste secreto do mestre ou resistência contra uma magia/ação
@@ -19,6 +20,8 @@ export interface SecretRollRequest {
   dc: number | null;
   /** Teste secreto (rolagem oculta, só o mestre vê) ou resistência pública. */
   secret: boolean;
+  /** Monstro: penalidade de magia que fica nele se falhar (some se passar ao rolar de novo). */
+  on_fail_effect?: {key: MonsterSpellEffectKey; from: string} | null;
   /** Rolagens já registradas pra este pedido. */
   answers: number;
   created_at: number;

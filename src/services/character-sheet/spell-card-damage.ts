@@ -28,7 +28,6 @@ export const SPELL_CARD_DAMAGE_EXTRA: Record<
     kind: 'damage',
   },
   26: {name: 'Armadura de Agathys', dice: '5', type: 'frio', kind: 'damage'},
-  38: {name: 'Auxílio Divino', dice: '+1d4', type: 'radiante', kind: 'damage'},
   41: {
     name: 'Barreira de Lâminas',
     dice: '6d10',
@@ -80,12 +79,6 @@ export const SPELL_CARD_DAMAGE_EXTRA: Record<
   },
   175: {name: 'Guardião da Fé', dice: '20', type: 'radiante', kind: 'damage'},
   206: {name: 'Malogro', dice: '8d8', type: 'necrótico', kind: 'damage'},
-  212: {
-    name: 'Marca da Punição',
-    dice: '+2d6',
-    type: 'radiante',
-    kind: 'damage',
-  },
   233: {
     name: 'Muralha de Vento',
     dice: '3d8',
@@ -106,12 +99,6 @@ export const SPELL_CARD_DAMAGE_EXTRA: Record<
     kind: 'damage',
   },
   295: {name: 'Rajada Prismática', dice: '10d6', type: 'varia', kind: 'damage'},
-  314: {
-    name: 'Rogar Maldição',
-    dice: '+1d8',
-    type: 'necrótico',
-    kind: 'damage',
-  },
   318: {
     name: 'Saraivada de Espinhos',
     dice: '1d10',

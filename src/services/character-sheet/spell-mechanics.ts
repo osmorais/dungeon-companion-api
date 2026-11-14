@@ -13,7 +13,8 @@ import {StatKeyEn} from '../../models/character-sheet-types';
  * Discípulo da Vida e a Cura Suprema do Clérigo do Domínio da Vida.
  * Fase 4: magias que **somam dano no ataque** (`kind: 'rider'`) — as Destruições (gastam o espaço
  * no acerto, como a Destruição Divina) e Bruxaria/Marca do Caçador/Manto do Cruzado (lançadas
- * antes; o jogador marca no acerto).
+ * antes; o jogador marca no acerto). Depois: Marca da Punição (como as Destruições), Auxílio
+ * Divino e a opção de dano do Rogar Maldição (lançados antes).
  * Efeitos além do dano imediato (ex.: metade do dano ao errar na Flecha Ácida, cura do Toque
  * Vampírico, dano repetido do Raio de Bruxa, condições) continuam só na descrição — o mestre
  * aplica. Os números seguem o livro (`docs/dungeon-companion/referencias/magias.txt`).
@@ -355,8 +356,8 @@ export const SPELL_MECHANICS: Record<number, SpellMechanics> = {
 
   // -------------------------------------------------------------------------
   // Somam dano no ataque (fase 4). Fora: Golpe Constritor, Saraivada de Espinhos e Flecha
-  // Relampejante (dano por turno/em área, não um dado a mais no acerto) e Arma Elemental (mexe
-  // também no bônus de ataque).
+  // Relampejante (dano por turno/em área, não um dado a mais no acerto). Arma Elemental e Arma
+  // Mágica (mexem também no bônus de ataque) são efeito ativo: `buildSpellWeaponEffect`.
   // -------------------------------------------------------------------------
   119: rider(
     'Destruição Colérica',
@@ -402,6 +403,17 @@ export const SPELL_MECHANICS: Record<number, SpellMechanics> = {
   49: rider('Bruxaria', 'each_hit', 'any', 1, 6, 'necrótico'),
   213: rider('Marca do Caçador', 'each_hit', 'weapon', 1, 6, 'da arma'),
   208: rider('Manto do Cruzado', 'each_hit', 'weapon', 1, 4, 'radiante'),
+  38: rider('Auxílio Divino', 'each_hit', 'weapon', 1, 4, 'radiante'),
+  // No livro, conjurada com ação bônus antes do ataque; aqui, como as Destruições, gasta o espaço
+  // no acerto (o botão de lançar some da lista).
+  212: rider('Marca da Punição', 'next_hit', 'weapon', 2, 6, 'radiante', {
+    upcast: {count: 1},
+  }),
+  // Só a opção de dano das quatro maldições (o jogador marca no acerto se escolheu essa); a CD
+  // vai no aviso de lançamento. As outras opções ficam com o mestre.
+  314: rider('Rogar Maldição', 'each_hit', 'any', 1, 8, 'necrótico', {
+    save: {ability: 'WIS'},
+  }),
 
   // -------------------------------------------------------------------------
   // Cura (fase 3). Fora: as de valor fixo, sem dado (Cura Completa, Palavra de Poder Curar,
@@ -464,7 +476,6 @@ export const SPELL_MECHANICS: Record<number, SpellMechanics> = {
   235: saveOnly('Nevasca', 'DEX'), // 3º
   236: saveOnly('Névoa Fétida', 'CON'), // 3º
   248: saveOnly('Padrão Hipnótico', 'WIS'), // 3º
-  314: saveOnly('Rogar Maldição', 'WIS'), // 3º
   39: saveOnly('Banimento', 'CHA'), // 4º
   70: saveOnly('Compulsão', 'WIS'), // 4º
   74: saveOnly('Confusão', 'WIS'), // 4º
