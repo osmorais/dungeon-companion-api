@@ -1,4 +1,12 @@
 /* eslint-disable @typescript-eslint/naming-convention */
+import {
+  LANGUAGES,
+  choiceSlots,
+  sheetLanguages,
+  sheetTools,
+  validateLanguageToolChoices,
+} from './character-sheet/language-tool-choices';
+import {weaponProficiencyList} from './character-sheet/weapon-proficiency';
 import {injectable, BindingScope, service} from '@loopback/core';
 import {HttpErrors} from '@loopback/rest';
 import {buildPrintHtml} from './character-sheet-print';
@@ -52,7 +60,6 @@ import {
   collectTraits,
   buildSpellcasting,
   SubclassCastingOverride,
-  buildLanguages,
   collectProficientSkills,
   normalizeKey,
   normalizeSkill,
@@ -95,6 +102,13 @@ import {
 import {FEATS, TOOL_PROFICIENCY_OPTIONS} from './character-sheet/feats';
 import {buildSpellRoll, healingFeaturesFor} from './character-sheet/spell-mechanics';
 import {withCardDamage} from './character-sheet/spell-card-damage';
+import {
+  BEAST_SPELLS_LEVEL,
+  WILD_SHAPE_RESOURCE,
+  beastAllowed,
+  buildWildShape,
+  wildShapeLimits,
+} from './character-sheet/wild-shape';
 import {abilityMechanicsFor} from './character-sheet/ability-mechanics';
 import {
   ACTIVATABLE_EFFECTS,
@@ -179,6 +193,14 @@ export class CharacterSheetService {
     } else if (choices.tool_proficiency) {
       throw new Error('Tool proficiency choice not allowed for this race');
     }
+    // Idiomas e ferramentas à escolha (1.24.0): opcionais aqui, dá pra escolher depois na ficha.
+    const languageToolChoices = validateLanguageToolChoices(
+      choiceSlots(raceRule, bgRule),
+      choices.languages,
+      choices.tools,
+    );
+    choices.languages = languageToolChoices.languages;
+    choices.tools = languageToolChoices.tools;
 
     const abilityBonusChoices = validateAbilityBonusChoice(core_build.id_race, choices.ability_bonus_choices);
     validateArmourChoice(
@@ -239,15 +261,21 @@ export class CharacterSheetService {
       getMod(stats.CON),
       (subraceRule?.hpBonusPerLevel ?? 0) + calcDraconicResilienceHpBonus(subclassRule?.id_subclass),
     );
+    const weaponProficiencies = weaponProficiencyList(
+      [classRule.weaponProficiencies, raceRule.weaponProficiencies, subraceRule?.weaponProficiencies],
+      subclassRule?.id_subclass,
+    );
     const weaponActions = buildWeaponActions(
       equipment.weapons,
       stats,
       profBonus,
       choices.fighting_style,
+      weaponProficiencies,
     );
     const traits = collectTraits(raceRule, subraceRule, classRule, bgRule, level, subclassRule, choices.fighting_style, profBonus, stats);
     const spells = choices.spells ?? [];
-    const languages = buildLanguages(raceRule, bgRule);
+    const creationSlots = choiceSlots(raceRule, bgRule);
+    const languages = sheetLanguages(creationSlots, choices.languages);
 
     const spellcastingResult = buildSpellcasting(
       classRule,
@@ -329,21 +357,23 @@ export class CharacterSheetService {
               ...(subraceRule?.armorProficiencies ?? []),
             ]),
           ],
-          weapons: [
-            ...new Set([
-              ...classRule.weaponProficiencies,
-              ...(raceRule.weaponProficiencies ?? []),
-              ...(subraceRule?.weaponProficiencies ?? []),
-            ]),
-          ],
+          weapons: weaponProficiencies,
           tools: [
             ...new Set([
-              ...bgRule.tools,
+              ...sheetTools(bgRule.tools, choices.tools),
               ...(subraceRule?.toolProficiencies ?? []),
               ...(choices.tool_proficiency ? [choices.tool_proficiency] : []),
             ]),
           ],
           languages,
+          choices: {
+            language_count: creationSlots.languages,
+            language_options: LANGUAGES,
+            fixed_languages: creationSlots.fixed_languages,
+            chosen_languages: choices.languages ?? [],
+            tool_slots: creationSlots.tools,
+            chosen_tools: choices.tools ?? {},
+          },
         },
         equipment: {
           currency: {cp: 0, sp: 0, ep: 0, gp: totalGold, pp: 0},
@@ -661,6 +691,8 @@ export class CharacterSheetService {
   async loadCharacter(
     id: number,
     userId: string,
+    /** Mesa de onde a ficha foi aberta: só o combate dela trava o preparo de magias. */
+    idGameSession?: string,
   ): Promise<CharacterSheet | null> {
     const raw = await this.repository.findCharacterById(id);
     if (!raw) return null;
@@ -708,7 +740,18 @@ export class CharacterSheetService {
       }
     }
 
-    const stats = applyLevelBasedAttributeBonuses(rawStats, character.id_class, character.level);
+    // Forma Selvagem: a força, a destreza e a constituição passam a ser as da besta (as mentais e
+    // as proficiências continuam do druida), então resistências, perícias e ataques já saem certos.
+    const wildShape = character.active_effects?.wild_shape ?? null;
+    const ownStats = applyLevelBasedAttributeBonuses(rawStats, character.id_class, character.level);
+    const stats: FinalStats = wildShape
+      ? {
+          ...ownStats,
+          STR: wildShape.strength,
+          DEX: wildShape.dexterity,
+          CON: wildShape.constitution,
+        }
+      : ownStats;
 
     const profBonus = character.proficiency_bonus;
     const allSavesProficient = grantsAllSavingThrowProficiency(character.id_class, character.level);
@@ -771,7 +814,17 @@ export class CharacterSheetService {
       damage_modifier: 0,
       isRanged: false,
     }));
-    const weaponResult = buildWeaponActions(weaponsForCalc, stats, profBonus, character.chosen_fighting_style);
+    const weaponProficiencies = weaponProficiencyList(
+      [classRule.weaponProficiencies, raceRule.weaponProficiencies, subraceRule?.weaponProficiencies],
+      subclassRule?.id_subclass,
+    );
+    const weaponResult = buildWeaponActions(
+      weaponsForCalc,
+      stats,
+      profBonus,
+      character.chosen_fighting_style,
+      weaponProficiencies,
+    );
 
     const knownSpells: Spell[] = spells.map(s => ({
       id_spell: s.id_spell,
@@ -809,14 +862,17 @@ export class CharacterSheetService {
         const picked = (row.choice_data as {feat_proficiencies?: {tools?: unknown}})?.feat_proficiencies?.tools;
         return Array.isArray(picked) ? picked.filter((t): t is string => typeof t === 'string') : [];
       });
-    const languages = buildLanguages(raceRule, bgRule);
+    const languageSlots = choiceSlots(raceRule, bgRule);
+    const languages = sheetLanguages(languageSlots, character.chosen_languages);
 
     // CA deixou de ser congelada em `character.armour_class` — recalculada a cada carregamento
     // (mesmo padrão já usado pros slots de magia), pra refletir troca de equipamento e ASI de DEX.
     const equippedArmourRule = character.id_armour
       ? {armour_type: character.armour_type, armour_class_base: character.armour_class_base, max_dexterity_bonus: character.max_dexterity_bonus}
       : null;
-    const ac = calcArmorClass(equippedArmourRule, stats, character.has_shield, character.id_class, character.chosen_fighting_style, subclassRule?.id_subclass);
+    const ac = wildShape
+      ? wildShape.armor_class
+      : calcArmorClass(equippedArmourRule, stats, character.has_shield, character.id_class, character.chosen_fighting_style, subclassRule?.id_subclass);
 
     const spellcastingResult = buildSpellcasting(
       classRule,
@@ -853,7 +909,10 @@ export class CharacterSheetService {
     // Só consulta se a classe realmente precisa preparar magia — evita uma query à toa pras
     // outras (maioria das classes/personagens não-conjuradores).
     const inActiveCombat = classRule.preparesSpells
-      ? await this.combatRepository.isCharacterPreparationLocked(character.id_character)
+      ? await this.combatRepository.isCharacterPreparationLocked(
+          character.id_character,
+          validSessionId(idGameSession),
+        )
       : false;
 
     return {
@@ -874,13 +933,16 @@ export class CharacterSheetService {
           proficiency_bonus: character.proficiency_bonus,
           armor_class: ac,
           initiative: getMod(stats.DEX) + featInitiativeBonus,
-          speed: formatSpeedWithBonus(
-            subraceRule?.speedOverride ?? raceRule.speed,
-            calcSpeedBonusMeters(character.id_class, character.level, classRule.featuresByLevel, character.armour_type, character.has_shield),
-          ),
+          speed: wildShape
+            ? wildShape.speed
+            : formatSpeedWithBonus(
+                subraceRule?.speedOverride ?? raceRule.speed,
+                calcSpeedBonusMeters(character.id_class, character.level, classRule.featuresByLevel, character.armour_type, character.has_shield),
+              ),
+          // Transformado, o PV mostrado é o da forma (o do druida fica em combat_features.wild_shape).
           hit_points: {
-            max: character.max_hit_points,
-            current: character.current_hit_points,
+            max: wildShape ? wildShape.hp_max : character.max_hit_points,
+            current: wildShape ? wildShape.hp_current : character.current_hit_points,
             temporary: 0,
           },
           hit_dice: character.hit_dice,
@@ -898,7 +960,8 @@ export class CharacterSheetService {
         },
         attributes_and_saves: attributesAndSaves,
         skills: skillsResult,
-        weapons: weaponResult,
+        // Transformado, ataca com as ações da besta (combat_features.wild_shape), não com as armas.
+        weapons: wildShape ? [] : weaponResult,
         features_and_traits: traits,
         proficiencies_and_languages: {
           armor: [
@@ -907,22 +970,24 @@ export class CharacterSheetService {
               ...(subraceRule?.armorProficiencies ?? []),
             ]),
           ],
-          weapons: [
-            ...new Set([
-              ...classRule.weaponProficiencies,
-              ...(raceRule.weaponProficiencies ?? []),
-              ...(subraceRule?.weaponProficiencies ?? []),
-            ]),
-          ],
+          weapons: weaponProficiencies,
           tools: [
             ...new Set([
-              ...bgRule.tools,
+              ...sheetTools(bgRule.tools, character.chosen_tools),
               ...(subraceRule?.toolProficiencies ?? []),
               ...(character.chosen_tool_proficiency ? [character.chosen_tool_proficiency] : []),
               ...featTools,
             ]),
           ],
           languages,
+          choices: {
+            language_count: languageSlots.languages,
+            language_options: LANGUAGES,
+            fixed_languages: languageSlots.fixed_languages,
+            chosen_languages: character.chosen_languages ?? [],
+            tool_slots: languageSlots.tools,
+            chosen_tools: character.chosen_tools ?? {},
+          },
         },
         equipment: {
           currency: {cp: 0, sp: 0, ep: 0, gp: character.total_po, pp: 0},
@@ -949,18 +1014,32 @@ export class CharacterSheetService {
         ),
         class_abilities: this.buildClassAbilities(character.id_class, character.level, character.id_subclass, character.id_race, stats, profBonus, spellcastingInfo?.spell_save_dc ?? null),
         class_resources: classResources,
-        combat_features: buildCombatFeatures({
-          idClass: character.id_class,
-          idSubclass: character.id_subclass,
-          idRace: character.id_race,
-          subrace: character.subrace ? normalizeKey(character.subrace) : null,
-          level: character.level,
-          stats,
-          profBonus,
-          classResources,
-          featIds: chosenFeats.map(f => f.feat_id),
-          activeEffects: character.active_effects,
-        }),
+        combat_features: {
+          ...buildCombatFeatures({
+            idClass: character.id_class,
+            idSubclass: character.id_subclass,
+            idRace: character.id_race,
+            subrace: character.subrace ? normalizeKey(character.subrace) : null,
+            level: character.level,
+            stats,
+            profBonus,
+            classResources,
+            featIds: chosenFeats.map(f => f.feat_id),
+            activeEffects: character.active_effects,
+            traits,
+          }),
+          wild_shape: wildShape
+            ? {
+                ...wildShape,
+                druid_hit_points: {
+                  current: character.current_hit_points,
+                  max: character.max_hit_points,
+                },
+                spells_blocked: character.level < BEAST_SPELLS_LEVEL,
+                hours: Math.floor(character.level / 2),
+              }
+            : null,
+        },
       },
     };
   }
@@ -1137,6 +1216,10 @@ export class CharacterSheetService {
   async getLevelUpPreview(id: number, userId: string, pendingSubclassId?: string): Promise<LevelUpPreview> {
     const {raw, classRule, nextLevel, levelData} = await this.resolveLevelUpContext(id, userId);
     const {character, attributes, spells} = raw;
+    // Talento já escolhido não volta pra lista (salvo os repetíveis).
+    const takenFeats = new Set(
+      levelData.isAsiLevel ? (await this.repository.findChosenFeats(id)).map(f => f.feat_id) : [],
+    );
 
     const stats = this.statsFromRaw(attributes);
     const conModifier = getMod(stats.CON);
@@ -1179,7 +1262,9 @@ export class CharacterSheetService {
           ? THIRD_CASTER_SLOTS[nextLevel] ?? null
           : null,
       feat_options: levelData.isAsiLevel
-        ? Object.values(FEATS).map(f => ({
+        ? Object.values(FEATS)
+            .filter(f => f.repeatable || !takenFeats.has(f.id_feat))
+            .map(f => ({
             id_feat: f.id_feat,
             display_name: f.displayName,
             description: f.description,
@@ -1281,6 +1366,11 @@ export class CharacterSheetService {
       } else {
         const feat = FEATS[choice.feat_id];
         if (!feat) throw new Error('Unknown feat');
+        if (
+          !feat.repeatable &&
+          (await this.repository.findChosenFeats(id)).some(f => f.feat_id === feat.id_feat)
+        )
+          throw new Error('Talento já escolhido');
         featId = feat.id_feat;
         if (feat.abilityIncrease) {
           asiStatIncreases = {[feat.abilityIncrease.stat]: feat.abilityIncrease.amount};
@@ -1568,6 +1658,30 @@ export class CharacterSheetService {
     return {armor_class: ac};
   }
 
+  /**
+   * Idiomas e ferramentas à escolha (1.24.0), na ficha: serve pras fichas antigas e pra quem pulou
+   * na criação. Substitui a escolha anterior. Devolve como a ficha passa a mostrar.
+   */
+  async setLanguageToolChoices(
+    id: number,
+    userId: string,
+    input: {languages?: unknown; tools?: unknown},
+  ): Promise<{languages: string[]; tools: string[]}> {
+    const raw = await this.repository.findCharacterById(id);
+    if (!raw) throw new HttpErrors.NotFound(NOT_FOUND);
+    if (!(await this.userCanManageCharacter(raw.character.user_id, id, userId))) {
+      throw new HttpErrors.Forbidden(NOT_ALLOWED);
+    }
+    const {character} = raw;
+    const slots = choiceSlots(resolveRace(character.id_race), resolveBackground(character.id_background ?? 1));
+    const valid = validateLanguageToolChoices(slots, input?.languages, input?.tools);
+    await this.repository.updateLanguageToolChoices(id, valid.languages, valid.tools);
+    return {
+      languages: sheetLanguages(slots, valid.languages),
+      tools: sheetTools(resolveBackground(character.id_background ?? 1).tools, valid.tools),
+    };
+  }
+
   async deleteCharacter(id: number, userId: string): Promise<{success: boolean}> {
     const raw = await this.repository.findCharacterById(id);
     if (!raw) throw new HttpErrors.NotFound(NOT_FOUND);
@@ -1697,6 +1811,72 @@ export class CharacterSheetService {
         featIds,
       }),
     };
+  }
+
+  /** Classe, subclasse e nível de um personagem que o usuário controla (Forma Selvagem). */
+  async wildShapeContext(
+    id: number,
+    userId: string,
+  ): Promise<{idClass: number; idSubclass: string | null; level: number}> {
+    const raw = await this.repository.findCharacterById(id);
+    if (!raw) throw new HttpErrors.NotFound(`Character with id ${id} not found`);
+    if (!(await this.userCanManageCharacter(raw.character.user_id, id, userId)))
+      throw new HttpErrors.Forbidden();
+    return {
+      idClass: raw.character.id_class,
+      idSubclass: raw.character.id_subclass,
+      level: raw.character.level,
+    };
+  }
+
+  /**
+   * Transforma o druida na besta (gasta um uso de Forma Selvagem) ou, com `null`, volta à forma
+   * normal. A besta tem que caber no ND e no nado/voo do nível.
+   */
+  async setWildShape(
+    id: number,
+    userId: string,
+    beast: Parameters<typeof buildWildShape>[0] | null,
+  ): Promise<{active_effects: ActiveEffects}> {
+    const raw = await this.repository.findCharacterById(id);
+    if (!raw) throw new HttpErrors.NotFound(`Character with id ${id} not found`);
+    if (!(await this.userCanManageCharacter(raw.character.user_id, id, userId)))
+      throw new HttpErrors.Forbidden();
+    const current = raw.character.active_effects ?? EMPTY_ACTIVE_EFFECTS;
+
+    if (beast === null) {
+      if (!current.wild_shape) throw new HttpErrors.UnprocessableEntity('O druida não está transformado');
+      const next = {...current, wild_shape: null};
+      await this.repository.updateActiveEffects(id, next);
+      return {active_effects: next};
+    }
+
+    const limits = wildShapeLimits(raw.character.id_class, raw.character.id_subclass, raw.character.level);
+    if (!limits) throw new HttpErrors.UnprocessableEntity('Só druida a partir do nível 2 tem Forma Selvagem');
+    if (current.wild_shape) throw new HttpErrors.Conflict('Saia da forma atual antes de virar outra besta');
+    if (!beastAllowed(beast, limits))
+      throw new HttpErrors.UnprocessableEntity('Essa besta passa do ND ou do deslocamento do seu nível');
+
+    const classRule = resolveClass(raw.character.id_class);
+    const subclassRule = resolveSubclass(raw.character.id_class, raw.character.id_subclass);
+    const max = maxTrackableResourceUses(
+      {
+        ...classRule.featuresByLevel?.[raw.character.level]?.resources,
+        ...subclassRule?.featuresByLevel[raw.character.level]?.resources,
+      },
+      WILD_SHAPE_RESOURCE,
+      this.statsFromRaw(raw.attributes),
+    );
+    const spent = raw.character.resource_uses_expended?.[WILD_SHAPE_RESOURCE] ?? 0;
+    if (typeof max === 'number' && spent >= max)
+      throw new HttpErrors.UnprocessableEntity('Sem usos de Forma Selvagem: descanse para recuperar');
+    await this.repository.updateResourceUsesExpended(id, {
+      ...(raw.character.resource_uses_expended ?? {}),
+      [WILD_SHAPE_RESOURCE]: spent + 1,
+    });
+    const next = {...current, wild_shape: buildWildShape(beast)};
+    await this.repository.updateActiveEffects(id, next);
+    return {active_effects: next};
   }
 
   /**
@@ -1926,6 +2106,8 @@ export class CharacterSheetService {
     idSpell: number,
     isPrepared: boolean,
     userId: string,
+    /** Mesa de onde veio o pedido: só o combate dela trava o preparo (outra mesa não). */
+    idGameSession?: string,
   ): Promise<{success: boolean}> {
     const raw = await this.repository.findCharacterById(id);
     if (!raw)
@@ -1940,7 +2122,9 @@ export class CharacterSheetService {
       );
     }
 
-    if (await this.combatRepository.isCharacterPreparationLocked(id)) {
+    if (
+      await this.combatRepository.isCharacterPreparationLocked(id, validSessionId(idGameSession))
+    ) {
       throw new HttpErrors.Conflict(
         'Não é possível preparar magias durante o combate',
       );
@@ -1995,4 +2179,9 @@ export class CharacterSheetService {
     );
     return {success: true};
   }
+}
+
+/** Id de mesa só se tiver cara de UUID (o banco recusaria outro formato com erro 500). */
+function validSessionId(id: string | undefined): string | undefined {
+  return id && /^[0-9a-f-]{36}$/i.test(id) ? id : undefined;
 }

@@ -217,6 +217,30 @@ export class CharacterController {
     }
   }
 
+  @patch('/api/character-sheet/{id}/language-tool-choices')
+  @response(200, {
+    description: 'Escolhe os idiomas e as ferramentas/kits "à escolha" da raça e do antecedente',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async updateLanguageToolChoices(
+    @param.path.number('id') id: number,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      description: 'languages: string[]; tools: {"Um tipo de kit de jogo": "Dados"}',
+      required: true,
+      content: {'application/json': {schema: {type: 'object'}}},
+    })
+    body: {languages?: unknown; tools?: unknown},
+  ): Promise<object> {
+    try {
+      return await this.characterSheetService.setLanguageToolChoices(id, currentUser.id, body);
+    } catch (e: unknown) {
+      if (HttpErrors.isHttpError(e)) throw e;
+      const message = e instanceof Error ? e.message : String(e);
+      throw new HttpErrors.UnprocessableEntity(message);
+    }
+  }
+
   @get('/api/character-sheet/{id}/level-up/preview')
   @response(200, {
     description: 'Computes what would change if the character leveled up, without saving anything',
@@ -427,11 +451,17 @@ export class CharacterController {
     @requestBody({
       description: 'Prepared state',
       required: true,
-      content: {'application/json': {schema: {type: 'object', required: ['is_prepared'], properties: {is_prepared: {type: 'boolean'}}}}},
+      content: {'application/json': {schema: {type: 'object', required: ['is_prepared'], properties: {is_prepared: {type: 'boolean'}, id_game_session: {type: 'string'}}}}},
     })
-    body: {is_prepared: boolean},
+    body: {is_prepared: boolean; id_game_session?: string},
   ): Promise<object> {
-    return this.characterSheetService.setSpellPrepared(id, idSpell, body.is_prepared, currentUser.id);
+    return this.characterSheetService.setSpellPrepared(
+      id,
+      idSpell,
+      body.is_prepared,
+      currentUser.id,
+      typeof body.id_game_session === 'string' ? body.id_game_session : undefined,
+    );
   }
 
   @get('/api/character-sheet/{id}/background')
@@ -503,9 +533,11 @@ export class CharacterController {
   async getSheet(
     @param.path.number('id') id: number,
     @inject(SecurityBindings.USER) currentUser: UserProfile,
+    /** Mesa de onde a ficha foi aberta: só o combate dela trava o preparo de magias. */
+    @param.query.string('session_id') sessionId?: string,
   ): Promise<object> {
     try {
-      const sheet = await this.characterSheetService.loadCharacter(id, currentUser.id);
+      const sheet = await this.characterSheetService.loadCharacter(id, currentUser.id, sessionId);
       if (!sheet) throw new HttpErrors.NotFound(`Character with id ${id} not found`);
       return sheet;
     } catch (e: unknown) {

@@ -315,6 +315,12 @@ describe('calculator', () => {
       ).to.equal(21);
       expect(calcArmorClass(null, s, false, 7, 'Defesa')).to.equal(13);
     });
+
+    it('Monge com escudo perde a Defesa sem Armadura (10 + DES + 2)', () => {
+      expect(calcArmorClass(null, s, true, 10)).to.equal(15);
+      // Bárbaro mantém a dele com escudo.
+      expect(calcArmorClass(null, s, true, 1)).to.equal(17);
+    });
   });
 
   describe('pontos de vida', () => {
@@ -402,6 +408,51 @@ describe('calculator', () => {
         'Duelo',
       );
       expect(first.damage_modifier).to.equal(3);
+    });
+
+    it('sem proficiência na arma, o ataque não soma a proficiência (bruxo com besta pesada)', () => {
+      const dex = stats({STR: 14, DEX: 17});
+      const [heavy, light, staff] = buildWeaponActions(
+        [
+          weapon(
+            'Besta Pesada',
+            'Munição (distância 30/120), pesada, recarga, duas mãos',
+          ),
+          weapon('Besta Leve', 'Munição (distância 24/96), recarga, duas mãos'),
+          weapon('Bordão', 'Versátil (1d8)'),
+        ],
+        dex,
+        2,
+        null,
+        ['Armas Simples'],
+      );
+      expect([
+        heavy.attack_bonus,
+        heavy.damage_modifier,
+        heavy.proficient,
+      ]).to.eql([3, 3, false]);
+      expect([light.attack_bonus, light.proficient]).to.eql([5, true]);
+      expect([staff.attack_bonus, staff.damage_modifier]).to.eql([4, 2]);
+    });
+
+    it('arma versátil traz o dado com as duas mãos', () => {
+      const [staff, dagger] = buildWeaponActions(
+        [weapon('Bordão', 'Versátil (1d8)'), weapon('Adaga', 'Acuidade')],
+        s,
+        2,
+      );
+      expect(staff.versatile_die).to.equal('1d8');
+      expect(dagger.versatile_die).to.be.null();
+    });
+
+    it('sem a lista de proficiências (legado), toda arma soma a proficiência', () => {
+      const [heavy] = buildWeaponActions(
+        [weapon('Besta Pesada', 'Munição')],
+        s,
+        2,
+      );
+      expect(heavy.attack_bonus).to.equal(4);
+      expect(heavy.proficient).to.be.true();
     });
   });
 
@@ -560,6 +611,20 @@ describe('calculator', () => {
       expect(langs).to.containEql('Idioma à escolha 1');
       expect(langs).to.containEql('Idioma à escolha 2');
       expect(new Set(langs).size).to.equal(langs.length);
+    });
+
+    it('Humano e Meio-Elfo ganham um idioma à escolha a mais', () => {
+      // Humano nobre: Comum + 1 da raça + 1 do antecedente.
+      expect(buildLanguages(resolveRace(9), resolveBackground(10))).to.eql([
+        'Comum',
+        'Idioma à escolha 1',
+        'Idioma à escolha 2',
+      ]);
+      expect(buildLanguages(resolveRace(6), resolveBackground(11))).to.eql([
+        'Comum',
+        'Élfico',
+        'Idioma à escolha 1',
+      ]);
     });
 
     it('collectProficientSkills une escolhidas, antecedente e raça sem duplicar', () => {

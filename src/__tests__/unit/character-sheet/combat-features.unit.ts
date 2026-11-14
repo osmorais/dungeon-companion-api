@@ -1,10 +1,19 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {expect} from '@loopback/testlab';
 import {
+  attacksPerAction,
   bardicInspirationSides,
   buildCombatFeatures,
   damageDefensesFor,
+  darkvisionFor,
 } from '../../../services/character-sheet/combat-features';
+import {
+  collectTraits,
+  resolveBackground,
+  resolveClass,
+  resolveRace,
+  resolveSubclass,
+} from '../../../services/character-sheet/calculator';
 import {stats} from '../fixtures';
 
 describe('combat-features', () => {
@@ -31,6 +40,81 @@ describe('combat-features', () => {
       active_effects: {active: [], turn_uses: {}},
       halfling_lucky: false,
       d20_reminders: [],
+      attacks_per_action: 1,
+      cunning_action: false,
+      animal_companion: false,
+      darkvision_m: null,
+    });
+  });
+
+  describe('seção E: Ataque Extra, Ação Ardilosa, visão no escuro', () => {
+    it('ataques por ação pelo traço de maior número', () => {
+      expect(attacksPerAction([])).to.equal(1);
+      expect(attacksPerAction([{name: 'Ataque Extra'}])).to.equal(2);
+      expect(
+        attacksPerAction([{name: 'Ataque Extra'}, {name: 'Ataque Extra (2)'}]),
+      ).to.equal(3);
+      expect(
+        attacksPerAction([
+          {name: 'Ataque Extra'},
+          {name: 'Ataque Extra (2)'},
+          {name: 'Ataque Extra (3)'},
+        ]),
+      ).to.equal(4);
+      expect(attacksPerAction([{name: 'Ataque Extraordinário'}])).to.equal(1);
+    });
+
+    it('pelas regras: Guerreiro 2 no nv5, 3 no nv11, 4 no nv20; Monge 2 no nv5; Ladino 1', () => {
+      const attacksAt = (idClass: number, level: number) =>
+        attacksPerAction(
+          collectTraits(
+            resolveRace(9),
+            null,
+            resolveClass(idClass),
+            resolveBackground(1),
+            level,
+          ),
+        );
+      expect([4, 5, 11, 20].map(level => attacksAt(7, level))).to.eql([
+        1, 2, 3, 4,
+      ]);
+      expect([4, 5].map(level => attacksAt(10, level))).to.eql([1, 2]);
+      expect(attacksAt(8, 20)).to.equal(1);
+    });
+
+    it('Ação Ardilosa: só com o traço (Ladino nv2)', () => {
+      const traitsAt = (level: number) =>
+        collectTraits(
+          resolveRace(9),
+          null,
+          resolveClass(8),
+          resolveBackground(1),
+          level,
+          resolveSubclass(8, null),
+        );
+      expect(
+        buildCombatFeatures({...base, idClass: 8, traits: traitsAt(1)})
+          .cunning_action,
+      ).to.be.false();
+      expect(
+        buildCombatFeatures({...base, idClass: 8, traits: traitsAt(2)})
+          .cunning_action,
+      ).to.be.true();
+    });
+
+    it('visão no escuro pela raça: 18 m em quem tem, null em Humano e Halfling', () => {
+      expect(
+        [1, 2, 5, 6, 7, 8].map(idRace =>
+          darkvisionFor({idRace, subrace: null}),
+        ),
+      ).to.eql([18, 18, 18, 18, 18, 18]);
+      expect(darkvisionFor({idRace: 9, subrace: null})).to.be.null();
+      expect(
+        darkvisionFor({idRace: 3, subrace: 'halfling-robusto'}),
+      ).to.be.null();
+      expect(buildCombatFeatures({...base, idRace: 1}).darkvision_m).to.equal(
+        18,
+      );
     });
   });
 

@@ -21,6 +21,11 @@ export interface FeatRule {
    * `hpBonusPerLevel` a mais no ganho normal do dado de vida. Ver `confirmLevelUp`.
    */
   hpBonusPerLevel?: number;
+  /**
+   * Pode ser escolhido mais de uma vez (no livro, só o Adepto Elemental, com outro tipo de dano a
+   * cada vez). Os demais talentos saem da lista do level-up depois de escolhidos.
+   */
+  repeatable?: boolean;
   /** Bônus fixo de iniciativa (hoje só o Alerta). */
   initiativeBonus?: number;
   /** Bônus fixo de percepção passiva (hoje só o Analítico). */
@@ -89,6 +94,7 @@ export const FEATS: Record<string, FeatRule> = {
   'adepto-elemental': {
     id_feat: 'adepto-elemental',
     displayName: 'Adepto Elemental',
+    repeatable: true,
     description:
       'Pré-requisito: a habilidade de conjurar ao menos uma magia. Escolha um tipo de dano: ácido, elétrico, fogo, frio ou trovejante. Suas magias ignoram qualquer resistência a esse tipo de dano, e ao determinar o dano de uma magia sua desse tipo, todo resultado 1 no dado é tratado como 2. Você pode escolher este talento várias vezes, desde que escolha um tipo de dano diferente a cada vez.',
   },

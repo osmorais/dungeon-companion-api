@@ -37,6 +37,7 @@ export class CharacterRepository {
           spellcasting_ability, spell_save_dc, spell_attack_bonus,
           avatar_preset,
           chosen_tool_proficiency, chosen_fighting_style,
+          chosen_languages, chosen_tools,
           user_id
         ) VALUES (
           ${character_details?.name ?? 'Aventureiro'},
@@ -63,6 +64,8 @@ export class CharacterRepository {
           ${input.avatar_preset ? sql.json(input.avatar_preset as any) : null},
           ${choices.tool_proficiency ?? null},
           ${choices.fighting_style ?? null},
+          ${choices.languages?.length ? sql.json(choices.languages) : null},
+          ${choices.tools && Object.keys(choices.tools).length ? sql.json(choices.tools) : null},
           ${userId}
         )
         RETURNING id_character
@@ -110,9 +113,12 @@ export class CharacterRepository {
 
       if (equipment.weapons.length) {
         for (const weapon of equipment.weapons) {
+          // Calculado na ficha (classe, raça e subclasse); a ficha recalcula ao carregar.
+          const proficient =
+            cs.weapons.find(w => w.id_weapon === weapon.id_weapon)?.proficient ?? true;
           await sql`
             INSERT INTO character_weapon (id_character, id_weapon, has_proficiency)
-            VALUES (${idCharacter}, ${weapon.id_weapon}, TRUE)
+            VALUES (${idCharacter}, ${weapon.id_weapon}, ${proficient})
           `;
         }
       }
@@ -178,6 +184,20 @@ export class CharacterRepository {
   async updateEquipment(id: number, idArmour: number | null, hasShield: boolean): Promise<void> {
     await this.db.sql`
       UPDATE character SET id_armour = ${idArmour}, has_shield = ${hasShield} WHERE id_character = ${id}
+    `;
+  }
+
+  /** Idiomas e ferramentas à escolha (1.24.0); vazio grava nulo ("ainda não escolheu"). */
+  async updateLanguageToolChoices(
+    id: number,
+    languages: string[],
+    tools: Record<string, string>,
+  ): Promise<void> {
+    await this.db.sql`
+      UPDATE character SET
+        chosen_languages = ${languages.length ? this.db.sql.json(languages) : null},
+        chosen_tools = ${Object.keys(tools).length ? this.db.sql.json(tools) : null}
+      WHERE id_character = ${id}
     `;
   }
 
@@ -477,7 +497,9 @@ export class CharacterRepository {
   }
 
   async findCharacterById(id: number): Promise<CharacterRawData | null> {
-    const rows = await this.db.sql<CharacterRawData['character'][]>`
+    // As seis consultas saem juntas: em sequência, cada ida ao banco somava à espera da ficha.
+    const [rows, attributes, skills, spells, weapons, items] = await Promise.all([
+      this.db.sql<CharacterRawData['character'][]>`
       SELECT
         c.id_character, c.name, c.level, c.id_race, c.subrace, c.id_class, c.id_subclass, c.id_armour, c.id_alignment,
         a.name AS armour_name, a.armour_type, a.armour_class_base, a.max_dexterity_bonus,
@@ -488,6 +510,7 @@ export class CharacterRepository {
         c.spellcasting_ability, c.spell_save_dc, c.spell_attack_bonus, c.spell_slots_expended,
         c.resource_uses_expended, c.active_effects,
         c.chosen_tool_proficiency, c.chosen_fighting_style,
+        c.chosen_languages, c.chosen_tools,
         c.hit_dice_spent, c.user_id,
         c.avatar_preset, c.image_url,
         al.name   AS alignment_name,
@@ -498,49 +521,44 @@ export class CharacterRepository {
       LEFT JOIN character_background cb ON cb.id_character = c.id_character
       WHERE c.id_character = ${id}
       LIMIT 1
-    `;
-
-    if (!rows.length) return null;
-
-    const character = rows[0];
-
-    const attributes = await this.db.sql<CharacterRawData['attributes'][number][]>`
+    `,
+      this.db.sql<CharacterRawData['attributes'][number][]>`
       SELECT at.name AS attribute_name, ca.bonus_value AS score, ca.modifier_value AS modifier
       FROM character_attribute ca
       JOIN attribute_type at ON at.id_attribute = ca.id_attribute
       WHERE ca.id_character = ${id}
-    `;
-
-    const skills = await this.db.sql<CharacterRawData['skills'][number][]>`
+    `,
+      this.db.sql<CharacterRawData['skills'][number][]>`
       SELECT s.id_skill, s.name, s.id_attribute, at.name AS attribute_name, s.description, cs.is_trained, cs.is_expert, cs.total_skill_value, cs.level_value
       FROM character_skill cs
       JOIN skill s ON s.id_skill = cs.id_skill
       JOIN attribute_type at ON at.id_attribute = s.id_attribute
       WHERE cs.id_character = ${id}
-    `;
-
-    const spells = await this.db.sql<CharacterRawData['spells'][number][]>`
+    `,
+      this.db.sql<CharacterRawData['spells'][number][]>`
       SELECT sp.id_spell, sp.name, sp.description, sp.casting_time, sp.range_distance,
              sp.duration, sp.is_verbal, sp.is_somatic, sp.is_material,
              sp.spelllevel AS "spellLevel", sp.school, csp.is_prepared
       FROM character_spell csp
       JOIN spell sp ON sp.id_spell = csp.id_spell
       WHERE csp.id_character = ${id}
-    `;
-
-    const weapons = await this.db.sql<CharacterRawData['weapons'][number][]>`
+    `,
+      this.db.sql<CharacterRawData['weapons'][number][]>`
       SELECT w.id_weapon, w.name, w.damage_die, w.damage_type, w.properties, w.weight, w.price_value, cw.has_proficiency
       FROM character_weapon cw
       JOIN weapon w ON w.id_weapon = cw.id_weapon
       WHERE cw.id_character = ${id}
-    `;
-
-    const items = await this.db.sql<CharacterRawData['items'][number][]>`
+    `,
+      this.db.sql<CharacterRawData['items'][number][]>`
       SELECT i.name
       FROM character_items ci
       JOIN item i ON i.id_item = ci.id_item
       WHERE ci.id_character = ${id}
-    `;
+    `,
+    ]);
+
+    if (!rows.length) return null;
+    const character = rows[0];
 
     return {character, attributes, skills, spells, weapons, items};
   }

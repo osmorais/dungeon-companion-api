@@ -4,6 +4,7 @@ import {SaveContext, SpellCardDamage} from './character-options-types';
 import {DamageDefenses} from '../services/character-sheet/combat-features';
 import {CombatEncounterDetail} from './combat-types';
 import {MonsterRevealCard} from '../services/monster-reveal';
+import {SessionCompanion} from '../services/character-sheet/companion';
 
 export interface GameSession {
   id_game_session: string;
@@ -13,6 +14,8 @@ export interface GameSession {
   dm_name: string;
   user_id: string | null;
   created_at?: Date;
+  /** Acerto automático do ataque contra a CA do alvo (1.25.0), opção do mestre. */
+  auto_hit_check?: boolean;
 }
 
 export interface NpcSessionInput {
@@ -119,6 +122,10 @@ export interface PlayerCharacterSummary {
   /** Resistências e reações pra quem aplica dano nele (ver `damageDefensesFor`) — vem no
    *  detalhe da sessão; ausente nos retornos de adicionar jogador/NPC. */
   defenses?: DamageDefenses;
+  /** Alcance da visão no escuro, em metros (informativo, no card da sessão). */
+  darkvision_m?: number | null;
+  /** Druida transformado (Forma Selvagem): o nome da besta; o PV acima é o da forma. */
+  wild_shape_name?: string | null;
 }
 
 export interface PlayerSession {
@@ -230,7 +237,9 @@ export type SecretRollCheck =
   | {kind: 'save'; ability: 'STR' | 'DEX' | 'CON' | 'INT' | 'WIS' | 'CHA'};
 
 export interface SecretRollRequestInput {
-  id_player_sessions: string[];
+  id_player_sessions?: string[];
+  /** Monstros atingidos (só resistência pública): o pedido vai pro mestre rolar (1.24.2). */
+  id_monster_sessions?: string[];
   check: SecretRollCheck;
   /** Nome do teste exibido pro jogador e no log do mestre (ex.: "Percepção"). */
   label: string;
@@ -238,6 +247,8 @@ export interface SecretRollRequestInput {
   dc?: number | null;
   /** Só resistência: contra o que é (decide a vantagem condicional). */
   against?: SaveContext[];
+  /** Tipo do dano da magia/ação: monstro imune a ele nem recebe o pedido (1.24.4). */
+  damage_type?: string | null;
   /** `false`: resistência contra magia/ação, pública e pedida por quem lançou (mestre ou
    *  jogador). Padrão `true`: teste secreto, só o mestre pede e só ele vê o resultado. */
   secret?: boolean;
@@ -277,6 +288,13 @@ export const CAST_ROLL_OUTCOMES = ['pending', 'hit', 'miss'] as const;
 
 /** Rolagem que faz parte do lançamento (o id é o da rolagem já registrada em /roll). */
 /** Dano/cura do lançamento já aplicado num alvo (mostrado no aviso, no lugar do aviso avulso). */
+/** Alvo escolhido no começo do lançamento (1.25.0) e como ele se saiu: a mesa vê o carimbo. */
+export interface CastStageTarget {
+  label: string;
+  /** Resistência pedida: aguardando, passou, falhou ou imune ao dano. */
+  save?: 'pending' | 'success' | 'fail' | 'immune' | null;
+}
+
 export interface CastStageApplied {
   label: string;
   amount: number;
@@ -332,6 +350,8 @@ export interface MonsterCastInfo {
   image_url: string | null;
   monster_type: string | null;
   size: string | null;
+  /** Slug do bestiário (arte padrão no site). */
+  monster_slug: string | null;
 }
 
 export interface SpellCastStageInput {
@@ -351,6 +371,8 @@ export interface SpellCastStageInput {
   rolls: CastStageRoll[];
   /** O que quem lança já aplicou nos alvos (opcional; clientes antigos não mandam). */
   applied?: CastStageApplied[];
+  /** Alvos escolhidos no começo (1.25.0; clientes antigos não mandam). */
+  targets?: CastStageTarget[];
   save_dc?: number | null;
   save_ability?: 'STR' | 'DEX' | 'CON' | 'INT' | 'WIS' | 'CHA' | null;
 }
@@ -360,20 +382,32 @@ export interface SpellCastStageInput {
  * calcula o PV (o cliente manda só a quantidade), então o jogador pode aplicar em aliados e em
  * monstros revelados sem conseguir gravar um PV qualquer.
  */
+/** PV do alvo depois de aplicar; no monstro, o que entrou e a defesa que valeu (1.24.4). */
+export interface ApplyAmountResult {
+  current_hit_points?: number;
+  temporary_hit_points?: number;
+  applied_amount?: number;
+  defense?: 'immune' | 'resistant' | 'vulnerable';
+}
+
 export interface ApplyAmountInput {
   id_character: number;
-  target_kind: 'player' | 'npc' | 'monster';
+  target_kind: 'player' | 'npc' | 'monster' | 'companion';
   target_id: string;
   amount: number;
   kind: 'damage' | 'heal' | 'temp_hp';
   /** Aplicação feita dentro de um lançamento: a mesa mostra no aviso dele, sem aviso avulso. */
   cast_id?: string;
+  /** Tipo do dano ("veneno"): no monstro, a API aplica imunidade/resistência/vulnerabilidade. */
+  damage_type?: string | null;
 }
 
 export interface GameSessionDetail {
   game_session: GameSession;
   players: PlayerSession[];
   npcs: NpcSession[];
+  /** Companheiros Animais dos rangers (Conclave da Besta), visíveis pra todos. */
+  companions: SessionCompanion[];
   /** Só preenchido para o mestre — jogadores recebem sempre um array vazio aqui. */
   monsters: MonsterSession[];
   /** Monstros revelados pelo mestre — visível para todos, sem status/PV. */

@@ -14,6 +14,8 @@ import {SupabaseStorageService} from '../../../services/supabase-storage.service
 import {ImageCleanupService} from '../../../services/image-cleanup.service';
 import {XP_THRESHOLDS} from '../../../services/character-sheet/rules';
 import {CharacterRawData} from '../../../models/character-sheet-types';
+import {buildWildShape} from '../../../services/character-sheet/wild-shape';
+import {WOLF} from '../character-sheet/wild-shape.unit';
 import {armour, characterInput, rawCharacter, skill, spell} from '../fixtures';
 
 describe('CharacterSheetService', () => {
@@ -283,6 +285,63 @@ describe('CharacterSheetService', () => {
   });
 
   // -------------------------------------------------------------------------
+  describe('idiomas e ferramentas à escolha (1.24.0)', () => {
+    it('criação: grava as escolhas válidas e a ficha mostra', () => {
+      const input = characterInput({
+        choices: {
+          languages: ['Élfico'],
+          tools: {'Um tipo de kit de jogo': 'Dados'},
+        },
+      });
+      const sheet = service.build(input).character_sheet;
+      expect(sheet.proficiencies_and_languages.languages).to.containEql(
+        'Élfico',
+      );
+      expect(sheet.proficiencies_and_languages.tools).to.containEql('Dados');
+      expect(sheet.proficiencies_and_languages.tools).to.not.containEql(
+        'Um tipo de kit de jogo',
+      );
+    });
+
+    it('criação: escolha inválida é recusada', () => {
+      expect(() =>
+        service.build(characterInput({choices: {languages: ['Comum']}})),
+      ).to.throw(/já fala/);
+    });
+
+    it('na ficha: dono escolhe, grava e recebe como fica', async () => {
+      givenCharacter();
+      const result = await service.setLanguageToolChoices(1, 'owner', {
+        languages: ['Anão'],
+        tools: {'Um tipo de kit de jogo': 'Baralho'},
+      });
+      expect(
+        repository.stubs.updateLanguageToolChoices.calledWith(1, ['Anão'], {
+          'Um tipo de kit de jogo': 'Baralho',
+        }),
+      ).to.be.true();
+      expect(result.languages).to.eql(['Comum', 'Anão']);
+      expect(result.tools).to.containEql('Baralho');
+    });
+
+    it('na ficha: outro usuário 403, ficha inexistente 404, escolha inválida não grava', async () => {
+      givenCharacter();
+      await expect(
+        service.setLanguageToolChoices(1, 'outro', {languages: ['Anão']}),
+      ).to.be.rejectedWith(/não pode alterar/);
+      await expect(
+        service.setLanguageToolChoices(1, 'owner', {
+          languages: ['Anão', 'Orc'],
+        }),
+      ).to.be.rejectedWith(/limite/);
+      expect(repository.stubs.updateLanguageToolChoices.called).to.be.false();
+      repository.stubs.findCharacterById.resolves(null);
+      await expect(
+        service.setLanguageToolChoices(9, 'owner', {}),
+      ).to.be.rejectedWith(/./);
+    });
+  });
+
   describe('level-up: travas comuns', () => {
     it('personagem inexistente', async () => {
       repository.stubs.findCharacterById.resolves(null);
@@ -354,6 +413,20 @@ describe('CharacterSheetService', () => {
       const preview = await service.getLevelUpPreview(1, 'owner');
       expect(preview.is_asi_level).to.be.true();
       expect(preview.feat_options.length).to.be.above(30);
+    });
+
+    it('talento já escolhido sai da lista; o Adepto Elemental (repetível) fica', async () => {
+      givenCharacter({character: {level: 7, id_subclass: 'campeao'}});
+      repository.stubs.findChosenFeats.resolves([
+        {level: 4, feat_id: 'duro'},
+        {level: 6, feat_id: 'adepto-elemental'},
+      ]);
+      const ids = (
+        await service.getLevelUpPreview(1, 'owner')
+      ).feat_options.map(f => f.id_feat);
+      expect(ids).to.not.containEql('duro');
+      expect(ids).to.containEql('adepto-elemental');
+      expect(ids).to.containEql('alerta');
     });
 
     it('Cavaleiro Arcano 3→4 vira terço-conjurador (espaços + magias novas)', async () => {
@@ -679,6 +752,26 @@ describe('CharacterSheetService', () => {
           asi_or_feat: {type: 'feat', feat_id: 'duro'},
         });
         expect(result.hp_gained).to.equal(5 + 2 + 2 * 4);
+      });
+
+      it('talento repetido é recusado (Vigoroso de novo); o Adepto Elemental pode repetir', async () => {
+        repository.stubs.findChosenFeats.resolves([
+          {level: 4, feat_id: 'duro'},
+          {level: 6, feat_id: 'adepto-elemental'},
+        ]);
+        await expect(
+          service.confirmLevelUp(1, 'owner', {
+            hit_die_roll: 5,
+            asi_or_feat: {type: 'feat', feat_id: 'duro'},
+          }),
+        ).to.be.rejectedWith(/já escolhido/);
+        expect(repository.stubs.applyLevelUp.called).to.be.false();
+        await expect(
+          service.confirmLevelUp(1, 'owner', {
+            hit_die_roll: 5,
+            asi_or_feat: {type: 'feat', feat_id: 'adepto-elemental'},
+          }),
+        ).to.be.fulfilled();
       });
     });
 
@@ -1047,6 +1140,136 @@ describe('CharacterSheetService', () => {
       await expect(
         service.expendSpellSlot(1, 1, 1, 'owner'),
       ).to.be.rejectedWith(/não possui espaços/);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('Forma Selvagem', () => {
+    const druid = (
+      level: number,
+      extra: Partial<CharacterRawData['character']> = {},
+    ) =>
+      rawCharacter({
+        character: {id_class: 5, level, chosen_fighting_style: null, ...extra},
+      });
+
+    it('transforma, gasta um uso e guarda a forma no personagem', async () => {
+      repository.stubs.findCharacterById.resolves(druid(2));
+      const {active_effects} = await service.setWildShape(1, 'owner', WOLF);
+      expect(active_effects.wild_shape).to.containDeep({
+        name: 'Lobo',
+        hp_current: 11,
+      });
+      sinon.assert.calledWith(repository.stubs.updateResourceUsesExpended, 1, {
+        'Forma Selvagem': 1,
+      });
+      sinon.assert.calledWith(
+        repository.stubs.updateActiveEffects,
+        1,
+        sinon.match({wild_shape: sinon.match({slug: 'lobo'})}),
+      );
+    });
+
+    it('recusa besta forte demais, sem usos, outra forma por cima, não druida e quem não controla', async () => {
+      repository.stubs.findCharacterById.resolves(druid(2));
+      await expect(
+        service.setWildShape(1, 'owner', {...WOLF, challenge_rating: 1}),
+      ).to.be.rejectedWith({statusCode: 422});
+      repository.stubs.findCharacterById.resolves(
+        druid(2, {resource_uses_expended: {'Forma Selvagem': 2}}),
+      );
+      await expect(service.setWildShape(1, 'owner', WOLF)).to.be.rejectedWith(
+        /Sem usos/,
+      );
+      repository.stubs.findCharacterById.resolves(
+        druid(2, {
+          active_effects: {
+            active: [],
+            turn_uses: {},
+            wild_shape: buildWildShape(WOLF),
+          },
+        }),
+      );
+      await expect(service.setWildShape(1, 'owner', WOLF)).to.be.rejectedWith({
+        statusCode: 409,
+      });
+      repository.stubs.findCharacterById.resolves(
+        rawCharacter({character: {level: 5}}),
+      );
+      await expect(service.setWildShape(1, 'owner', WOLF)).to.be.rejectedWith(
+        /Só druida/,
+      );
+      repository.stubs.findCharacterById.resolves(druid(2));
+      await expect(service.setWildShape(1, 'outro', WOLF)).to.be.rejectedWith({
+        statusCode: 403,
+      });
+      sinon.assert.notCalled(repository.stubs.updateActiveEffects);
+    });
+
+    it('Círculo da Lua vira besta de ND 1 já no nível 2', async () => {
+      repository.stubs.findCharacterById.resolves(
+        druid(2, {id_subclass: 'lua'}),
+      );
+      const {active_effects} = await service.setWildShape(1, 'owner', {
+        ...WOLF,
+        challenge_rating: 1,
+      });
+      expect(active_effects.wild_shape?.challenge_rating).to.equal(1);
+    });
+
+    it('sair da forma', async () => {
+      repository.stubs.findCharacterById.resolves(druid(2));
+      await expect(service.setWildShape(1, 'owner', null)).to.be.rejectedWith(
+        /não está transformado/,
+      );
+      repository.stubs.findCharacterById.resolves(
+        druid(2, {
+          active_effects: {
+            active: [],
+            turn_uses: {},
+            wild_shape: buildWildShape(WOLF),
+          },
+        }),
+      );
+      const {active_effects} = await service.setWildShape(1, 'owner', null);
+      expect(active_effects.wild_shape).to.be.null();
+    });
+
+    it('a ficha transformada usa PV, CA, FOR/DES/CON e deslocamento da besta; sem armas', async () => {
+      optionsRepository.stubs.findSpellsByIdsUpToLevel.resolves([]);
+      repository.stubs.findCharacterById.resolves(
+        druid(4, {
+          current_hit_points: 25,
+          max_hit_points: 30,
+          active_effects: {
+            active: [],
+            turn_uses: {},
+            wild_shape: {...buildWildShape(WOLF), hp_current: 6},
+          },
+        }),
+      );
+      const sheet = (await service.loadCharacter(1, 'owner'))!.character_sheet;
+      expect(sheet.combat_stats).to.containDeep({
+        armor_class: 13,
+        speed: 'terrestre 12 m',
+        hit_points: {max: 11, current: 6},
+      });
+      expect(sheet.attributes_and_saves.DEX.score).to.equal(15);
+      expect(sheet.attributes_and_saves.WIS.score).to.equal(12);
+      expect(sheet.weapons).to.eql([]);
+      expect(sheet.combat_features?.wild_shape).to.containDeep({
+        name: 'Lobo',
+        druid_hit_points: {current: 25, max: 30},
+        spells_blocked: true,
+        hours: 2,
+      });
+    });
+
+    it('sem forma, a ficha fica como sempre', async () => {
+      optionsRepository.stubs.findSpellsByIdsUpToLevel.resolves([]);
+      repository.stubs.findCharacterById.resolves(druid(4));
+      const sheet = (await service.loadCharacter(1, 'owner'))!.character_sheet;
+      expect(sheet.combat_features?.wild_shape).to.be.null();
     });
   });
 
@@ -1519,6 +1742,33 @@ describe('CharacterSheetService', () => {
         service.setSpellPrepared(1, 42, true, 'owner'),
       ).to.be.rejectedWith(/durante o combate/);
       sinon.assert.notCalled(repository.stubs.setSpellPrepared);
+    });
+
+    it('com a mesa, só o combate dela conta (combate esquecido noutra mesa não trava)', async () => {
+      const gs = '9ce28442-55a3-42f4-a187-17496f572109';
+      combatRepository.stubs.isCharacterPreparationLocked.resolves(false);
+      await service.setSpellPrepared(1, 42, true, 'owner', gs);
+      sinon.assert.calledWith(
+        combatRepository.stubs.isCharacterPreparationLocked,
+        1,
+        gs,
+      );
+      await service.loadCharacter(1, 'owner', gs);
+      sinon.assert.calledWith(
+        combatRepository.stubs.isCharacterPreparationLocked,
+        1,
+        gs,
+      );
+    });
+
+    it('id de mesa inválido é ignorado (vale qualquer combate, como antes)', async () => {
+      combatRepository.stubs.isCharacterPreparationLocked.resolves(false);
+      await service.setSpellPrepared(1, 42, true, 'owner', "x'; drop");
+      sinon.assert.calledWith(
+        combatRepository.stubs.isCharacterPreparationLocked,
+        1,
+        undefined,
+      );
     });
   });
 });

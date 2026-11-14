@@ -59,6 +59,10 @@ export interface CharacterInput {
     expertise_skill_ids?: number[];
     /** Só relevante se `raceRule.toolProficiencyChoice` existir (hoje só o Anão). */
     tool_proficiency?: string;
+    /** Idiomas à escolha da raça e do antecedente (1.24.0) — opcional, dá pra escolher depois na ficha. */
+    languages?: string[];
+    /** Ferramenta genérica do antecedente → a escolhida (ex.: {"Um tipo de kit de jogo": "Dados"}). */
+    tools?: Record<string, string>;
     /** Só relevante se `classRule.fightingStyleChoice` existir (hoje só o Guerreiro). */
     fighting_style?: string;
     /** Aumento de atributo à escolha da raça (Meio-Elfo: dois atributos diferentes, +1 cada, menos CAR). */
@@ -163,6 +167,9 @@ export interface CharacterRawData {
     active_effects: ActiveEffects | null;
     chosen_tool_proficiency: string | null;
     chosen_fighting_style: string | null;
+    /** Idiomas e ferramentas à escolha (1.24.0); nulos = ainda não escolheu. */
+    chosen_languages?: string[] | null;
+    chosen_tools?: Record<string, string> | null;
     hit_dice_spent: number;
     user_id: string;
     avatar_preset: AvatarPreset | null;
@@ -224,6 +231,16 @@ export interface CharacterSheet {
       weapons: string[];
       tools: string[];
       languages: string[];
+      /** Vagas "à escolha" e o que já foi escolhido (1.24.0) — a ficha deixa escolher depois. */
+      choices?: {
+        language_count: number;
+        /** Idiomas que dá pra escolher. */
+        language_options: readonly string[];
+        fixed_languages: string[];
+        chosen_languages: string[];
+        tool_slots: {placeholder: string; options: readonly string[]}[];
+        chosen_tools: Record<string, string>;
+      };
     };
     equipment: {
       currency: {cp: number; sp: number; ep: number; gp: number; pp: number};

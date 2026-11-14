@@ -1,4 +1,11 @@
 /* eslint-disable @typescript-eslint/naming-convention */
+import {ApplyAmountResult} from '../models/game-session-types';
+import {
+  DefenseOutcome,
+  damageAfterDefenses,
+  isImmuneTo,
+  monsterDefenses,
+} from './monster-defenses';
 import {inject, injectable, BindingScope, service} from '@loopback/core';
 import {HttpErrors} from '@loopback/rest';
 import {GameSessionRepository} from '../repositories/game-session.repository';
@@ -456,7 +463,7 @@ export class GameSessionService {
       name: result.customName ?? this.monsterSnapshotName(result.dataSnapshot),
       image_url: result.imageUrl ?? null,
       combat_xp: result.combatXp ?? null,
-      ...monsterRevealCard(result.dataSnapshot, null),
+      ...monsterRevealCard(result.dataSnapshot, null, result.monsterSlug),
     });
     // Também na resposta (1.15.1): quem derrotou já tem o acumulado sem esperar o socket — o
     // encerrar combate pergunta do XP logo depois de derrotar os que sobraram.
@@ -483,7 +490,14 @@ export class GameSessionService {
     currentHitPoints: number,
     temporaryHitPoints: number,
     userId: string,
-  ): Promise<{current_hit_points: number}> {
+    overflow: number = 0,
+  ): Promise<{
+    current_hit_points: number;
+    max_hit_points?: number;
+    wild_shape_name?: string | null;
+  }> {
+    if (!Number.isInteger(overflow) || overflow < 0)
+      throw new HttpErrors.UnprocessableEntity('overflow deve ser um inteiro não negativo');
     if (
       typeof currentHitPoints !== 'number' ||
       !Number.isInteger(currentHitPoints)
@@ -506,6 +520,7 @@ export class GameSessionService {
       currentHitPoints,
       temporaryHitPoints,
       userId,
+      overflow,
     );
     if (result.status === 'not_found')
       throw new HttpErrors.NotFound('Jogador não encontrado na sessão');
@@ -529,6 +544,12 @@ export class GameSessionService {
       id_player_session: idPlayerSession,
       current_hit_points: result.currentHitPoints ?? currentHitPoints,
       temporary_hit_points: temporaryHitPoints,
+      ...(result.wildShape
+        ? {
+            max_hit_points: result.wildShape.maxHitPoints,
+            wild_shape_name: result.wildShape.name,
+          }
+        : {}),
     });
     // Resistência Implacável (Meio-Orc) entrou sozinha: avisa a mesa ("USOU").
     if (result.relentlessEndurance) {
@@ -543,7 +564,15 @@ export class GameSessionService {
         is_ability: true,
       });
     }
-    return {current_hit_points: result.currentHitPoints ?? currentHitPoints};
+    return {
+      current_hit_points: result.currentHitPoints ?? currentHitPoints,
+      ...(result.wildShape
+        ? {
+            max_hit_points: result.wildShape.maxHitPoints,
+            wild_shape_name: result.wildShape.name,
+          }
+        : {}),
+    };
   }
 
   /** Só o mestre concede XP; cada jogador selecionado recebe o valor cheio informado (não dividido). */
@@ -740,7 +769,7 @@ export class GameSessionService {
         id_monster_session: m.id_monster_session,
         name: m.custom_name ?? this.monsterSnapshotName(m.data_snapshot),
         image_url: m.image_url,
-        ...monsterRevealCard(m.data_snapshot, m.lore),
+        ...monsterRevealCard(m.data_snapshot, m.lore, m.monster_api_slug),
       }));
 
     const combat = await this.combatService.getActiveEncounterDetail(id);
@@ -764,7 +793,7 @@ export class GameSessionService {
     idGameSession: string,
     input: ApplyAmountInput,
     userId: string,
-  ): Promise<{current_hit_points?: number; temporary_hit_points?: number}> {
+  ): Promise<ApplyAmountResult> {
     const amount = input?.amount;
     if (!Number.isInteger(amount) || amount < 1 || amount > APPLY_AMOUNT_MAX)
       throw new HttpErrors.UnprocessableEntity(
@@ -772,7 +801,7 @@ export class GameSessionService {
       );
     if (!['damage', 'heal', 'temp_hp'].includes(input.kind))
       throw new HttpErrors.UnprocessableEntity('kind inválido');
-    if (!['player', 'npc', 'monster'].includes(input.target_kind))
+    if (!['player', 'npc', 'monster', 'companion'].includes(input.target_kind))
       throw new HttpErrors.UnprocessableEntity('target_kind inválido');
     if (!Number.isInteger(input.id_character))
       throw new HttpErrors.UnprocessableEntity('id_character é obrigatório');
@@ -805,14 +834,73 @@ export class GameSessionService {
         'Só jogadores recebem PV temporários',
       );
 
-    const next = applyHpAmount(target, amount, input.kind);
+    // Monstro (1.24.4): imunidade, resistência e vulnerabilidade da ficha ao tipo do dano. O
+    // jogador não vê a ficha do monstro — quem ajusta é a API, e a mesa vê o que entrou.
+    let applied = amount;
+    let defense: DefenseOutcome = null;
+    if (input.target_kind === 'monster' && input.kind === 'damage' && input.damage_type) {
+      const adjusted = damageAfterDefenses(
+        monsterDefenses(target.data_snapshot),
+        String(input.damage_type),
+        amount,
+      );
+      applied = adjusted.amount;
+      defense = adjusted.outcome;
+    }
+    const next = applyHpAmount(target, applied, input.kind);
     const actorName =
       (await this.repository.findCharacterName(input.id_character)) ?? '—';
     let result: {current_hit_points?: number; temporary_hit_points?: number} =
       {};
     let after = {current: next.current, temp: next.temp};
 
-    if (input.target_kind === 'monster') {
+    if (input.target_kind === 'companion') {
+      after = {current: next.current, temp: 0};
+      await this.repository.writeCompanionHp(input.target_id, next.current);
+      this.events.publish({
+        type: 'companion_hp_updated',
+        id_game_session: idGameSession,
+        id_session_companion: input.target_id,
+        hp_current: next.current,
+      });
+      result = {current_hit_points: next.current};
+    } else if (input.target_kind === 'player' && target.wildShape) {
+      // Druida em Forma Selvagem: o dano vai na forma; o que passar dela, no druida.
+      const overflow =
+        input.kind === 'damage'
+          ? Math.max(0, Math.max(0, amount - target.temp) - target.current)
+          : 0;
+      const written = await this.repository.writeWildShapeHp(
+        target.id_character!,
+        target.wildShape.effects,
+        target.wildShape.druid,
+        next.current,
+        overflow,
+        next.temp,
+      );
+      after = {current: written.current, temp: next.temp};
+      this.events.publish({
+        type: 'player_hp_updated',
+        id_game_session: idGameSession,
+        id_player_session: input.target_id,
+        current_hit_points: written.current,
+        temporary_hit_points: next.temp,
+        max_hit_points: written.max,
+        wild_shape_name: written.name,
+      });
+      if (written.relentlessEndurance)
+        this.events.publish({
+          type: 'spell_cast',
+          id_game_session: idGameSession,
+          id_character: written.relentlessEndurance.idCharacter,
+          actor_name: written.relentlessEndurance.name,
+          spell_name: 'Resistência Implacável',
+          save_dc: null,
+          save_ability: null,
+          is_ability: true,
+        });
+      result = {current_hit_points: written.current, temporary_hit_points: next.temp};
+    } else if (input.target_kind === 'monster') {
       after = {current: next.current, temp: 0};
       await this.repository.writeMonsterHp(input.target_id, next.current);
       this.events.publish({
@@ -867,7 +955,8 @@ export class GameSessionService {
 
     const stats = applyStats({
       kind: input.kind,
-      targetKind: input.target_kind,
+      // Companheiro conta como aliado (como um NPC) nas estatísticas.
+      targetKind: input.target_kind === 'companion' ? 'npc' : input.target_kind,
       before: {current: target.current, temp: target.temp},
       after,
     });
@@ -881,11 +970,12 @@ export class GameSessionService {
       id_character: input.id_character,
       actor_name: actorName,
       target_label: target.label,
-      amount,
+      amount: applied,
       kind: input.kind,
       ...(input.cast_id ? {cast_id: input.cast_id} : {}),
+      ...(defense ? {defense} : {}),
     });
-    return result;
+    return defense ? {...result, applied_amount: applied, defense} : result;
   }
 
   /** Só o mestre pode alterar o PV atual de um NPC. */
@@ -1199,7 +1289,7 @@ export class GameSessionService {
       id_monster_session: idMonsterSession,
       name: result.customName ?? this.monsterSnapshotName(result.dataSnapshot),
       image_url: result.imageUrl ?? null,
-      ...monsterRevealCard(result.dataSnapshot, result.lore),
+      ...monsterRevealCard(result.dataSnapshot, result.lore, result.monsterSlug),
     });
     await this.joinActiveCombat(result.idGameSession!, idMonsterSession, userId);
   }
@@ -1323,10 +1413,14 @@ export class GameSessionService {
     const rollInput = {...input};
     delete rollInput.secret_request_id;
     delete rollInput.cast_id;
+    // Resistência de monstro: a rolagem fica oculta (só o mestre vê o total); a mesa recebe só
+    // o passou/falhou no `save_resolved`.
+    const monsterSave = !!request?.id_monster_session;
     const roll = await this.repository.addRoll(idGameSession, {
       ...rollInput,
       id_character: idCharacter,
-      is_hidden: (request?.secret ?? false) || (isDm && !!input.is_hidden),
+      is_hidden:
+        monsterSave || (request?.secret ?? false) || (isDm && !!input.is_hidden),
     });
     const answer: RollLogEntry = request
       ? {
@@ -1340,13 +1434,24 @@ export class GameSessionService {
               : null,
         }
       : roll;
-    if (idCharacter !== null)
-      await this.recordStats(idGameSession, idCharacter, rollStats(input));
+    // A mesa (e quem pediu a resistência) recebe já; a estatística do ranking grava depois, sem
+    // segurar a resposta (falha aqui só vai pro log).
     this.events.publish({
       type: 'roll_added',
       id_game_session: idGameSession,
       roll: castId ? {...answer, cast_id: castId} : answer,
     });
+    if (request?.id_monster_session && answer.save_outcome)
+      this.events.publish({
+        type: 'save_resolved',
+        id_game_session: idGameSession,
+        save_request_id: request.id,
+        id_monster_session: request.id_monster_session,
+        name: input.actor_name ?? 'Monstro',
+        outcome: answer.save_outcome,
+      });
+    if (idCharacter !== null)
+      void this.recordStats(idGameSession, idCharacter, rollStats(input));
     return answer;
   }
 
@@ -1385,7 +1490,15 @@ export class GameSessionService {
     idGameSession: string,
     input: SecretRollRequestInput,
     userId: string,
-  ): Promise<{id_player_session: string; request_id: string}[]> {
+  ): Promise<
+    {
+      id_player_session: string | null;
+      id_monster_session?: string | null;
+      /** `null` com `immune`: monstro imune ao dano, sem pedido (1.24.4). */
+      request_id: string | null;
+      immune?: boolean;
+    }[]
+  > {
     const isOwner = await this.repository.isSessionOwner(idGameSession, userId);
     // Teste secreto é só do mestre. Resistência pública (contra a magia/ação que alguém lançou)
     // qualquer um da mesa pede pros atingidos.
@@ -1401,8 +1514,15 @@ export class GameSessionService {
     const ids = Array.isArray(input.id_player_sessions)
       ? [...new Set(input.id_player_sessions)]
       : [];
-    if (ids.length === 0)
+    const monsterIds = Array.isArray(input.id_monster_sessions)
+      ? [...new Set(input.id_monster_sessions)]
+      : [];
+    if (ids.length === 0 && monsterIds.length === 0)
       throw new HttpErrors.UnprocessableEntity('Escolha ao menos um jogador');
+    if (monsterIds.length && secret)
+      throw new HttpErrors.UnprocessableEntity(
+        'Monstro só recebe resistência contra magia ou ação',
+      );
     const label = typeof input.label === 'string' ? input.label.trim() : '';
     if (!label || label.length > 60)
       throw new HttpErrors.UnprocessableEntity('label inválido');
@@ -1430,18 +1550,81 @@ export class GameSessionService {
     )
       throw new HttpErrors.UnprocessableEntity('contexto inválido');
 
-    const session = await this.repository.findById(idGameSession);
-    if (!session) throw new HttpErrors.NotFound('Sessão não encontrada');
+    const found = ids.length
+      ? await this.repository.findPlayersForRequest(idGameSession, ids)
+      : [];
     const targets = ids.map(id => {
-      const player = session.players.find(p => p.id_player_session === id);
-      if (!player?.user_id || !player.character)
+      const player = found.find(p => p.id_player_session === id);
+      if (!player?.user_id)
         throw new HttpErrors.UnprocessableEntity(
           'Jogador sem personagem ou fora da sessão',
         );
       return player;
     });
 
-    return targets.map(player => {
+    // Monstros (1.24.2): o mestre rola com o bônus da ficha. Jogador só marca monstro revelado
+    // (o escondido nem aparece pra ele); o pedido vai só pro mestre, com a CD.
+    const monsters = monsterIds.length
+      ? await this.repository.findMonstersForRequest(idGameSession, monsterIds)
+      : [];
+    const monsterTargets = monsterIds.map(id => {
+      const monster = monsters.find(m => m.id_monster_session === id);
+      if (!monster || (!isOwner && !monster.is_revealed))
+        throw new HttpErrors.UnprocessableEntity('Monstro fora da sessão');
+      return monster;
+    });
+    const dmUserId = monsterTargets.length
+      ? await this.repository.findSessionOwnerId(idGameSession)
+      : null;
+    if (monsterTargets.length && !dmUserId)
+      throw new HttpErrors.UnprocessableEntity('Sessão sem mestre');
+
+    const damageType =
+      typeof input.damage_type === 'string' ? input.damage_type.slice(0, 40) : null;
+    const monsterRequests = monsterTargets.map(monster => {
+      const name =
+        monster.custom_name ?? this.monsterSnapshotName(monster.data_snapshot);
+      // Imune ao dano da magia (ex.: esqueleto e veneno): nem pede a resistência (1.24.4).
+      if (isImmuneTo(monsterDefenses(monster.data_snapshot), damageType))
+        return {
+          id_player_session: null,
+          id_monster_session: monster.id_monster_session,
+          request_id: null,
+          immune: true,
+        };
+      const request = this.secretRequests.create({
+        id_game_session: idGameSession,
+        id_player_session: null,
+        id_monster_session: monster.id_monster_session,
+        id_character: null,
+        user_id: dmUserId!,
+        label,
+        dc,
+        secret: false,
+      });
+      this.events.publish({
+        type: 'secret_roll_requested',
+        id_game_session: idGameSession,
+        target_user_id: dmUserId!,
+        request_id: request.id,
+        id_player_session: null,
+        id_character: null,
+        id_monster_session: monster.id_monster_session,
+        monster_name: name,
+        dc,
+        label,
+        check: input.check,
+        secret: false,
+        against: [...new Set(against)],
+      });
+      return {
+        id_player_session: null,
+        id_monster_session: monster.id_monster_session,
+        request_id: request.id,
+      };
+    });
+
+    const playerRequests = targets.map(player => {
       const request = this.secretRequests.create({
         id_game_session: idGameSession,
         id_player_session: player.id_player_session,
@@ -1465,6 +1648,7 @@ export class GameSessionService {
       });
       return {id_player_session: player.id_player_session, request_id: request.id};
     });
+    return [...playerRequests, ...monsterRequests];
   }
 
   /** Só anuncia (broadcast via socket) — ao contrário de addRoll, não persiste nada, é puramente
@@ -1598,6 +1782,16 @@ export class GameSessionService {
       )
         throw new HttpErrors.UnprocessableEntity('applied inválido');
     }
+    const targets = input.targets ?? [];
+    if (!Array.isArray(targets) || targets.length > 20)
+      throw new HttpErrors.UnprocessableEntity('targets inválido');
+    for (const t of targets) {
+      if (
+        !shortText(t?.label, 80) ||
+        ![undefined, null, 'pending', 'success', 'fail', 'immune'].includes(t.save)
+      )
+        throw new HttpErrors.UnprocessableEntity('targets inválido');
+    }
     const saveDc = input.save_dc ?? null;
     const saveAbility = input.save_ability ?? null;
     if ((saveDc === null) !== (saveAbility === null))
@@ -1669,6 +1863,7 @@ export class GameSessionService {
         amount: a.amount,
         kind: a.kind,
       })),
+      targets: targets.map(t => ({label: t.label.trim(), save: t.save ?? null})),
       save_dc: saveDc,
       save_ability: saveAbility,
     });
@@ -1701,6 +1896,7 @@ export class GameSessionService {
       image_url: found.image_url,
       monster_type: card.monster_type,
       size: card.size,
+      monster_slug: found.monster_api_slug ?? null,
     };
   }
 

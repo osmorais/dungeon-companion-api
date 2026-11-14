@@ -1,6 +1,7 @@
 /* eslint-disable no-void */
 /* eslint-disable @typescript-eslint/naming-convention */
 import {FinalStats, StatKeyEn, StatBlock, SkillBlock, WeaponAction, Trait} from '../../models/character-sheet-types';
+import {isProficientWithWeapon} from './weapon-proficiency';
 import {Armour, Skill, Spell, WeaponOption, WeaponRow} from '../../models/character-options-types';
 import {RACES, SUBRACES, CLASSES, BACKGROUNDS, WEAPONS, SPELL_SLOTS, SUBCLASSES, RaceRule, ClassRule, BackgroundRule, WeaponRule, SubclassRule} from './rules';
 
@@ -268,7 +269,7 @@ export function calcArmorClass(
   if (armor?.armour_type == null) {
     if (classKey === CLASSES[1].id_class) { // Bárbaro
       ac = 10 + dexMod + getMod(stats.CON);
-    } else if (classKey === CLASSES[10].id_class) { // Monge
+    } else if (classKey === CLASSES[10].id_class && !hasShield) { // Monge (Defesa sem Armadura só sem escudo)
       ac = 10 + dexMod + getMod(stats.WIS);
     } else if (classKey === CLASSES[6].id_class && idSubclass === 'linhagem-draconica') { // Feiticeiro, Resiliência Dracônica
       ac = 13 + dexMod;
@@ -316,6 +317,8 @@ export function buildWeaponActions(
   stats: FinalStats,
   profBonus: number,
   fightingStyle?: string | null,
+  /** Proficiências em armas do personagem; ausente = trata todas como proficientes (legado). */
+  weaponProficiencies?: string[],
 ): WeaponRow[] {
 
   const weaponsVerified : WeaponRow[] = weapons.map(w => {
@@ -352,8 +355,15 @@ export function buildWeaponActions(
       abilityMod = strMod;
     }
 
-    w.attack_bonus = profBonus + abilityMod;
+    w.proficient = weaponProficiencies
+      ? isProficientWithWeapon(w.name, weaponProficiencies)
+      : true;
+    w.attack_bonus = (w.proficient ? profBonus : 0) + abilityMod;
     w.damage_modifier = abilityMod;
+    const versatile = props
+      .map(p => /^vers[aá]til\s*\((\d+d\d+)\)/i.exec(p.trim()))
+      .find(m => !!m);
+    w.versatile_die = versatile ? versatile[1] : null;
 
     // Estilo de Luta (Guerreiro): Arqueria (+2 ataque à distância) e Duelo (+2 dano com uma
     // única arma corpo a corpo de uma mão só, sem outra arma empunhada — aproximação: só se
@@ -523,8 +533,9 @@ export function buildLanguages(
   bgRule: BackgroundRule,
 ): string[] {
   const langs = [...raceRule.languages];
-  // Add placeholder bonus languages from background
-  for (let i = 0; i < bgRule.languages; i++) {
+  // Idiomas à escolha da raça (Humano, Meio-Elfo) e do antecedente.
+  const extra = (raceRule.extraLanguages ?? 0) + bgRule.languages;
+  for (let i = 0; i < extra; i++) {
     langs.push(`Idioma à escolha ${i + 1}`);
   }
   return [...new Set(langs)];

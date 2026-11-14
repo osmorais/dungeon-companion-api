@@ -57,7 +57,13 @@ export class SessionSocketGateway {
   }
 
   private async onConnection(socket: Socket): Promise<void> {
-    const idGameSession = String(socket.handshake.query.sessionId ?? '');
+    // `auth.sessionId` primeiro: vale por namespace, mesmo quando o navegador reaproveita a
+    // conexão do socket social (aí a query da conexão não traz o `sessionId`).
+    const authSession = socket.handshake.auth?.['sessionId'];
+    const idGameSession = String(
+      (typeof authSession === 'string' && authSession) ||
+        (socket.handshake.query.sessionId ?? ''),
+    );
     const userId = socket.data.userId as string;
     if (!idGameSession) {
       socket.disconnect(true);

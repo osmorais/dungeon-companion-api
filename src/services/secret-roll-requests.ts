@@ -8,8 +8,11 @@ import {randomUUID} from 'crypto';
 export interface SecretRollRequest {
   id: string;
   id_game_session: string;
-  id_player_session: string;
-  id_character: number;
+  /** Jogador atingido; `null` quando o alvo é um monstro (quem rola é o mestre). */
+  id_player_session: string | null;
+  /** Monstro atingido (resistência rolada pelo mestre, 1.24.2). */
+  id_monster_session?: string | null;
+  id_character: number | null;
   user_id: string;
   label: string;
   /** CD da resistência: fica só aqui — o jogador recebe só se passou ou falhou. */

@@ -1,11 +1,13 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {CombatEncounterDetail} from './combat-types';
+import {SessionCompanion} from '../services/character-sheet/companion';
 import {SaveContext} from './character-options-types';
 import {
   MonsterAbilityKey,
   MonsterSession,
   NpcSession,
   CastStageApplied,
+  CastStageTarget,
   CastStageRoll,
   PlayerSession,
   RollLogEntry,
@@ -33,6 +35,12 @@ export interface SessionEventPayloadMap {
   npc_added: {npc: NpcSession};
   npc_removed: {id_npc_session: string};
   monster_added: {monster: MonsterSession};
+  /** Companheiro Animal escolhido, trocado (`companion`) ou dispensado (`null`). */
+  companion_set: {
+    id_player_session: string;
+    companion: SessionCompanion | null;
+  };
+  companion_hp_updated: {id_session_companion: string; hp_current: number};
   monster_removed: {id_monster_session: string};
   /** Com a carta (tipo e tamanho; sem lore) pra explosão no aviso de derrota (1.11.0). */
   monster_defeated: {
@@ -53,6 +61,9 @@ export interface SessionEventPayloadMap {
     id_player_session: string;
     current_hit_points: number;
     temporary_hit_points: number;
+    /** Forma Selvagem entrou em jogo: o PV máximo mostrado e a forma (`null` = voltou ao normal). */
+    max_hit_points?: number;
+    wild_shape_name?: string | null;
   };
   player_xp_granted: {
     id_player_session: string;
@@ -97,12 +108,28 @@ export interface SessionEventPayloadMap {
   monster_hidden: {id_monster_session: string};
   /** `cast_id`: rolagem de um lançamento de magia — a mesa mostra no aviso do lançamento. */
   roll_added: {roll: RollLogEntry & {cast_id?: string}};
+  /** Mestre mudou uma opção da mesa no Quadro do Mestre (1.25.0). */
+  session_settings_updated: {auto_hit_check: boolean};
+  /** Resistência de monstro resolvida pelo mestre: a mesa sabe só se passou ou falhou (o total
+   *  fica na rolagem oculta, 1.24.2). */
+  save_resolved: {
+    save_request_id: string;
+    id_monster_session: string;
+    name: string;
+    outcome: 'success' | 'fail';
+  };
   /** Teste secreto pedido pelo mestre — vai só pro jogador alvo (ver `eventTargetUserId`). */
   secret_roll_requested: {
     target_user_id: string;
     request_id: string;
-    id_player_session: string;
-    id_character: number;
+    /** `null` quando o alvo é um monstro (o pedido vai pro mestre). */
+    id_player_session: string | null;
+    id_character: number | null;
+    /** Monstro atingido e o nome dele (só nos pedidos pro mestre, 1.24.2). */
+    id_monster_session?: string | null;
+    monster_name?: string | null;
+    /** CD — só no pedido de monstro, que vai só pro mestre (o jogador nunca recebe). */
+    dc?: number | null;
     label: string;
     check: SecretRollCheck;
     /** Teste secreto (só o mestre vê) ou resistência pública contra uma magia/ação. */
@@ -135,6 +162,8 @@ export interface SessionEventPayloadMap {
     phase: 'open' | 'done' | 'cancel';
     rolls: CastStageRoll[];
     applied: CastStageApplied[];
+    /** Alvos escolhidos no começo e o resultado da resistência de cada um (1.25.0). */
+    targets: CastStageTarget[];
     save_dc: number | null;
     save_ability: 'STR' | 'DEX' | 'CON' | 'INT' | 'WIS' | 'CHA' | null;
   };
@@ -148,6 +177,8 @@ export interface SessionEventPayloadMap {
     kind: 'damage' | 'heal' | 'temp_hp';
     /** Veio de um lançamento: a mesa mostra no aviso dele (sem aviso avulso). */
     cast_id?: string;
+    /** Monstro imune/resistente/vulnerável ao dano (o `amount` já é o que entrou, 1.24.4). */
+    defense?: 'immune' | 'resistant' | 'vulnerable' | null;
   };
   /** Mestre mostra uma imagem de referência em tela cheia pra todos da sessão. */
   reference_image_shown: {image: ShownReferenceImage};

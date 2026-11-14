@@ -69,16 +69,27 @@ export function buildPrintHtml(sheet: CharacterSheet): string {
   }).join('');
 
   // ── Weapons ──────────────────────────────────────────────────────────────
+  // Dano com o atributo somado ("1d8+3"); arma versátil mostra também o dado com as duas mãos.
+  const damageText = (die: string | null | undefined, mod: number) =>
+    !die ? '—' : mod ? `${die}${mod > 0 ? '+' : '−'}${Math.abs(mod)}` : die;
   const weaponRows = cs.weapons.map(w => `
     <tr>
-      <td>${esc(w.name)}</td>
+      <td>${esc(w.name)}${w.proficient === false ? ' <span class="skill-attr">(sem proficiência)</span>' : ''}</td>
       <td class="center">${sign(w.attack_bonus)}</td>
-      <td class="center">${esc(w.damage_die ?? '—')} ${esc(w.damage_type ?? '')}</td>
+      <td class="center">${esc(damageText(w.damage_die, w.damage_modifier))} ${esc(w.damage_type ?? '')}${
+        w.versatile_die ? ` <span class="skill-attr">(${esc(damageText(w.versatile_die, w.damage_modifier))} com as duas mãos)</span>` : ''
+      }</td>
       <td class="props">${esc(w.properties ?? '—')}</td>
     </tr>`).join('');
 
   // ── Equipment / Items ────────────────────────────────────────────────────
-  const itemsList = cs.equipment.items.map(i => `<li>${esc(i)}</li>`).join('');
+  // Armadura e escudo vestidos entram na lista (explicam a CA); o kit inicial fica no inventário da
+  // sessão (decisão de 2026-10-16), então a ficha sozinha pode não ter outros itens.
+  const worn = [
+    cs.equipment.equipped_armour ? `${cs.equipment.equipped_armour.name} (vestida)` : null,
+    cs.equipment.has_shield ? 'Escudo (empunhado)' : null,
+  ].filter((i): i is string => !!i);
+  const itemsList = [...worn, ...cs.equipment.items].map(i => `<li>${esc(i)}</li>`).join('');
 
   // ── Currency ─────────────────────────────────────────────────────────────
   const currency = cs.equipment.currency;
@@ -535,7 +546,7 @@ export function buildPrintHtml(sheet: CharacterSheet): string {
     <div class="lower-col">
       <div class="section-title">Equipamento</div>
       <div class="currency-row">${currencyHtml}</div>
-      ${itemsList ? `<ul class="items-list" style="margin-top:10px">${itemsList}</ul>` : '<p style="font-size:12px;color:#888;margin-top:8px">Nenhum item.</p>'}
+      ${itemsList ? `<ul class="items-list" style="margin-top:10px">${itemsList}</ul>` : '<p style="font-size:12px;color:#888;margin-top:8px">Nenhum item na ficha (o equipamento inicial fica no inventário da sessão).</p>'}
 
       <div class="section-title" style="margin-top:16px">Proficiências &amp; Idiomas</div>
       <div class="prof-block">${profLines || '<p style="font-size:12px;color:#888">—</p>'}</div>

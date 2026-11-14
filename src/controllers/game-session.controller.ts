@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/naming-convention */
+import {ApplyAmountResult} from '../models/game-session-types';
 import {inject} from '@loopback/core';
 import {
   del,
@@ -462,18 +463,21 @@ export class GameSessionController {
             properties: {
               current_hit_points: {type: 'integer'},
               temporary_hit_points: {type: 'integer'},
+              // Forma Selvagem: dano que passou do PV da forma (vai pro druida).
+              overflow: {type: 'integer'},
             },
           },
         },
       },
     })
-    body: {current_hit_points: number; temporary_hit_points: number},
-  ): Promise<{current_hit_points: number}> {
+    body: {current_hit_points: number; temporary_hit_points: number; overflow?: number},
+  ): Promise<object> {
     return this.gameSessionService.updateCharacterHp(
       idPlayerSession,
       body.current_hit_points,
       body.temporary_hit_points,
       currentUser.id,
+      body.overflow ?? 0,
     );
   }
 
@@ -624,7 +628,15 @@ export class GameSessionController {
       content: {'application/json': {schema: {type: 'object'}}},
     })
     body: SecretRollRequestInput,
-  ): Promise<{id_player_session: string; request_id: string}[]> {
+  ): Promise<
+    {
+      id_player_session: string | null;
+      id_monster_session?: string | null;
+      /** `null` com `immune`: monstro imune ao dano, sem pedido (1.24.4). */
+      request_id: string | null;
+      immune?: boolean;
+    }[]
+  > {
     return this.gameSessionService.requestSecretRoll(id, body, currentUser.id);
   }
 
@@ -682,7 +694,7 @@ export class GameSessionController {
       content: {'application/json': {schema: {type: 'object'}}},
     })
     body: ApplyAmountInput,
-  ): Promise<{current_hit_points?: number; temporary_hit_points?: number}> {
+  ): Promise<ApplyAmountResult> {
     return this.gameSessionService.applyAmount(id, body, currentUser.id);
   }
 

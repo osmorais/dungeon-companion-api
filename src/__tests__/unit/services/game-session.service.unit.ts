@@ -52,6 +52,7 @@ function sessionDetail(): GameSessionDetail {
     game_session: {user_id: 'dm'} as GameSessionDetail['game_session'],
     players: [],
     npcs: [],
+    companions: [],
     monsters: [
       monster('m1', {is_revealed: true}),
       monster('m2', {
@@ -351,6 +352,86 @@ describe('GameSessionService', () => {
       });
     });
 
+    it('companheiro: dano no PV dele e a mesa recebe o PV novo', async () => {
+      repository.stubs.findApplyTarget.resolves({
+        id_character: null,
+        label: 'Lobo',
+        current: 12,
+        max: 12,
+        temp: 0,
+        is_revealed: true,
+      });
+      const result = await service.applyAmount(
+        'gs',
+        input({
+          target_kind: 'companion',
+          target_id: 'c1',
+          kind: 'damage',
+          amount: 5,
+        }),
+        'u1',
+      );
+      expect(result).to.eql({current_hit_points: 7});
+      sinon.assert.calledWith(repository.stubs.writeCompanionHp, 'c1', 7);
+      expect(events[0]).to.eql({
+        type: 'companion_hp_updated',
+        id_game_session: 'gs',
+        id_session_companion: 'c1',
+        hp_current: 7,
+      });
+      await expect(
+        service.applyAmount(
+          'gs',
+          input({target_kind: 'companion', target_id: 'c1', kind: 'temp_hp'}),
+          'u1',
+        ),
+      ).to.be.rejectedWith(/PV temporários/);
+    });
+
+    it('druida em Forma Selvagem: o dano vai na forma e o que sobra passa pro druida', async () => {
+      const effects = {
+        active: [],
+        turn_uses: {},
+        wild_shape: {hp_current: 4, hp_max: 11, name: 'Lobo'},
+      } as never;
+      repository.stubs.findApplyTarget.resolves({
+        ...ally,
+        current: 4,
+        max: 11,
+        temp: 1,
+        wildShape: {effects, druid: {current: 25, max: 30}},
+      });
+      repository.stubs.writeWildShapeHp.resolves({
+        current: 20,
+        max: 30,
+        name: null,
+        relentlessEndurance: null,
+      });
+      const result = await service.applyAmount(
+        'gs',
+        input({kind: 'damage', amount: 10}),
+        'u1',
+      );
+      // 10 de dano: 1 na vida temporária, 4 na forma, 5 passam pro druida
+      sinon.assert.calledWith(
+        repository.stubs.writeWildShapeHp,
+        20,
+        effects,
+        {current: 25, max: 30},
+        0,
+        5,
+        0,
+      );
+      sinon.assert.notCalled(repository.stubs.writeCharacterHp);
+      expect(result).to.eql({current_hit_points: 20, temporary_hit_points: 0});
+      expect(events[0]).to.containDeep({
+        type: 'player_hp_updated',
+        current_hit_points: 20,
+        max_hit_points: 30,
+        wild_shape_name: null,
+      });
+    });
+
     it('aplicação de um lançamento leva o cast_id no aviso (a mesa mostra no aviso dele)', async () => {
       await service.applyAmount('gs', {...input(), cast_id: 'cast-0001'}, 'u1');
       expect(events.find(e => e.type === 'amount_applied')).to.containDeep({
@@ -398,6 +479,61 @@ describe('GameSessionService', () => {
       expect(
         isDmOnlyEvent(events.find(e => e.type === 'amount_applied')!),
       ).to.be.false();
+    });
+
+    describe('defesas do monstro ao dano (1.24.4)', () => {
+      const skeleton = {
+        ...goblin,
+        label: 'Esqueleto',
+        current: 13,
+        max: 13,
+        data_snapshot: {
+          damage_immunities: ['veneno'],
+          damage_resistances: ['fogo'],
+          damage_vulnerabilities: ['concussão'],
+        },
+      };
+      const hit = (damage_type: string, amount = 8) =>
+        service.applyAmount(
+          'gs',
+          input({
+            target_kind: 'monster',
+            target_id: 'm1',
+            kind: 'damage',
+            amount,
+            damage_type,
+          }),
+          'u1',
+        );
+      beforeEach(() => repository.stubs.findApplyTarget.resolves(skeleton));
+
+      it('imune: nada entra e a mesa vê o 0 com o aviso', async () => {
+        const result = await hit('veneno');
+        expect(result).to.containDeep({applied_amount: 0, defense: 'immune'});
+        expect(
+          repository.stubs.writeMonsterHp.calledWith('m1', 13),
+        ).to.be.true();
+        expect(events.find(e => e.type === 'amount_applied')).to.containDeep({
+          amount: 0,
+          defense: 'immune',
+        });
+      });
+
+      it('resistente: metade pra baixo; vulnerável: o dobro ("contundente" = concussão)', async () => {
+        expect(await hit('fogo', 7)).to.containDeep({
+          applied_amount: 3,
+          defense: 'resistant',
+        });
+        expect(await hit('contundente', 3)).to.containDeep({
+          applied_amount: 6,
+          defense: 'vulnerable',
+        });
+      });
+
+      it('sem tipo ou tipo comum: dano inteiro, sem aviso', async () => {
+        expect(await hit('cortante', 5)).to.eql({});
+        expect(repository.stubs.writeMonsterHp.lastCall.args).to.eql(['m1', 8]);
+      });
     });
 
     it('monstro escondido: 404 pro jogador, mas o mestre aplica', async () => {
@@ -653,13 +789,22 @@ describe('GameSessionService', () => {
       const detail = await service.getSession('gs', 'player');
       expect(detail.monsters).to.eql([]);
       const noCard = {monster_type: null, size: null, lore: null};
+      // Slug do bestiário pra arte padrão no site (1.23.0).
+      const goblinArt = {monster_slug: 'goblin'};
       expect(detail.revealed_monsters).to.eql([
-        {id_monster_session: 'm1', name: 'Goblin', image_url: null, ...noCard},
+        {
+          id_monster_session: 'm1',
+          name: 'Goblin',
+          image_url: null,
+          ...noCard,
+          ...goblinArt,
+        },
         {
           id_monster_session: 'm2',
           name: 'Chefão',
           image_url: 'c.png',
           ...noCard,
+          ...goblinArt,
         },
       ]);
       expect(
@@ -692,6 +837,7 @@ describe('GameSessionService', () => {
           monster_type: 'humanoide',
           size: 'Pequeno',
           lore: 'Pequenos e traiçoeiros.',
+          monster_slug: 'goblin',
         },
       ]);
     });
@@ -743,6 +889,38 @@ describe('GameSessionService', () => {
           temporary_hit_points: 3,
         },
       ]);
+    });
+
+    it('Forma Selvagem: repassa o dano que sobrou e avisa a mesa do PV máximo e da forma', async () => {
+      await expect(
+        service.updateCharacterHp('ps', 0, 0, 'u', -2),
+      ).to.be.rejectedWith(/overflow/);
+      repository.stubs.updateCharacterHp.resolves({
+        status: 'ok',
+        idGameSession: 'gs',
+        currentHitPoints: 18,
+        wildShape: {maxHitPoints: 30, name: null},
+      });
+      const result = await service.updateCharacterHp('ps', 0, 0, 'u', 7);
+      sinon.assert.calledWith(
+        repository.stubs.updateCharacterHp,
+        'ps',
+        0,
+        0,
+        'u',
+        7,
+      );
+      expect(result).to.eql({
+        current_hit_points: 18,
+        max_hit_points: 30,
+        wild_shape_name: null,
+      });
+      expect(events[0]).to.containDeep({
+        type: 'player_hp_updated',
+        current_hit_points: 18,
+        max_hit_points: 30,
+        wild_shape_name: null,
+      });
     });
 
     it('Resistência Implacável: grava 1 em vez de 0, devolve o PV final e avisa a mesa', async () => {
@@ -914,6 +1092,7 @@ describe('GameSessionService', () => {
         },
         imageUrl: 'o.png',
         lore: 'Saqueadores das montanhas.',
+        monsterSlug: 'orc',
       });
       await service.revealMonster('m', 'dm');
       expect(events).to.eql([
@@ -926,6 +1105,7 @@ describe('GameSessionService', () => {
           monster_type: 'humanoide',
           size: 'Médio',
           lore: 'Saqueadores das montanhas.',
+          monster_slug: 'orc',
         },
       ]);
     });
@@ -1014,6 +1194,7 @@ describe('GameSessionService', () => {
           hit_points: 15,
         },
         imageUrl: null,
+        monsterSlug: 'orc',
       });
       await service.defeatMonster('m', 'dm');
       expect(events).to.eql([
@@ -1026,6 +1207,7 @@ describe('GameSessionService', () => {
           monster_type: 'humanoide',
           size: 'Médio',
           lore: null,
+          monster_slug: 'orc',
           combat_xp: null,
         },
       ]);
@@ -1456,6 +1638,18 @@ describe('GameSessionService', () => {
       );
     });
 
+    it('a mesa recebe a rolagem sem esperar a estatística do ranking gravar', async () => {
+      repository.stubs.bumpStats.returns(new Promise<void>(() => {}));
+      const roll = await service.addRoll(
+        'gs',
+        {...ROLL, id_character: 7, dice_notation: '1d20', rolls: [12]},
+        'u',
+      );
+      expect(roll).to.be.ok();
+      expect(events.map(e => e.type)).to.containEql('roll_added');
+      sinon.assert.calledOnce(repository.stubs.bumpStats);
+    });
+
     it('rolagem de d20 com 20 natural soma crítico pra quem rolou', async () => {
       await service.addRoll(
         'gs',
@@ -1732,11 +1926,30 @@ describe('GameSessionService', () => {
         async (_gs, user) => user === 'dm',
       );
       repository.stubs.findById.resolves({...sessionDetail(), players});
+      repository.stubs.findPlayersForRequest.callsFake(async (_gs, ids) =>
+        players
+          .filter(p => ids.includes(p.id_player_session) && p.character)
+          .map(p => ({
+            id_player_session: p.id_player_session,
+            user_id: p.user_id ?? null,
+            id_character: p.id_character,
+          })),
+      );
       repository.stubs.hasSessionAccess.resolves(true);
       repository.stubs.canPostRollFor.resolves(true);
       repository.stubs.addRoll.callsFake(
         async (_gs, input) => ({...input}) as unknown as RollLogEntry,
       );
+    });
+
+    it('confere os jogadores numa consulta só, sem carregar a sessão inteira', async () => {
+      await service.requestSecretRoll('gs', perception, 'dm');
+      sinon.assert.calledOnceWithExactly(
+        repository.stubs.findPlayersForRequest,
+        'gs',
+        ['p1'],
+      );
+      sinon.assert.notCalled(repository.stubs.findById);
     });
 
     it('só o mestre pede', async () => {
@@ -1806,7 +2019,7 @@ describe('GameSessionService', () => {
         id_character: 10,
         roll_type: 'skill' as const,
         label: 'Teste secreto: Percepção',
-        secret_request_id: request_id,
+        secret_request_id: request_id!,
       };
       const roll = await service.addRoll('gs', answer, 'u1');
       expect(roll.is_hidden).to.be.true();
@@ -1858,7 +2071,7 @@ describe('GameSessionService', () => {
         );
         const failed = await service.addRoll(
           'gs',
-          answerTo(request_id, 13),
+          answerTo(request_id!, 13),
           'u1',
         );
         expect(failed).to.containDeep({
@@ -1868,7 +2081,7 @@ describe('GameSessionService', () => {
         // Indomável: rola de novo pelo mesmo pedido
         const passed = await service.addRoll(
           'gs',
-          answerTo(request_id, 14),
+          answerTo(request_id!, 14),
           'u1',
         );
         expect(passed.save_outcome).to.equal('success');
@@ -1880,7 +2093,11 @@ describe('GameSessionService', () => {
           {...save, dc: null},
           'dm',
         );
-        const roll = await service.addRoll('gs', answerTo(request_id, 3), 'u1');
+        const roll = await service.addRoll(
+          'gs',
+          answerTo(request_id!, 3),
+          'u1',
+        );
         expect(roll.save_outcome).to.be.null();
       });
 
@@ -1893,7 +2110,7 @@ describe('GameSessionService', () => {
         expect(events[0]).to.containDeep({secret: false});
         const roll = await service.addRoll(
           'gs',
-          answerTo(request_id, 20),
+          answerTo(request_id!, 20),
           'u1',
         );
         expect(roll.is_hidden).to.be.false();
@@ -1901,6 +2118,165 @@ describe('GameSessionService', () => {
         expect(isDmOnlyEvent(events[1])).to.be.false();
         expect(events[1]).to.containDeep({
           roll: {save_request_id: request_id, save_outcome: 'success'},
+        });
+      });
+
+      describe('monstros atingidos (1.24.2)', () => {
+        const fireball = {
+          id_monster_sessions: ['m1'],
+          check: {kind: 'save' as const, ability: 'DEX' as const},
+          label: 'Bola de Fogo',
+          dc: 15,
+          against: ['magic' as const],
+          secret: false,
+        };
+        beforeEach(() => {
+          repository.stubs.findSessionOwnerId.resolves('dm');
+          repository.stubs.findMonstersForRequest.resolves([
+            {
+              id_monster_session: 'm1',
+              custom_name: null,
+              data_snapshot: {name: 'Goblin'},
+              is_revealed: true,
+            },
+            {
+              id_monster_session: 'm2',
+              custom_name: 'Chefe',
+              data_snapshot: {name: 'Hobgoblin'},
+              is_revealed: false,
+            },
+          ]);
+        });
+        const dmAnswer = (request_id: string, total: number) => ({
+          ...ROLL,
+          id_character: null,
+          actor_name: 'Goblin',
+          roll_type: 'save' as const,
+          label: 'Resistência: Destreza',
+          total,
+          secret_request_id: request_id,
+        });
+
+        it('o pedido vai só pro mestre, com o monstro e a CD', async () => {
+          const [created] = await service.requestSecretRoll(
+            'gs',
+            fireball,
+            'u2',
+          );
+          expect(created).to.containDeep({
+            id_player_session: null,
+            id_monster_session: 'm1',
+          });
+          expect(events[0]).to.containDeep({
+            type: 'secret_roll_requested',
+            target_user_id: 'dm',
+            id_monster_session: 'm1',
+            monster_name: 'Goblin',
+            dc: 15,
+            secret: false,
+          });
+        });
+
+        it('o mestre rola: rolagem oculta e a mesa recebe só passou/falhou', async () => {
+          const [{request_id}] = await service.requestSecretRoll(
+            'gs',
+            fireball,
+            'u2',
+          );
+          events.length = 0;
+          const roll = await service.addRoll(
+            'gs',
+            dmAnswer(request_id!, 12),
+            'dm',
+          );
+          expect(roll.is_hidden).to.be.true();
+          expect(isDmOnlyEvent(events[0])).to.be.true();
+          expect(events[1]).to.eql({
+            type: 'save_resolved',
+            id_game_session: 'gs',
+            save_request_id: request_id,
+            id_monster_session: 'm1',
+            name: 'Goblin',
+            outcome: 'fail',
+          });
+          expect(isDmOnlyEvent(events[1])).to.be.false();
+        });
+
+        it('só o mestre responde pelo monstro', async () => {
+          const [{request_id}] = await service.requestSecretRoll(
+            'gs',
+            fireball,
+            'u2',
+          );
+          await expect(
+            service.addRoll('gs', dmAnswer(request_id!, 20), 'u2'),
+          ).to.be.rejectedWith(/não pode registrar|inválido/);
+        });
+
+        it('jogador não marca monstro escondido; monstro não recebe teste secreto', async () => {
+          await expect(
+            service.requestSecretRoll(
+              'gs',
+              {...fireball, id_monster_sessions: ['m2']},
+              'u2',
+            ),
+          ).to.be.rejectedWith(/fora da sessão/);
+          await expect(
+            service.requestSecretRoll('gs', {...fireball, secret: true}, 'dm'),
+          ).to.be.rejectedWith(/Monstro só recebe/);
+          // O mestre pode marcar o escondido.
+          await expect(
+            service.requestSecretRoll(
+              'gs',
+              {...fireball, id_monster_sessions: ['m2']},
+              'dm',
+            ),
+          ).to.be.fulfilled();
+        });
+
+        it('monstro imune ao dano da magia nem recebe o pedido (1.24.4)', async () => {
+          repository.stubs.findMonstersForRequest.resolves([
+            {
+              id_monster_session: 'm1',
+              custom_name: null,
+              data_snapshot: {name: 'Esqueleto', damage_immunities: ['veneno']},
+              is_revealed: true,
+            },
+          ]);
+          const created = await service.requestSecretRoll(
+            'gs',
+            {...fireball, damage_type: 'veneno'},
+            'u2',
+          );
+          expect(created).to.eql([
+            {
+              id_player_session: null,
+              id_monster_session: 'm1',
+              request_id: null,
+              immune: true,
+            },
+          ]);
+          expect(
+            events.filter(e => e.type === 'secret_roll_requested'),
+          ).to.have.length(0);
+          // Outro tipo de dano: pede normalmente.
+          const [fire] = await service.requestSecretRoll(
+            'gs',
+            {...fireball, damage_type: 'fogo'},
+            'u2',
+          );
+          expect(fire.request_id).to.be.a.String();
+        });
+
+        it('jogadores e monstros no mesmo pedido', async () => {
+          const created = await service.requestSecretRoll(
+            'gs',
+            {...fireball, id_player_sessions: ['p1']},
+            'u2',
+          );
+          expect(
+            created.map(c => c.id_player_session ?? c.id_monster_session),
+          ).to.eql(['p1', 'm1']);
         });
       });
 
@@ -1943,21 +2319,21 @@ describe('GameSessionService', () => {
       await expect(
         service.addRoll(
           'gs',
-          {...ROLL, id_character: 10, secret_request_id: request_id},
+          {...ROLL, id_character: 10, secret_request_id: request_id!},
           'u2',
         ),
       ).to.be.rejectedWith(/inválido ou expirado/);
       await expect(
         service.addRoll(
           'gs',
-          {...ROLL, id_character: 20, secret_request_id: request_id},
+          {...ROLL, id_character: 20, secret_request_id: request_id!},
           'u1',
         ),
       ).to.be.rejectedWith(/inválido ou expirado/);
       // ainda vale pro dono certo
       const roll = await service.addRoll(
         'gs',
-        {...ROLL, id_character: 10, secret_request_id: request_id},
+        {...ROLL, id_character: 10, secret_request_id: request_id!},
         'u1',
       );
       expect(roll.is_hidden).to.be.true();
@@ -2100,6 +2476,35 @@ describe('GameSessionService', () => {
       repository.stubs.findSpellCard.resolves(SPELL);
     });
 
+    it('leva os alvos escolhidos com o resultado da resistência (1.25.0) e valida', async () => {
+      await service.publishSpellCastStage(
+        'gs',
+        {
+          ...STAGE,
+          targets: [
+            {label: ' Goblin ', save: 'fail'},
+            {label: 'Esqueleto', save: 'immune'},
+            {label: 'Lyra'},
+          ],
+        },
+        'u1',
+      );
+      expect(events[0]).to.containDeep({
+        targets: [
+          {label: 'Goblin', save: 'fail'},
+          {label: 'Esqueleto', save: 'immune'},
+          {label: 'Lyra', save: null},
+        ],
+      });
+      await expect(
+        service.publishSpellCastStage(
+          'gs',
+          {...STAGE, targets: [{label: 'x', save: 'talvez' as never}]},
+          'u1',
+        ),
+      ).to.be.rejectedWith(/targets inválido/);
+    });
+
     it('publica a etapa com a carta da magia e quem lançou (não grava nada)', async () => {
       await service.publishSpellCastStage('gs', STAGE, 'u1');
       expect(events).to.eql([
@@ -2118,6 +2523,7 @@ describe('GameSessionService', () => {
           phase: 'open',
           rolls: STAGE.rolls,
           applied: [],
+          targets: [],
           save_dc: null,
           save_ability: null,
         },
@@ -2172,6 +2578,7 @@ describe('GameSessionService', () => {
         custom_name: null,
         image_url: 'g.png',
         data_snapshot: {name: 'Goblin', type: 'humanoide', size: 'Pequeno'},
+        monster_api_slug: 'goblin',
         ...over,
       });
 
@@ -2195,6 +2602,7 @@ describe('GameSessionService', () => {
             image_url: 'g.png',
             monster_type: 'humanoide',
             size: 'Pequeno',
+            monster_slug: 'goblin',
           },
         });
         expect(repository.stubs.canPostRollFor.called).to.be.false();

@@ -264,6 +264,7 @@ describe('CombatService', () => {
           data_snapshot: {name: 'Goblin'},
           image_url: null,
           lore: null,
+          monster_api_slug: 'goblin',
         },
       ]);
 
@@ -400,6 +401,7 @@ describe('CombatService', () => {
           data_snapshot: {},
           image_url: 'x.png',
           lore: null,
+          monster_api_slug: null,
         },
       ]);
       await service.addParticipants(
