@@ -955,3 +955,8 @@ ALTER TABLE character ADD COLUMN IF NOT EXISTS chosen_tools JSONB;
 -- Acerto automático do ataque contra a CA do alvo (1.25.0), ligado pelo mestre no Quadro do Mestre.
 -- false (padrão): quem rola responde "passou da CA?". Ver game-session.service.ts (resolveAttack).
 ALTER TABLE game_session ADD COLUMN IF NOT EXISTS auto_hit_check BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Penalidades de magia no monstro da sessão (1.26.0): Perdição, Fogo das Fadas, Raio Guiador,
+-- Zombaria Viciosa, Raio do Enfraquecimento — {"bane": {"from": "Irmã Clara"}, ...}.
+-- Nulo = nenhuma. Ver services/monster-spell-effects.ts; limpa no fim do combate.
+ALTER TABLE monster_session ADD COLUMN IF NOT EXISTS spell_effects JSONB;

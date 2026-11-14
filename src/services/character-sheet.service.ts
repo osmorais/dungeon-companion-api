@@ -112,6 +112,10 @@ import {
 import {abilityMechanicsFor} from './character-sheet/ability-mechanics';
 import {
   ACTIVATABLE_EFFECTS,
+  applySpellArmorClass,
+  buildSpellWeaponEffect,
+  SPELL_BOON_KEYS,
+  SpellBoonKey,
   ActiveEffects,
   EMPTY_ACTIVE_EFFECTS,
   ONCE_PER_TURN_RIDERS,
@@ -870,9 +874,17 @@ export class CharacterSheetService {
     const equippedArmourRule = character.id_armour
       ? {armour_type: character.armour_type, armour_class_base: character.armour_class_base, max_dexterity_bonus: character.max_dexterity_bonus}
       : null;
-    const ac = wildShape
+    const baseAc = wildShape
       ? wildShape.armor_class
       : calcArmorClass(equippedArmourRule, stats, character.has_shield, character.id_class, character.chosen_fighting_style, subclassRule?.id_subclass);
+    // Magias na CA (Armadura Arcana, Escudo da Fé, Escudo Arcano, Pele de Árvore, Velocidade) —
+    // vale na ficha e no acerto automático contra o personagem (`AttackCheckService`).
+    const ac = applySpellArmorClass(baseAc, character.active_effects, {
+      wearingArmour: !!equippedArmourRule?.armour_type,
+      hasShield: !!character.has_shield,
+      dexMod: getMod(stats.DEX),
+      wildShape: !!wildShape,
+    });
 
     const spellcastingResult = buildSpellcasting(
       classRule,
@@ -1654,7 +1666,13 @@ export class CharacterSheetService {
     await this.repository.updateEquipment(id, input.id_armour, input.has_shield);
 
     const stats = applyLevelBasedAttributeBonuses(this.statsFromRaw(attributes), character.id_class, character.level);
-    const ac = calcArmorClass(armour, stats, input.has_shield, character.id_class, character.chosen_fighting_style, character.id_subclass);
+    const baseAc = calcArmorClass(armour, stats, input.has_shield, character.id_class, character.chosen_fighting_style, character.id_subclass);
+    const ac = applySpellArmorClass(baseAc, character.active_effects, {
+      wearingArmour: !!armour?.armour_type,
+      hasShield: input.has_shield,
+      dexMod: getMod(stats.DEX),
+      wildShape: !!character.active_effects?.wild_shape,
+    });
     return {armor_class: ac};
   }
 
@@ -1880,12 +1898,22 @@ export class CharacterSheetService {
   }
 
   /**
-   * Liga/desliga um efeito ativo (Fúria, Arma Sagrada) ou marca uma soma 1×/turno como usada na
-   * vez atual do combate (`turn_key`). Fica guardado no personagem (coluna `active_effects`).
+   * Liga/desliga um efeito ativo (Fúria, Arma Sagrada), guarda/encerra a magia na arma (Arma
+   * Mágica, Arma Elemental) ou marca uma soma 1×/turno como usada na vez atual do combate (`turn_key`). Fica guardado no personagem (coluna `active_effects`).
    */
   async updateActiveEffects(
     id: number,
-    input: {effect?: string; active?: boolean; turn_use?: string; turn_key?: string; consume_inspiration?: boolean},
+    input: {
+      effect?: string;
+      active?: boolean;
+      turn_use?: string;
+      turn_key?: string;
+      consume_inspiration?: boolean;
+      /** Arma Mágica / Arma Elemental lançada (`null` encerra). */
+      spell_weapon?: {id_spell?: number; slot_level?: number; element?: string | null} | null;
+      /** Orientação/Resistência usada num teste (gasta) ou Bênção encerrada. */
+      consume_boon?: string;
+    },
     userId: string,
   ): Promise<{active_effects: ActiveEffects}> {
     const raw = await this.repository.findCharacterById(id);
@@ -1905,11 +1933,32 @@ export class CharacterSheetService {
       if (!(ONCE_PER_TURN_RIDERS as readonly string[]).includes(input.turn_use) || !turnKey || turnKey.length > 120)
         throw new HttpErrors.UnprocessableEntity('Uso por turno inválido');
       next = {...current, turn_uses: {...current.turn_uses, [input.turn_use]: turnKey}};
+    } else if (input.spell_weapon !== undefined) {
+      if (input.spell_weapon === null) {
+        next = {...current, spell_weapon: null};
+      } else {
+        const {id_spell, slot_level, element} = input.spell_weapon ?? {};
+        const effect =
+          typeof id_spell === 'number' && typeof slot_level === 'number'
+            ? buildSpellWeaponEffect(id_spell, slot_level, element)
+            : null;
+        if (!effect) throw new HttpErrors.UnprocessableEntity('Magia na arma inválida');
+        if (!raw.spells.some(s => s.id_spell === id_spell))
+          throw new HttpErrors.UnprocessableEntity('O personagem não conhece essa magia');
+        next = {...current, spell_weapon: effect};
+      }
+    } else if (input.consume_boon !== undefined) {
+      const key = input.consume_boon as SpellBoonKey;
+      if (!SPELL_BOON_KEYS.includes(key)) throw new HttpErrors.UnprocessableEntity('Magia de apoio inválida');
+      if (!current[key]) throw new HttpErrors.UnprocessableEntity('Essa magia não está ativa no personagem');
+      next = {...current, [key]: null};
     } else if (input.consume_inspiration === true) {
       if (!current.bardic_inspiration) throw new HttpErrors.UnprocessableEntity('Sem Inspiração Bárdica guardada');
       next = {...current, bardic_inspiration: null};
     } else {
-      throw new HttpErrors.UnprocessableEntity('Informe effect/active, turn_use/turn_key ou consume_inspiration');
+      throw new HttpErrors.UnprocessableEntity(
+        'Informe effect/active, turn_use/turn_key, spell_weapon, consume_boon ou consume_inspiration',
+      );
     }
     await this.repository.updateActiveEffects(id, next);
     return {active_effects: next};

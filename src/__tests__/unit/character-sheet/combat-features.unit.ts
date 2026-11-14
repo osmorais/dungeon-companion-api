@@ -4,6 +4,11 @@ import {
   attacksPerAction,
   bardicInspirationSides,
   buildCombatFeatures,
+  buildSpellWeaponEffect,
+  ELEMENTAL_WEAPON_TYPES,
+  SPELL_WEAPON_SPELLS,
+  spellBoonMaxTargets,
+  applySpellArmorClass,
   damageDefensesFor,
   darkvisionFor,
 } from '../../../services/character-sheet/combat-features';
@@ -359,6 +364,158 @@ describe('combat-features', () => {
     expect(def({idClass: 10, level: 7})).to.containDeep({
       uncanny_dodge: false,
       evasion: true,
+    });
+  });
+
+  describe('magias na arma (Arma Mágica, Arma Elemental)', () => {
+    it('mesmos ids e elementos do web (roll-modal/spell-weapon.ts)', () => {
+      expect(Object.keys(SPELL_WEAPON_SPELLS).map(Number).sort()).to.eql([
+        22, 24,
+      ]);
+      expect([...ELEMENTAL_WEAPON_TYPES]).to.eql([
+        'ácido',
+        'elétrico',
+        'frio',
+        'fogo',
+        'trovejante',
+      ]);
+    });
+
+    it('Arma Mágica: +1 no ataque e no dano, +2 no 4º círculo, +3 no 6º', () => {
+      expect(
+        [2, 3, 4, 5, 6, 9].map(
+          slot => buildSpellWeaponEffect(24, slot)!.attack_bonus,
+        ),
+      ).to.eql([1, 1, 2, 2, 3, 3]);
+      expect(buildSpellWeaponEffect(24, 6)).to.eql({
+        id_spell: 24,
+        name: 'Arma Mágica',
+        slot_level: 6,
+        attack_bonus: 3,
+        damage_bonus: 3,
+        dice: null,
+        damage_type: null,
+      });
+    });
+
+    it('Arma Elemental: +1/1d4, +2/2d4 no 5º e 6º, +3/3d4 no 7º+, do elemento escolhido', () => {
+      expect(
+        [3, 4, 5, 6, 7, 9].map(slot => {
+          const e = buildSpellWeaponEffect(22, slot, 'frio')!;
+          return [e.attack_bonus, e.dice!.count];
+        }),
+      ).to.eql([
+        [1, 1],
+        [1, 1],
+        [2, 2],
+        [2, 2],
+        [3, 3],
+        [3, 3],
+      ]);
+      expect(buildSpellWeaponEffect(22, 3, 'trovejante')).to.containDeep({
+        name: 'Arma Elemental (trovejante)',
+        damage_bonus: 0,
+        dice: {count: 1, sides: 4},
+        damage_type: 'trovejante',
+      });
+    });
+
+    it('recusa círculo abaixo do da magia, acima do 9º, elemento inválido e outra magia', () => {
+      expect(buildSpellWeaponEffect(24, 1)).to.be.null();
+      expect(buildSpellWeaponEffect(24, 10)).to.be.null();
+      expect(buildSpellWeaponEffect(24, 2.5)).to.be.null();
+      expect(buildSpellWeaponEffect(22, 2, 'fogo')).to.be.null();
+      expect(buildSpellWeaponEffect(22, 3)).to.be.null();
+      expect(buildSpellWeaponEffect(22, 3, 'radiante')).to.be.null();
+      expect(buildSpellWeaponEffect(49, 3)).to.be.null();
+    });
+  });
+
+  describe('magias de apoio (Bênção, Orientação, Resistência)', () => {
+    it('Bênção: 3 alvos no 1º círculo, +1 por círculo acima', () => {
+      expect([1, 2, 3, 9].map(slot => spellBoonMaxTargets(42, slot))).to.eql([
+        3, 4, 5, 11,
+      ]);
+      expect(spellBoonMaxTargets(42, 0)).to.be.null();
+      expect(spellBoonMaxTargets(42, 10)).to.be.null();
+    });
+
+    it('magias de CA: um alvo, no círculo da magia ou maior', () => {
+      expect(spellBoonMaxTargets(25, 1)).to.equal(1); // Armadura Arcana
+      expect(spellBoonMaxTargets(146, 3)).to.equal(1); // Escudo da Fé não ganha alvo
+      expect(spellBoonMaxTargets(145, 1)).to.equal(1); // Escudo Arcano
+      expect(spellBoonMaxTargets(261, 1)).to.be.null(); // Pele de Árvore é 2º
+      expect(spellBoonMaxTargets(351, 3)).to.equal(1); // Velocidade
+    });
+
+    it('CA: Armadura Arcana troca a base (sem armadura), somas e mínimo da Pele de Árvore', () => {
+      const ctx = {
+        wearingArmour: false,
+        hasShield: false,
+        dexMod: 2,
+        wildShape: false,
+      };
+      const fx = (e: Record<string, unknown>) => ({
+        active: [],
+        turn_uses: {},
+        ...e,
+      });
+      const by = {from: 'Elara'};
+      expect(applySpellArmorClass(12, null, ctx)).to.equal(12);
+      expect(applySpellArmorClass(12, fx({mage_armor: by}), ctx)).to.equal(15);
+      expect(
+        applySpellArmorClass(12, fx({mage_armor: by}), {
+          ...ctx,
+          hasShield: true,
+        }),
+      ).to.equal(17);
+      // Defesa sem Armadura maior que 13 + DES: fica a maior
+      expect(applySpellArmorClass(17, fx({mage_armor: by}), ctx)).to.equal(17);
+      // de armadura ou em Forma Selvagem a Armadura Arcana não vale
+      expect(
+        applySpellArmorClass(16, fx({mage_armor: by}), {
+          ...ctx,
+          wearingArmour: true,
+          dexMod: 5,
+        }),
+      ).to.equal(16);
+      expect(
+        applySpellArmorClass(11, fx({mage_armor: by}), {
+          ...ctx,
+          wildShape: true,
+        }),
+      ).to.equal(11);
+      expect(
+        applySpellArmorClass(
+          15,
+          fx({shield_of_faith: by, haste: by, shield: by}),
+          ctx,
+        ),
+      ).to.equal(15 + 2 + 2 + 5);
+      expect(applySpellArmorClass(12, fx({barkskin: by}), ctx)).to.equal(16);
+      expect(applySpellArmorClass(18, fx({barkskin: by}), ctx)).to.equal(18);
+    });
+
+    it('Velocidade: vantagem em resistência de Destreza', () => {
+      const features = buildCombatFeatures({
+        ...base,
+        activeEffects: {active: [], turn_uses: {}, haste: {from: 'Elara'}},
+      } as Parameters<typeof buildCombatFeatures>[0]);
+      expect(features.d20_reminders).to.containDeep([
+        {
+          applies: 'save',
+          abilities: ['DEX'],
+          against: null,
+          text: 'Vantagem (Velocidade)',
+        },
+      ]);
+    });
+
+    it('Orientação e Resistência: truques de um alvo', () => {
+      expect(spellBoonMaxTargets(247, 0)).to.equal(1);
+      expect(spellBoonMaxTargets(305, 0)).to.equal(1);
+      expect(spellBoonMaxTargets(305, 1)).to.be.null();
+      expect(spellBoonMaxTargets(49, 1)).to.be.null();
     });
   });
 });

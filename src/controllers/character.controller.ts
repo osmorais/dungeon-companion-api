@@ -399,18 +399,26 @@ export class CharacterController {
   @patch('/api/character-sheet/{id}/active-effects')
   @response(200, {
     description:
-      'Liga/desliga um efeito ativo (Fúria, Arma Sagrada) ou marca uma soma 1×/turno (Ataque Furtivo, Golpe Divino, Matador de Inimigos) como usada na vez atual do combate',
+      'Liga/desliga um efeito ativo (Fúria, Arma Sagrada, Arma Mágica/Elemental) ou marca uma soma 1×/turno (Ataque Furtivo, Golpe Divino, Matador de Inimigos) como usada na vez atual do combate',
     content: {'application/json': {schema: {type: 'object'}}},
   })
   async updateActiveEffects(
     @param.path.number('id') id: number,
     @inject(SecurityBindings.USER) currentUser: UserProfile,
     @requestBody({
-      description: '{effect, active} ou {turn_use, turn_key}',
+      description: '{effect, active}, {turn_use, turn_key}, {spell_weapon} ou {consume_inspiration}',
       required: true,
       content: {'application/json': {schema: {type: 'object'}}},
     })
-    body: {effect?: string; active?: boolean; turn_use?: string; turn_key?: string; consume_inspiration?: boolean},
+    body: {
+      effect?: string;
+      active?: boolean;
+      turn_use?: string;
+      turn_key?: string;
+      consume_inspiration?: boolean;
+      spell_weapon?: {id_spell?: number; slot_level?: number; element?: string | null} | null;
+      consume_boon?: string;
+    },
   ): Promise<object> {
     return this.characterSheetService.updateActiveEffects(id, body, currentUser.id);
   }

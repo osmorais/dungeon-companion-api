@@ -1448,6 +1448,145 @@ describe('CharacterSheetService', () => {
       ).to.be.rejectedWith(/Sem Inspiração/);
     });
 
+    it('Arma Mágica/Elemental: guarda o bônus do círculo, substitui e encerra', async () => {
+      repository.stubs.findCharacterById.resolves(
+        rawCharacter({
+          spells: [
+            {...spell(24, 'Arma Mágica', 2), is_prepared: true},
+            {...spell(22, 'Arma Elemental', 3), is_prepared: true},
+          ],
+        }),
+      );
+      const magic = await service.updateActiveEffects(
+        1,
+        {spell_weapon: {id_spell: 24, slot_level: 4}},
+        'owner',
+      );
+      expect(magic.active_effects.spell_weapon).to.containDeep({
+        name: 'Arma Mágica',
+        attack_bonus: 2,
+        damage_bonus: 2,
+        dice: null,
+      });
+      const elemental = await service.updateActiveEffects(
+        1,
+        {spell_weapon: {id_spell: 22, slot_level: 3, element: 'fogo'}},
+        'owner',
+      );
+      expect(elemental.active_effects.spell_weapon).to.containDeep({
+        name: 'Arma Elemental (fogo)',
+        attack_bonus: 1,
+        dice: {count: 1, sides: 4},
+        damage_type: 'fogo',
+      });
+      const off = await service.updateActiveEffects(
+        1,
+        {spell_weapon: null},
+        'owner',
+      );
+      expect(off.active_effects.spell_weapon).to.be.null();
+    });
+
+    it('Arma Mágica/Elemental: valida magia, círculo, elemento, se conhece e permissão', async () => {
+      repository.stubs.findCharacterById.resolves(
+        rawCharacter({
+          spells: [{...spell(22, 'Arma Elemental', 3), is_prepared: true}],
+        }),
+      );
+      const invalid = [
+        {id_spell: 22, slot_level: 2, element: 'fogo'}, // abaixo do 3º
+        {id_spell: 22, slot_level: 3}, // sem elemento
+        {id_spell: 22, slot_level: 3, element: 'psíquico'},
+        {id_spell: 49, slot_level: 1}, // Bruxaria não é magia na arma
+        {id_spell: 22, slot_level: 10, element: 'fogo'},
+      ];
+      for (const sw of invalid) {
+        await expect(
+          service.updateActiveEffects(1, {spell_weapon: sw}, 'owner'),
+        ).to.be.rejectedWith(/Magia na arma inválida/);
+      }
+      await expect(
+        service.updateActiveEffects(
+          1,
+          {spell_weapon: {id_spell: 24, slot_level: 2}},
+          'owner',
+        ),
+      ).to.be.rejectedWith(/não conhece/);
+      await expect(
+        service.updateActiveEffects(
+          1,
+          {spell_weapon: {id_spell: 22, slot_level: 3, element: 'fogo'}},
+          'outro',
+        ),
+      ).to.be.rejected();
+      expect(repository.stubs.updateActiveEffects.called).to.be.false();
+    });
+
+    it('gasta Orientação/Resistência usada e encerra Bênção; recusa o que não está ativo', async () => {
+      repository.stubs.findCharacterById.resolves(
+        rawCharacter({
+          character: {
+            active_effects: {
+              active: [],
+              turn_uses: {},
+              guidance: {from: 'Irmã Clara'},
+              bless: {from: 'Irmã Clara'},
+            },
+          },
+        }),
+      );
+      const used = await service.updateActiveEffects(
+        1,
+        {consume_boon: 'guidance'},
+        'owner',
+      );
+      expect(used.active_effects.guidance).to.be.null();
+      expect(used.active_effects.bless).to.eql({from: 'Irmã Clara'});
+      const ended = await service.updateActiveEffects(
+        1,
+        {consume_boon: 'bless'},
+        'owner',
+      );
+      expect(ended.active_effects.bless).to.be.null();
+      await expect(
+        service.updateActiveEffects(1, {consume_boon: 'resistance'}, 'owner'),
+      ).to.be.rejectedWith(/não está ativa/);
+      await expect(
+        service.updateActiveEffects(1, {consume_boon: 'spell_weapon'}, 'owner'),
+      ).to.be.rejectedWith(/apoio inválida/);
+      await expect(
+        service.updateActiveEffects(1, {consume_boon: 'bless'}, 'outro'),
+      ).to.be.rejected();
+    });
+
+    it('a CA da ficha soma as magias ativas; Encerrar tira', async () => {
+      const base = (await service.loadCharacter(1, 'owner'))!.character_sheet
+        .combat_stats.armor_class;
+      repository.stubs.findCharacterById.resolves(
+        rawCharacter({
+          character: {
+            id_class: 1,
+            chosen_fighting_style: null,
+            active_effects: {
+              active: [],
+              turn_uses: {},
+              shield_of_faith: {from: 'Clara'},
+              haste: {from: 'Elara'},
+            },
+          },
+        }),
+      );
+      const buffed = (await service.loadCharacter(1, 'owner'))!.character_sheet;
+      expect(buffed.combat_stats.armor_class).to.equal(base + 4);
+      const ended = await service.updateActiveEffects(
+        1,
+        {consume_boon: 'haste'},
+        'owner',
+      );
+      expect(ended.active_effects.haste).to.be.null();
+      expect(ended.active_effects.shield_of_faith).to.eql({from: 'Clara'});
+    });
+
     it('valida efeito, soma, vez e permissão', async () => {
       await expect(
         service.updateActiveEffects(1, {effect: 'Voo', active: true}, 'owner'),

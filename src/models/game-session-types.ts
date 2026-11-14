@@ -4,6 +4,7 @@ import {SaveContext, SpellCardDamage} from './character-options-types';
 import {DamageDefenses} from '../services/character-sheet/combat-features';
 import {CombatEncounterDetail} from './combat-types';
 import {MonsterRevealCard} from '../services/monster-reveal';
+import {MonsterSpellEffects} from '../services/monster-spell-effects';
 import {SessionCompanion} from '../services/character-sheet/companion';
 
 export interface GameSession {
@@ -159,6 +160,8 @@ export interface MonsterSession {
   image_url: string | null;
   /** Usos das ações (recarga, por dia, lendárias, reação, covil) — 1.11.0. Nulo = nada gasto. */
   action_state?: unknown;
+  /** Penalidades de magia (Perdição, Fogo das Fadas…) — 1.26.0. Nulo = nenhuma. */
+  spell_effects?: unknown;
   /** Descrição do bestiário (pela slug; nula em ficha antiga) — só no detalhe da sessão. */
   lore?: string | null;
 }
@@ -171,6 +174,8 @@ export interface RevealedMonster extends MonsterRevealCard {
   id_monster_session: string;
   name: string;
   image_url: string | null;
+  /** Penalidades de magia visíveis pra mesa (vantagem contra o alvo, etc.) — 1.26.0. */
+  spell_effects: MonsterSpellEffects;
 }
 
 export interface GameSessionCreated {
@@ -252,6 +257,8 @@ export interface SecretRollRequestInput {
   /** `false`: resistência contra magia/ação, pública e pedida por quem lançou (mestre ou
    *  jogador). Padrão `true`: teste secreto, só o mestre pede e só ele vê o resultado. */
   secret?: boolean;
+  /** Só monstro atingido: penalidade que fica nele se falhar (Perdição, Zombaria…) — 1.26.0. */
+  on_fail_effect?: {key: string; from: string} | null;
 }
 
 /** Anúncio de "jogador lançou uma magia" — só informativo, não persiste (ao contrário da

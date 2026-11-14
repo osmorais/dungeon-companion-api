@@ -53,8 +53,17 @@ import {
 import {
   bardicInspirationSides,
   SAVE_CONTEXTS,
+  SPELL_BOONS,
+  spellBoonMaxTargets,
 } from './character-sheet/combat-features';
 import {startingInventory} from './character-sheet/starting-items';
+import {
+  isMonsterSpellEffectKey,
+  MonsterSpellEffectKey,
+  MonsterSpellEffects,
+  normalizeMonsterSpellEffects,
+  withMonsterSpellEffect,
+} from './monster-spell-effects';
 import {applyHpAmount} from './hp-math';
 import {monsterRevealCard} from './monster-reveal';
 import {
@@ -769,6 +778,7 @@ export class GameSessionService {
         id_monster_session: m.id_monster_session,
         name: m.custom_name ?? this.monsterSnapshotName(m.data_snapshot),
         image_url: m.image_url,
+        spell_effects: normalizeMonsterSpellEffects(m.spell_effects),
         ...monsterRevealCard(m.data_snapshot, m.lore, m.monster_api_slug),
       }));
 
@@ -1441,7 +1451,7 @@ export class GameSessionService {
       id_game_session: idGameSession,
       roll: castId ? {...answer, cast_id: castId} : answer,
     });
-    if (request?.id_monster_session && answer.save_outcome)
+    if (request?.id_monster_session && answer.save_outcome) {
       this.events.publish({
         type: 'save_resolved',
         id_game_session: idGameSession,
@@ -1450,6 +1460,16 @@ export class GameSessionService {
         name: input.actor_name ?? 'Monstro',
         outcome: answer.save_outcome,
       });
+      // Perdição, Fogo das Fadas, Zombaria…: falhou, fica a penalidade; passou ao rolar de novo
+      // (Indomável/Sortudo do mestre), sai a que este pedido tinha posto.
+      if (request.on_fail_effect)
+        await this.applyMonsterSaveEffect(
+          idGameSession,
+          request.id_monster_session,
+          request.on_fail_effect,
+          answer.save_outcome === 'fail',
+        );
+    }
     if (idCharacter !== null)
       void this.recordStats(idGameSession, idCharacter, rollStats(input));
     return answer;
@@ -1480,6 +1500,119 @@ export class GameSessionService {
     const sides = bardicInspirationSides(bard.level);
     await this.repository.setBardicInspiration(ally.id_character, {sides, from: bard.name});
     return {sides, to: ally.character.name};
+  }
+
+  private async applyMonsterSaveEffect(
+    idGameSession: string,
+    idMonsterSession: string,
+    effect: {key: MonsterSpellEffectKey; from: string},
+    failed: boolean,
+  ): Promise<void> {
+    const monster = await this.repository.findMonsterSpellEffects(idGameSession, idMonsterSession);
+    if (!monster) return;
+    const current = normalizeMonsterSpellEffects(monster.spell_effects);
+    if (!failed && current[effect.key]?.from !== effect.from) return;
+    const next = withMonsterSpellEffect(current, effect.key, failed ? effect.from : null);
+    await this.repository.setMonsterSpellEffects(idMonsterSession, next);
+    this.events.publish({
+      type: 'monster_spell_effects_updated',
+      id_game_session: idGameSession,
+      id_monster_session: idMonsterSession,
+      spell_effects: next,
+      is_revealed: monster.is_revealed,
+    });
+  }
+
+  /**
+   * Liga/desliga uma penalidade de magia num monstro da sessão (1.26.0): o mestre em qualquer
+   * monstro; jogador só em monstro revelado (Raio Guiador ao acertar, gastar o "próximo ataque"
+   * com vantagem). Avisa a mesa (monstro escondido: só o mestre).
+   */
+  async updateMonsterSpellEffect(
+    idGameSession: string,
+    idMonsterSession: string,
+    input: {key?: string; active?: boolean; from?: string},
+    userId: string,
+  ): Promise<{spell_effects: MonsterSpellEffects}> {
+    const hasAccess = await this.repository.hasSessionAccess(idGameSession, userId);
+    if (!hasAccess) throw new HttpErrors.Forbidden('Você não tem acesso a esta sessão');
+    if (!isMonsterSpellEffectKey(input.key) || typeof input.active !== 'boolean')
+      throw new HttpErrors.UnprocessableEntity('Penalidade inválida');
+    const from = typeof input.from === 'string' ? input.from.trim() : '';
+    if (input.active && (!from || from.length > 60))
+      throw new HttpErrors.UnprocessableEntity('Informe quem lançou');
+    const monster = await this.repository.findMonsterSpellEffects(idGameSession, idMonsterSession);
+    const isDm = await this.repository.isSessionOwner(idGameSession, userId);
+    if (!monster || (!isDm && !monster.is_revealed))
+      throw new HttpErrors.NotFound('Monstro não encontrado na sessão');
+    const next = withMonsterSpellEffect(
+      normalizeMonsterSpellEffects(monster.spell_effects),
+      input.key,
+      input.active ? from : null,
+    );
+    await this.repository.setMonsterSpellEffects(idMonsterSession, next);
+    this.events.publish({
+      type: 'monster_spell_effects_updated',
+      id_game_session: idGameSession,
+      id_monster_session: idMonsterSession,
+      spell_effects: next,
+      is_revealed: monster.is_revealed,
+    });
+    return {spell_effects: next};
+  }
+
+  /**
+   * Magia de apoio lançada (Bênção, Orientação, Resistência, Armadura Arcana, Escudo da Fé,
+   * Escudo Arcano, Pele de Árvore, Velocidade): o efeito fica guardado no personagem de cada alvo
+   * (o próprio conjurador e/ou jogadores da mesa) até acabar — ver `SPELL_BOONS`. O espaço é gasto pelo endpoint de espaços;
+   * aqui só entrega o efeito.
+   */
+  async grantSpellBoon(
+    idGameSession: string,
+    input: {
+      id_character: number;
+      id_spell: number;
+      slot_level: number;
+      include_self?: boolean;
+      id_player_sessions?: string[];
+    },
+    userId: string,
+  ): Promise<{spell: string; to: string[]}> {
+    const canAct = await this.canActFor(idGameSession, input.id_character, userId);
+    if (!canAct)
+      throw new HttpErrors.Forbidden('Você não pode agir por esse personagem');
+    const boon = SPELL_BOONS[input.id_spell];
+    const maxTargets = boon ? spellBoonMaxTargets(input.id_spell, input.slot_level) : null;
+    if (!boon || maxTargets === null)
+      throw new HttpErrors.UnprocessableEntity('Magia ou círculo inválido');
+    const caster = await this.repository.findCharacterBasics(input.id_character);
+    if (!caster) throw new HttpErrors.NotFound('Personagem não encontrado');
+    if (!(await this.repository.characterHasSpell(input.id_character, input.id_spell)))
+      throw new HttpErrors.UnprocessableEntity('O personagem não conhece essa magia');
+
+    const ids = Array.isArray(input.id_player_sessions)
+      ? [...new Set(input.id_player_sessions)]
+      : [];
+    const session = await this.repository.findById(idGameSession);
+    const targets: {idCharacter: number; name: string}[] = [];
+    if (input.include_self === true) targets.push({idCharacter: input.id_character, name: caster.name});
+    for (const id of ids) {
+      const player = session?.players.find(p => p.id_player_session === id);
+      if (!player?.character)
+        throw new HttpErrors.UnprocessableEntity('Alvo sem personagem ou fora da sessão');
+      if (targets.some(t => t.idCharacter === player.id_character)) continue;
+      targets.push({idCharacter: player.id_character, name: player.character.name});
+    }
+    if (targets.length === 0) throw new HttpErrors.UnprocessableEntity('Escolha ao menos um alvo');
+    if (boon.selfOnly && (targets.length !== 1 || targets[0].idCharacter !== input.id_character))
+      throw new HttpErrors.UnprocessableEntity(`${boon.name} só pode ser lançada em você mesmo`);
+    if (targets.length > maxTargets)
+      throw new HttpErrors.UnprocessableEntity(
+        `${boon.name} atinge até ${maxTargets} criatura(s) nesse círculo`,
+      );
+    for (const t of targets)
+      await this.repository.setSpellBoon(t.idCharacter, boon.key, {from: caster.name});
+    return {spell: boon.name, to: targets.map(t => t.name)};
   }
 
   /**
@@ -1549,6 +1682,20 @@ export class GameSessionService {
       against.some(context => !SAVE_CONTEXTS.includes(context))
     )
       throw new HttpErrors.UnprocessableEntity('contexto inválido');
+    const rawEffect = input.on_fail_effect ?? null;
+    const effectFrom = typeof rawEffect?.from === 'string' ? rawEffect.from.trim() : '';
+    if (
+      rawEffect !== null &&
+      (check.kind !== 'save' ||
+        !isMonsterSpellEffectKey(rawEffect.key) ||
+        !effectFrom ||
+        effectFrom.length > 60)
+    )
+      throw new HttpErrors.UnprocessableEntity('Penalidade inválida');
+    const onFailEffect =
+      rawEffect && isMonsterSpellEffectKey(rawEffect.key)
+        ? {key: rawEffect.key, from: effectFrom}
+        : null;
 
     const found = ids.length
       ? await this.repository.findPlayersForRequest(idGameSession, ids)
@@ -1601,6 +1748,7 @@ export class GameSessionService {
         label,
         dc,
         secret: false,
+        on_fail_effect: onFailEffect,
       });
       this.events.publish({
         type: 'secret_roll_requested',

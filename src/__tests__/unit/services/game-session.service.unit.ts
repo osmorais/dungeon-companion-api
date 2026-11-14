@@ -789,8 +789,8 @@ describe('GameSessionService', () => {
       const detail = await service.getSession('gs', 'player');
       expect(detail.monsters).to.eql([]);
       const noCard = {monster_type: null, size: null, lore: null};
-      // Slug do bestiário pra arte padrão no site (1.23.0).
-      const goblinArt = {monster_slug: 'goblin'};
+      // Slug do bestiário pra arte padrão no site (1.23.0); penalidades de magia (1.26.0).
+      const goblinArt = {monster_slug: 'goblin', spell_effects: {}};
       expect(detail.revealed_monsters).to.eql([
         {
           id_monster_session: 'm1',
@@ -838,6 +838,7 @@ describe('GameSessionService', () => {
           size: 'Pequeno',
           lore: 'Pequenos e traiçoeiros.',
           monster_slug: 'goblin',
+          spell_effects: {},
         },
       ]);
     });
@@ -2202,6 +2203,71 @@ describe('GameSessionService', () => {
           expect(isDmOnlyEvent(events[1])).to.be.false();
         });
 
+        it('Perdição: falhou, fica a penalidade no monstro; passou ao rolar de novo, sai (1.26.0)', async () => {
+          const bane = {
+            ...fireball,
+            label: 'Perdição',
+            on_fail_effect: {key: 'bane', from: 'Irmã Clara'},
+          };
+          const [{request_id}] = await service.requestSecretRoll(
+            'gs',
+            bane,
+            'u2',
+          );
+          repository.stubs.findMonsterSpellEffects.resolves({
+            is_revealed: true,
+            spell_effects: null,
+          });
+          events.length = 0;
+          await service.addRoll('gs', dmAnswer(request_id!, 12), 'dm');
+          expect(repository.stubs.setMonsterSpellEffects.firstCall.args).to.eql(
+            ['m1', {bane: {from: 'Irmã Clara'}}],
+          );
+          expect(events[2]).to.eql({
+            type: 'monster_spell_effects_updated',
+            id_game_session: 'gs',
+            id_monster_session: 'm1',
+            spell_effects: {bane: {from: 'Irmã Clara'}},
+            is_revealed: true,
+          });
+          expect(isDmOnlyEvent(events[2])).to.be.false();
+
+          repository.stubs.findMonsterSpellEffects.resolves({
+            is_revealed: true,
+            spell_effects: {bane: {from: 'Irmã Clara'}},
+          });
+          await service.addRoll('gs', dmAnswer(request_id!, 18), 'dm');
+          expect(
+            repository.stubs.setMonsterSpellEffects.secondCall.args,
+          ).to.eql(['m1', {}]);
+        });
+
+        it('passou de primeira: não mexe; penalidade inválida é recusada', async () => {
+          const [{request_id}] = await service.requestSecretRoll(
+            'gs',
+            {...fireball, on_fail_effect: {key: 'faerie_fire', from: 'Lyra'}},
+            'u2',
+          );
+          repository.stubs.findMonsterSpellEffects.resolves({
+            is_revealed: true,
+            spell_effects: null,
+          });
+          await service.addRoll('gs', dmAnswer(request_id!, 18), 'dm');
+          expect(repository.stubs.setMonsterSpellEffects.called).to.be.false();
+          for (const on_fail_effect of [
+            {key: 'voo', from: 'Lyra'},
+            {key: 'bane', from: ' '},
+          ]) {
+            await expect(
+              service.requestSecretRoll(
+                'gs',
+                {...fireball, on_fail_effect},
+                'u2',
+              ),
+            ).to.be.rejectedWith(/Penalidade inválida/);
+          }
+        });
+
         it('só o mestre responde pelo monstro', async () => {
           const [{request_id}] = await service.requestSecretRoll(
             'gs',
@@ -2346,6 +2412,317 @@ describe('GameSessionService', () => {
         'u1',
       );
       expect(roll.is_hidden).to.be.false();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('penalidades de magia no monstro (1.26.0)', () => {
+    beforeEach(() => {
+      repository.stubs.hasSessionAccess.resolves(true);
+      repository.stubs.isSessionOwner.callsFake(
+        async (_gs, user) => user === 'dm',
+      );
+      repository.stubs.findMonsterSpellEffects.resolves({
+        is_revealed: false,
+        spell_effects: {faerie_fire: {from: 'Lyra'}},
+      });
+    });
+
+    it('mestre liga em monstro escondido: guarda junto das outras e só o mestre é avisado', async () => {
+      const result = await service.updateMonsterSpellEffect(
+        'gs',
+        'm1',
+        {key: 'bane', active: true, from: 'Irmã Clara'},
+        'dm',
+      );
+      expect(result.spell_effects).to.eql({
+        faerie_fire: {from: 'Lyra'},
+        bane: {from: 'Irmã Clara'},
+      });
+      expect(
+        repository.stubs.setMonsterSpellEffects.firstCall.args[0],
+      ).to.equal('m1');
+      expect(isDmOnlyEvent(events[0])).to.be.true();
+    });
+
+    it('jogador: só em monstro revelado (Raio Guiador gasto no ataque)', async () => {
+      await expect(
+        service.updateMonsterSpellEffect(
+          'gs',
+          'm1',
+          {key: 'guiding_bolt', active: false},
+          'u2',
+        ),
+      ).to.be.rejectedWith(/não encontrado/);
+      repository.stubs.findMonsterSpellEffects.resolves({
+        is_revealed: true,
+        spell_effects: {guiding_bolt: {from: 'Irmã Clara'}},
+      });
+      const result = await service.updateMonsterSpellEffect(
+        'gs',
+        'm1',
+        {key: 'guiding_bolt', active: false},
+        'u2',
+      );
+      expect(result.spell_effects).to.eql({});
+      expect(isDmOnlyEvent(events[0])).to.be.false();
+    });
+
+    it('valida acesso, penalidade, quem lançou e monstro da sessão', async () => {
+      await expect(
+        service.updateMonsterSpellEffect(
+          'gs',
+          'm1',
+          {key: 'voo', active: true, from: 'x'},
+          'dm',
+        ),
+      ).to.be.rejectedWith(/Penalidade inválida/);
+      await expect(
+        service.updateMonsterSpellEffect(
+          'gs',
+          'm1',
+          {key: 'bane', active: true},
+          'dm',
+        ),
+      ).to.be.rejectedWith(/quem lançou/);
+      repository.stubs.findMonsterSpellEffects.resolves(null);
+      await expect(
+        service.updateMonsterSpellEffect(
+          'gs',
+          'mx',
+          {key: 'bane', active: false},
+          'dm',
+        ),
+      ).to.be.rejectedWith(/não encontrado/);
+      repository.stubs.hasSessionAccess.resolves(false);
+      await expect(
+        service.updateMonsterSpellEffect(
+          'gs',
+          'm1',
+          {key: 'bane', active: false},
+          'u9',
+        ),
+      ).to.be.rejectedWith(/acesso/);
+      expect(repository.stubs.setMonsterSpellEffects.called).to.be.false();
+    });
+
+    it('a mesa vê as penalidades do monstro revelado', async () => {
+      repository.stubs.findById.resolves({
+        ...sessionDetail(),
+        monsters: [
+          {
+            id_monster_session: 'm1',
+            id_game_session: 'gs',
+            monster_api_slug: 'goblin',
+            hp_current: 7,
+            hp_max: 7,
+            ac: 15,
+            data_snapshot: {name: 'Goblin'},
+            is_revealed: true,
+            image_url: null,
+            spell_effects: {bane: {from: 'Clara'}, lixo: 1},
+          },
+        ],
+      });
+      repository.stubs.hasSessionAccess.resolves(true);
+      const detail = await service.getSession('gs', 'u2');
+      expect(detail.revealed_monsters[0].spell_effects).to.eql({
+        bane: {from: 'Clara'},
+      });
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('Bênção / Orientação / Resistência', () => {
+    const players = [
+      {
+        id_player_session: 'p1',
+        id_game_session: 'gs',
+        id_character: 10,
+        player_name: 'Ana',
+        user_id: 'u1',
+        character: {name: 'Irmã Clara'},
+      },
+      {
+        id_player_session: 'p2',
+        id_game_session: 'gs',
+        id_character: 20,
+        player_name: 'Bia',
+        user_id: 'u2',
+        character: {name: 'Thorin'},
+      },
+      {
+        id_player_session: 'p3',
+        id_game_session: 'gs',
+        id_character: 30,
+        player_name: 'Cris',
+        user_id: 'u3',
+        character: {name: 'Lyra'},
+      },
+      {
+        id_player_session: 'p4',
+        id_game_session: 'gs',
+        id_character: 40,
+        player_name: 'Duda',
+        user_id: 'u4',
+        character: {name: 'Kael'},
+      },
+    ] as unknown as GameSessionDetail['players'];
+
+    beforeEach(() => {
+      repository.stubs.canPostRollFor.resolves(true);
+      repository.stubs.findById.resolves({...sessionDetail(), players});
+      repository.stubs.findCharacterBasics.resolves({
+        name: 'Irmã Clara',
+        id_class: 3,
+        level: 5,
+      });
+      repository.stubs.characterHasSpell.resolves(true);
+    });
+
+    it('Bênção: guarda em cada alvo (inclusive quem lançou), com quem lançou', async () => {
+      const result = await service.grantSpellBoon(
+        'gs',
+        {
+          id_character: 10,
+          id_spell: 42,
+          slot_level: 1,
+          include_self: true,
+          id_player_sessions: ['p2', 'p3', 'p2'],
+        },
+        'u1',
+      );
+      expect(result).to.eql({
+        spell: 'Bênção',
+        to: ['Irmã Clara', 'Thorin', 'Lyra'],
+      });
+      expect(repository.stubs.setSpellBoon.getCalls().map(c => c.args)).to.eql([
+        [10, 'bless', {from: 'Irmã Clara'}],
+        [20, 'bless', {from: 'Irmã Clara'}],
+        [30, 'bless', {from: 'Irmã Clara'}],
+      ]);
+    });
+
+    it('Bênção no 2º círculo atinge 4; no 1º, a quarta criatura é recusada', async () => {
+      const four = {
+        id_character: 10,
+        id_spell: 42,
+        include_self: true,
+        id_player_sessions: ['p2', 'p3', 'p4'],
+      };
+      await expect(
+        service.grantSpellBoon('gs', {...four, slot_level: 1}, 'u1'),
+      ).to.be.rejectedWith(/até 3/);
+      expect(repository.stubs.setSpellBoon.called).to.be.false();
+      const result = await service.grantSpellBoon(
+        'gs',
+        {...four, slot_level: 2},
+        'u1',
+      );
+      expect(result.to).to.have.length(4);
+    });
+
+    it('Orientação (truque): um alvo, guarda como guidance', async () => {
+      await service.grantSpellBoon(
+        'gs',
+        {
+          id_character: 10,
+          id_spell: 247,
+          slot_level: 0,
+          id_player_sessions: ['p2'],
+        },
+        'u1',
+      );
+      expect(
+        repository.stubs.setSpellBoon.calledOnceWith(20, 'guidance', {
+          from: 'Irmã Clara',
+        }),
+      ).to.be.true();
+      await expect(
+        service.grantSpellBoon(
+          'gs',
+          {
+            id_character: 10,
+            id_spell: 305,
+            slot_level: 0,
+            include_self: true,
+            id_player_sessions: ['p2'],
+          },
+          'u1',
+        ),
+      ).to.be.rejectedWith(/até 1/);
+    });
+
+    it('Escudo Arcano só em quem lançou; Pele de Árvore vai pra outro jogador', async () => {
+      await expect(
+        service.grantSpellBoon(
+          'gs',
+          {
+            id_character: 10,
+            id_spell: 145,
+            slot_level: 1,
+            id_player_sessions: ['p2'],
+          },
+          'u1',
+        ),
+      ).to.be.rejectedWith(/em você mesmo/);
+      await service.grantSpellBoon(
+        'gs',
+        {id_character: 10, id_spell: 145, slot_level: 1, include_self: true},
+        'u1',
+      );
+      await service.grantSpellBoon(
+        'gs',
+        {
+          id_character: 10,
+          id_spell: 261,
+          slot_level: 2,
+          id_player_sessions: ['p3'],
+        },
+        'u1',
+      );
+      expect(repository.stubs.setSpellBoon.getCalls().map(c => c.args)).to.eql([
+        [10, 'shield', {from: 'Irmã Clara'}],
+        [30, 'barkskin', {from: 'Irmã Clara'}],
+      ]);
+    });
+
+    it('valida permissão, magia, círculo, se conhece, alvo da sessão e alvo vazio', async () => {
+      const ok = {
+        id_character: 10,
+        id_spell: 42,
+        slot_level: 1,
+        id_player_sessions: ['p2'],
+      };
+      repository.stubs.canPostRollFor.resolves(false);
+      await expect(service.grantSpellBoon('gs', ok, 'u2')).to.be.rejectedWith(
+        /não pode agir/,
+      );
+      repository.stubs.canPostRollFor.resolves(true);
+      await expect(
+        service.grantSpellBoon('gs', {...ok, id_spell: 49}, 'u1'),
+      ).to.be.rejectedWith(/Magia ou círculo inválido/);
+      await expect(
+        service.grantSpellBoon('gs', {...ok, slot_level: 0}, 'u1'),
+      ).to.be.rejectedWith(/Magia ou círculo inválido/);
+      await expect(
+        service.grantSpellBoon(
+          'gs',
+          {...ok, id_spell: 247, slot_level: 1},
+          'u1',
+        ),
+      ).to.be.rejectedWith(/Magia ou círculo inválido/);
+      await expect(
+        service.grantSpellBoon('gs', {...ok, id_player_sessions: ['x']}, 'u1'),
+      ).to.be.rejectedWith(/fora da sessão/);
+      await expect(
+        service.grantSpellBoon('gs', {...ok, id_player_sessions: []}, 'u1'),
+      ).to.be.rejectedWith(/ao menos um alvo/);
+      repository.stubs.characterHasSpell.resolves(false);
+      await expect(service.grantSpellBoon('gs', ok, 'u1')).to.be.rejectedWith(
+        /não conhece/,
+      );
+      expect(repository.stubs.setSpellBoon.called).to.be.false();
     });
   });
 

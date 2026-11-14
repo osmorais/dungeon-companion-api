@@ -35,6 +35,212 @@ export interface ActiveEffects {
   bardic_inspiration?: {sides: number; from: string} | null;
   /** Druida transformado (Forma Selvagem): sobrevive ao fim do combate, acaba no descanso longo. */
   wild_shape?: WildShapeState | null;
+  /** Arma Mágica / Arma Elemental lançada: bônus já calculado pelo círculo (concentração, uma por
+   *  vez — lançar outra substitui). Acaba no fim do combate, no descanso longo ou no "Encerrar". */
+  spell_weapon?: SpellWeaponEffect | null;
+  /** Bênção recebida: +1d4 em toda jogada de ataque e resistência até acabar. */
+  bless?: SpellBoon | null;
+  /** Orientação recebida: +1d4 em um teste de habilidade (gasta ao usar). */
+  guidance?: SpellBoon | null;
+  /** Resistência (truque) recebida: +1d4 em um teste de resistência (gasta ao usar). */
+  resistance?: SpellBoon | null;
+  /** Armadura Arcana: CA base 13 + DES sem armadura (8 h: sobrevive ao fim do combate). */
+  mage_armor?: SpellBoon | null;
+  /** Escudo da Fé: +2 na CA. */
+  shield_of_faith?: SpellBoon | null;
+  /** Escudo Arcano (reação, em si): +5 na CA até o começo do próximo turno de quem lançou. */
+  shield?: SpellBoon | null;
+  /** Pele de Árvore: CA nunca menor que 16. */
+  barkskin?: SpellBoon | null;
+  /** Velocidade: +2 na CA e vantagem em resistência de Destreza. */
+  haste?: SpellBoon | null;
+}
+
+/** Quem lançou a magia de apoio (aparece pro alvo no modal). */
+export interface SpellBoon {
+  from: string;
+}
+
+export type SpellBoonKey =
+  | 'bless'
+  | 'guidance'
+  | 'resistance'
+  | 'mage_armor'
+  | 'shield_of_faith'
+  | 'shield'
+  | 'barkskin'
+  | 'haste';
+
+export const SPELL_BOON_KEYS: readonly SpellBoonKey[] = [
+  'bless',
+  'guidance',
+  'resistance',
+  'mage_armor',
+  'shield_of_faith',
+  'shield',
+  'barkskin',
+  'haste',
+];
+
+/**
+ * Magias de apoio lançadas em criaturas (`docs/dungeon-companion/referencias/magias.txt`): 1d4
+ * (Bênção, Orientação, Resistência) ou CA (Armadura Arcana, Escudo da Fé, Escudo Arcano, Pele de
+ * Árvore, Velocidade). Ficam guardadas no personagem de cada alvo, como a Inspiração Bárdica, e
+ * acabam no fim do combate (menos a Armadura Arcana, de 8 h), no descanso longo, no "Encerrar" ou
+ * (Orientação/Resistência) ao usar; Escudo Arcano acaba no próximo turno de quem lançou.
+ * `extraTargetsPerSlot`: Bênção ganha 1 alvo por círculo acima do 1º. `selfOnly`: Escudo Arcano.
+ */
+export const SPELL_BOONS: Record<
+  number,
+  {
+    key: SpellBoonKey;
+    name: string;
+    level: number;
+    targets: number;
+    extraTargetsPerSlot?: number;
+    selfOnly?: boolean;
+  }
+> = {
+  42: {
+    key: 'bless',
+    name: 'Bênção',
+    level: 1,
+    targets: 3,
+    extraTargetsPerSlot: 1,
+  },
+  247: {key: 'guidance', name: 'Orientação', level: 0, targets: 1},
+  305: {key: 'resistance', name: 'Resistência', level: 0, targets: 1},
+  25: {key: 'mage_armor', name: 'Armadura Arcana', level: 1, targets: 1},
+  146: {key: 'shield_of_faith', name: 'Escudo da Fé', level: 1, targets: 1},
+  145: {
+    key: 'shield',
+    name: 'Escudo Arcano',
+    level: 1,
+    targets: 1,
+    selfOnly: true,
+  },
+  261: {key: 'barkskin', name: 'Pele de Árvore', level: 2, targets: 1},
+  351: {key: 'haste', name: 'Velocidade', level: 3, targets: 1},
+};
+
+/**
+ * CA com as magias ativas: Armadura Arcana troca a base por 13 + DES (sem armadura, fica a maior;
+ * não vale em Forma Selvagem), Escudo da Fé +2, Velocidade +2, Escudo Arcano +5 e Pele de Árvore
+ * garante no mínimo 16.
+ */
+export function applySpellArmorClass(
+  ac: number,
+  effects: ActiveEffects | null | undefined,
+  ctx: {
+    wearingArmour: boolean;
+    hasShield: boolean;
+    dexMod: number;
+    wildShape: boolean;
+  },
+): number {
+  if (!effects) return ac;
+  let total = ac;
+  if (effects.mage_armor && !ctx.wearingArmour && !ctx.wildShape)
+    total = Math.max(total, 13 + ctx.dexMod + (ctx.hasShield ? 2 : 0));
+  if (effects.shield_of_faith) total += 2;
+  if (effects.haste) total += 2;
+  if (effects.shield) total += 5;
+  if (effects.barkskin) total = Math.max(total, 16);
+  return total;
+}
+
+/** Quantos alvos a magia atinge no círculo (`null` se não é dessas ou o círculo não serve). */
+export function spellBoonMaxTargets(
+  idSpell: number,
+  slotLevel: number,
+): number | null {
+  const boon = SPELL_BOONS[idSpell];
+  if (!boon || !Number.isInteger(slotLevel)) return null;
+  if (boon.level === 0) return slotLevel === 0 ? boon.targets : null;
+  if (slotLevel < boon.level || slotLevel > 9) return null;
+  return (
+    boon.targets + (boon.extraTargetsPerSlot ?? 0) * (slotLevel - boon.level)
+  );
+}
+
+export interface SpellWeaponEffect {
+  id_spell: number;
+  name: string;
+  slot_level: number;
+  /** Somado na jogada de ataque com arma. */
+  attack_bonus: number;
+  /** Somado ao dano da arma (Arma Mágica). */
+  damage_bonus: number;
+  /** Dados extras no acerto (Arma Elemental), do tipo do elemento escolhido. */
+  dice: {count: number; sides: number} | null;
+  damage_type: string | null;
+}
+
+/** Elementos da Arma Elemental, como o resto do sistema escreve os tipos de dano. */
+export const ELEMENTAL_WEAPON_TYPES = [
+  'ácido',
+  'elétrico',
+  'frio',
+  'fogo',
+  'trovejante',
+] as const;
+
+/**
+ * Magias que encantam a arma do conjurador (`docs/dungeon-companion/referencias/magias.txt`).
+ * Simplificação: vale pra todas as armas de quem lançou (no livro, uma arma tocada — que pode ser
+ * de um aliado).
+ */
+export const SPELL_WEAPON_SPELLS: Record<
+  number,
+  {name: string; level: number}
+> = {
+  24: {name: 'Arma Mágica', level: 2},
+  22: {name: 'Arma Elemental', level: 3},
+};
+
+/**
+ * Efeito no círculo do espaço gasto. Arma Mágica: +1 no ataque e no dano (+2 no 4º, +3 no 6º).
+ * Arma Elemental: +1 no ataque e 1d4 do elemento (+2/2d4 no 5º e 6º, +3/3d4 no 7º+).
+ * `null` se a magia não é dessas, o círculo é menor que o da magia ou o elemento é inválido.
+ */
+export function buildSpellWeaponEffect(
+  idSpell: number,
+  slotLevel: number,
+  element?: string | null,
+): SpellWeaponEffect | null {
+  const spell = SPELL_WEAPON_SPELLS[idSpell];
+  if (
+    !spell ||
+    !Number.isInteger(slotLevel) ||
+    slotLevel < spell.level ||
+    slotLevel > 9
+  )
+    return null;
+  const base = {id_spell: idSpell, name: spell.name, slot_level: slotLevel};
+  if (idSpell === 24) {
+    const bonus = slotLevel >= 6 ? 3 : slotLevel >= 4 ? 2 : 1;
+    return {
+      ...base,
+      attack_bonus: bonus,
+      damage_bonus: bonus,
+      dice: null,
+      damage_type: null,
+    };
+  }
+  if (
+    !element ||
+    !(ELEMENTAL_WEAPON_TYPES as readonly string[]).includes(element)
+  )
+    return null;
+  const step = slotLevel >= 7 ? 3 : slotLevel >= 5 ? 2 : 1;
+  return {
+    ...base,
+    name: `${spell.name} (${element})`,
+    attack_bonus: step,
+    damage_bonus: 0,
+    dice: {count: step, sides: 4},
+    damage_type: element,
+  };
 }
 
 /** Dado de Inspiração Bárdica pelo nível do bardo: d6, d8 (5), d10 (10), d12 (15). */
@@ -137,6 +343,7 @@ function d20RemindersFor(ctx: {
   idClass: number;
   level: number;
   active: string[];
+  haste?: boolean;
 }): D20Reminder[] {
   const reminders: D20Reminder[] = [];
   if (ctx.idRace === 1) {
@@ -199,6 +406,14 @@ function d20RemindersFor(ctx: {
       abilities: ['STR'],
       against: null,
       text: 'Vantagem (Fúria)',
+    });
+  }
+  if (ctx.haste) {
+    reminders.push({
+      applies: 'save',
+      abilities: ['DEX'],
+      against: null,
+      text: 'Vantagem (Velocidade)',
     });
   }
   return reminders;
@@ -418,6 +633,7 @@ export function buildCombatFeatures(ctx: {
       idClass,
       level,
       active: ctx.activeEffects?.active ?? [],
+      haste: !!ctx.activeEffects?.haste,
     }),
     attacks_per_action: attacksPerAction(ctx.traits ?? []),
     cunning_action: (ctx.traits ?? []).some(t => t.name === 'Ação Ardilosa'),

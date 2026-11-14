@@ -595,6 +595,49 @@ export class GameSessionController {
     return this.gameSessionService.addRoll(id, body, currentUser.id);
   }
 
+  @patch('/api/game-session/{id}/monster/{idMonster}/spell-effects')
+  @response(200, {
+    description:
+      'Liga/desliga uma penalidade de magia num monstro (Perdição, Fogo das Fadas, Raio Guiador, Zombaria Viciosa, Raio do Enfraquecimento): mestre em qualquer um, jogador só em monstro revelado',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async updateMonsterSpellEffect(
+    @param.path.string('id') id: string,
+    @param.path.string('idMonster') idMonster: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      required: true,
+      content: {'application/json': {schema: {type: 'object'}}},
+    })
+    body: {key?: string; active?: boolean; from?: string},
+  ): Promise<object> {
+    return this.gameSessionService.updateMonsterSpellEffect(id, idMonster, body, currentUser.id);
+  }
+
+  @post('/api/game-session/{id}/spell-boon')
+  @response(200, {
+    description:
+      'Bênção / Orientação / Resistência lançada: entrega o 1d4 aos alvos da mesa (guardado até acabar)',
+    content: {'application/json': {schema: {type: 'object'}}},
+  })
+  async grantSpellBoon(
+    @param.path.string('id') id: string,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+    @requestBody({
+      required: true,
+      content: {'application/json': {schema: {type: 'object'}}},
+    })
+    body: {
+      id_character: number;
+      id_spell: number;
+      slot_level: number;
+      include_self?: boolean;
+      id_player_sessions?: string[];
+    },
+  ): Promise<object> {
+    return this.gameSessionService.grantSpellBoon(id, body, currentUser.id);
+  }
+
   @post('/api/game-session/{id}/bardic-inspiration')
   @response(200, {
     description: 'Bard gives a Bardic Inspiration die to an ally in the session (stored until used)',

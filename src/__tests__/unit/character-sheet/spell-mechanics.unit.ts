@@ -432,6 +432,39 @@ describe('spell-mechanics', () => {
       });
     });
 
+    it('Marca da Punição: próximo acerto com qualquer arma, 2d6 radiante +1d6 por círculo', () => {
+      const branding = buildSpellRoll(212, 2, 5, 3, 6, 14)!;
+      expect(branding).to.containDeep({
+        kind: 'rider',
+        rider_trigger: 'next_hit',
+        rider_attack: 'weapon',
+        damage_type: 'radiante',
+        save_ability: null,
+      });
+      expect(
+        [2, 3, 5].map(slot => branding.by_slot[String(slot)].dice_count),
+      ).to.eql([2, 3, 5]);
+    });
+
+    it('Auxílio Divino (arma) e Rogar Maldição (qualquer ataque, com CD): todo acerto', () => {
+      const favor = buildSpellRoll(38, 1, 5, 3, 6, 14)!;
+      expect(favor).to.containDeep({
+        rider_trigger: 'each_hit',
+        rider_attack: 'weapon',
+        damage_type: 'radiante',
+      });
+      expect(favor.by_slot['1']).to.containDeep({dice_count: 1, dice_sides: 4});
+      const curse = buildSpellRoll(314, 3, 5, 3, 6, 14)!;
+      expect(curse).to.containDeep({
+        rider_trigger: 'each_hit',
+        rider_attack: 'any',
+        damage_type: 'necrótico',
+        save_ability: 'WIS',
+        save_dc: 14,
+      });
+      expect(curse.by_slot['5']).to.containDeep({dice_count: 1, dice_sides: 8});
+    });
+
     it('Lâmina Flamejante é ataque mágico: 3d6, +1d6 a cada 2 círculos', () => {
       const blade = buildSpellRoll(193, 2, 5, 3, 6, 14)!;
       expect(blade).to.containDeep({kind: 'attack', attack_type: 'melee'});

@@ -2,10 +2,13 @@
 import {inject, injectable, BindingScope} from '@loopback/core';
 import {
   ActiveEffects,
+  SpellBoon,
+  SpellBoonKey,
   damageDefensesFor,
   darkvisionFor,
 } from '../services/character-sheet/combat-features';
 import {applyHpToWildShape} from '../services/character-sheet/wild-shape';
+import {MonsterSpellEffects} from '../services/monster-spell-effects';
 import {selectCompanions} from './companion.repository';
 import {companionMaxHp} from '../services/character-sheet/companion';
 import {normalizeKey} from '../services/character-sheet/calculator';
@@ -120,7 +123,7 @@ export class GameSessionRepository {
         ${sql.json(monster.data_snapshot as any)},
         ${monster.image_url ?? null}
       )
-      RETURNING id_monster_session, id_game_session, monster_api_slug, custom_name, hp_current, hp_max, ac, data_snapshot, is_revealed, image_url, action_state
+      RETURNING id_monster_session, id_game_session, monster_api_slug, custom_name, hp_current, hp_max, ac, data_snapshot, is_revealed, image_url, action_state, spell_effects
     `;
     return row;
   }
@@ -440,7 +443,7 @@ export class GameSessionRepository {
     // lore: descrição do bestiário pela slug, pra carta do monstro revelado (1.11.0).
     const monsters = await this.db.sql<MonsterSession[]>`
       SELECT id_monster_session, id_game_session, monster_api_slug, custom_name,
-             hp_current, hp_max, ac, data_snapshot, is_revealed, image_url, action_state,
+             hp_current, hp_max, ac, data_snapshot, is_revealed, image_url, action_state, spell_effects,
              (SELECT m.lore FROM monster m WHERE m.slug = monster_session.monster_api_slug) AS lore
       FROM monster_session
       WHERE id_game_session = ${id}
@@ -1636,7 +1639,7 @@ export class GameSessionRepository {
       UPDATE monster_session SET image_url = ${imageUrl}
       WHERE id_monster_session = ${idMonsterSession}
       RETURNING id_monster_session, id_game_session, monster_api_slug, custom_name,
-                hp_current, hp_max, ac, data_snapshot, is_revealed, image_url, action_state
+                hp_current, hp_max, ac, data_snapshot, is_revealed, image_url, action_state, spell_effects
     `;
     return {
       status: 'ok',
@@ -1687,19 +1690,22 @@ export class GameSessionRepository {
 
   /** Esconde todos os monstros revelados da sessão — chamado ao encerrar o combate. Devolve os ids afetados. */
   /**
-   * Fim do combate: os efeitos ativos (Fúria, Arma Sagrada) dos personagens da sessão acabam. A
-   * Forma Selvagem fica: ela dura horas, não o combate.
+   * Fim do combate: os efeitos ativos (Fúria, Arma Sagrada, magias de apoio) dos personagens da
+   * sessão acabam. A Forma Selvagem e a Armadura Arcana ficam: duram horas, não o combate.
    */
   async clearActiveEffectsInSession(idGameSession: string): Promise<void> {
     await this.db.sql`
       UPDATE character
       SET active_effects = CASE
         WHEN jsonb_typeof(active_effects->'wild_shape') = 'object'
-          THEN jsonb_build_object(
-            'active', '[]'::jsonb,
-            'turn_uses', '{}'::jsonb,
-            'wild_shape', active_effects->'wild_shape'
-          )
+          OR jsonb_typeof(active_effects->'mage_armor') = 'object'
+          THEN '{"active": [], "turn_uses": {}}'::jsonb
+            || CASE WHEN jsonb_typeof(active_effects->'wild_shape') = 'object'
+                 THEN jsonb_build_object('wild_shape', active_effects->'wild_shape')
+                 ELSE '{}'::jsonb END
+            || CASE WHEN jsonb_typeof(active_effects->'mage_armor') = 'object'
+                 THEN jsonb_build_object('mage_armor', active_effects->'mage_armor')
+                 ELSE '{}'::jsonb END
         ELSE NULL
       END
       WHERE active_effects IS NOT NULL
@@ -1765,6 +1771,75 @@ export class GameSessionRepository {
       ON CONFLICT (id_player_session, id_item)
       DO UPDATE SET quantity = player_inventory_item.quantity + EXCLUDED.quantity
     `;
+  }
+
+  /** Guarda Bênção/Orientação/Resistência no personagem do alvo (substitui uma anterior). */
+  async setSpellBoon(idCharacter: number, key: SpellBoonKey, boon: SpellBoon): Promise<void> {
+    await this.db.sql`
+      UPDATE character
+      SET active_effects =
+        COALESCE(active_effects, '{"active": [], "turn_uses": {}}'::jsonb)
+        || jsonb_build_object(${key}::text, ${this.db.sql.json(boon as never)}::jsonb)
+      WHERE id_character = ${idCharacter}
+    `;
+  }
+
+  /** Monstro da sessão pra mexer nas penalidades de magia (`null` se não é dessa sessão). */
+  async findMonsterSpellEffects(
+    idGameSession: string,
+    idMonsterSession: string,
+  ): Promise<{is_revealed: boolean; spell_effects: unknown} | null> {
+    const [row] = await this.db.sql<{is_revealed: boolean; spell_effects: unknown}[]>`
+      SELECT is_revealed, spell_effects FROM monster_session
+      WHERE id_monster_session = ${idMonsterSession} AND id_game_session = ${idGameSession}
+    `;
+    return row ?? null;
+  }
+
+  async setMonsterSpellEffects(
+    idMonsterSession: string,
+    effects: MonsterSpellEffects,
+  ): Promise<void> {
+    const value = Object.keys(effects).length ? this.db.sql.json(effects as never) : null;
+    await this.db.sql`
+      UPDATE monster_session SET spell_effects = ${value}
+      WHERE id_monster_session = ${idMonsterSession}
+    `;
+  }
+
+  /** Fim do combate: as penalidades de magia dos monstros da sessão acabam. */
+  async clearMonsterSpellEffectsInSession(idGameSession: string): Promise<void> {
+    await this.db.sql`
+      UPDATE monster_session SET spell_effects = NULL
+      WHERE id_game_session = ${idGameSession} AND spell_effects IS NOT NULL
+    `;
+  }
+
+  /** Começo do turno de um jogador/NPC: o Escudo Arcano dele acaba. */
+  async clearShieldSpellOnTurnStart(
+    idPlayerSession: string | null,
+    idNpcSession: string | null,
+  ): Promise<void> {
+    await this.db.sql`
+      UPDATE character
+      SET active_effects = active_effects - 'shield'
+      WHERE active_effects ? 'shield'
+        AND id_character IN (
+          SELECT id_character FROM player_session WHERE id_player_session = ${idPlayerSession}
+          UNION
+          SELECT id_character FROM npc_session WHERE id_npc_session = ${idNpcSession}
+        )
+    `;
+  }
+
+  /** O personagem tem a magia na lista (conhecida/preparável). */
+  async characterHasSpell(idCharacter: number, idSpell: number): Promise<boolean> {
+    const [row] = await this.db.sql<{found: number}[]>`
+      SELECT 1 AS found FROM character_spell
+      WHERE id_character = ${idCharacter} AND id_spell = ${idSpell}
+      LIMIT 1
+    `;
+    return !!row;
   }
 
   /** Guarda a Inspiração Bárdica no personagem do aliado (substitui uma anterior não usada). */

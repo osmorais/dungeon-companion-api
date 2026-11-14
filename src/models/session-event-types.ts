@@ -2,6 +2,7 @@
 import {CombatEncounterDetail} from './combat-types';
 import {SessionCompanion} from '../services/character-sheet/companion';
 import {SaveContext} from './character-options-types';
+import {MonsterSpellEffects} from '../services/monster-spell-effects';
 import {
   MonsterAbilityKey,
   MonsterSession,
@@ -110,6 +111,13 @@ export interface SessionEventPayloadMap {
   roll_added: {roll: RollLogEntry & {cast_id?: string}};
   /** Mestre mudou uma opção da mesa no Quadro do Mestre (1.25.0). */
   session_settings_updated: {auto_hit_check: boolean};
+  /** Penalidades de magia de um monstro mudaram (1.26.0). Monstro escondido: só o mestre recebe
+   *  (ver `isDmOnlyEvent`). */
+  monster_spell_effects_updated: {
+    id_monster_session: string;
+    spell_effects: MonsterSpellEffects;
+    is_revealed: boolean;
+  };
   /** Resistência de monstro resolvida pelo mestre: a mesa sabe só se passou ou falhou (o total
    *  fica na rolagem oculta, 1.24.2). */
   save_resolved: {
@@ -226,5 +234,6 @@ export function eventTargetUserId(event: SessionEvent): string | null {
 
 export function isDmOnlyEvent(event: SessionEvent): boolean {
   if (DM_ONLY_EVENT_TYPES.has(event.type)) return true;
+  if (event.type === 'monster_spell_effects_updated') return !event.is_revealed;
   return event.type === 'roll_added' && event.roll.is_hidden;
 }

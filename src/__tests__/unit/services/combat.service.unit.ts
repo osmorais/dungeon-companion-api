@@ -511,6 +511,32 @@ describe('CombatService', () => {
       expect(eventTypes()).to.eql(['turn_ended']);
     });
 
+    it('começo da vez de jogador/NPC: o Escudo Arcano dele acaba; vez de monstro não mexe', async () => {
+      repository.stubs.findEncounterContext.resolves(
+        encounterContext({current_turn_participant_id: 'a'}),
+      );
+      await service.endTurn('enc', 'dm');
+      const b = ordered()[1];
+      expect(
+        gameSessionRepository.stubs.clearShieldSpellOnTurnStart.firstCall.args,
+      ).to.eql([b.id_player_session, b.id_npc_session]);
+
+      gameSessionRepository.stubs.clearShieldSpellOnTurnStart.resetHistory();
+      repository.stubs.findParticipants.resolves([
+        participant('a', {turn_order: 0}),
+        participant('m', {
+          turn_order: 1,
+          participant_type: 'monster',
+          id_player_session: null,
+          id_monster_session: 'ms1',
+        }),
+      ]);
+      await service.endTurn('enc', 'dm');
+      expect(
+        gameSessionRepository.stubs.clearShieldSpellOnTurnStart.called,
+      ).to.be.false();
+    });
+
     it('vez de um monstro: rola a recarga gasta, devolve lendárias e avisa o mestre', async () => {
       repository.stubs.findParticipants.resolves([
         participant('a', {turn_order: 0}),
@@ -777,6 +803,12 @@ describe('CombatService', () => {
       // Fúria/Arma Sagrada dos personagens da sessão acabam com o combate
       expect(
         gameSessionRepository.stubs.clearActiveEffectsInSession.calledOnceWith(
+          'gs',
+        ),
+      ).to.be.true();
+      // e as penalidades de magia dos monstros (Perdição, Fogo das Fadas…)
+      expect(
+        gameSessionRepository.stubs.clearMonsterSpellEffectsInSession.calledOnceWith(
           'gs',
         ),
       ).to.be.true();

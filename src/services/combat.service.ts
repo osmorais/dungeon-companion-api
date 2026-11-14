@@ -150,11 +150,15 @@ export class CombatService {
     idGameSession: string,
     participant: CombatParticipant,
   ): Promise<void> {
-    if (
-      participant.participant_type !== 'monster' ||
-      !participant.id_monster_session
-    )
+    if (participant.participant_type !== 'monster') {
+      // Escudo Arcano dura até o começo do próximo turno de quem lançou.
+      await this.gameSessionRepository.clearShieldSpellOnTurnStart(
+        participant.id_player_session,
+        participant.id_npc_session,
+      );
       return;
+    }
+    if (!participant.id_monster_session) return;
     const ctx = await this.gameSessionRepository.findMonsterActionContext(
       participant.id_monster_session,
     );
@@ -765,6 +769,10 @@ export class CombatService {
 
     await this.repository.finishEncounter(idCombatEncounter);
     await this.gameSessionRepository.clearActiveEffectsInSession(
+      context.id_game_session,
+    );
+    // Penalidades de magia nos monstros (Perdição, Fogo das Fadas…) também acabam.
+    await this.gameSessionRepository.clearMonsterSpellEffectsInSession(
       context.id_game_session,
     );
     const hiddenMonsterIds = await this.gameSessionRepository.hideAllMonsters(
